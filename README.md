@@ -33,7 +33,7 @@ Instead of running one AI agent and manually reviewing its output, `kj` chains a
 - **Budget tracking** — per-session token and cost monitoring with `--trace`
 - **Git automation** — auto-commit, auto-push, auto-PR after approval
 - **Session management** — pause/resume with fail-fast detection
-- **Planning Game integration** — pair with [Planning Game MCP](https://www.npmjs.com/package/planning-game-mcp) for full project management (tasks, sprints, estimation) — like Jira, but open-source and XP-native
+- **Planning Game integration** — optionally pair with [Planning Game](https://github.com/AgenteIA-Geniova/planning-game) for agile project management (tasks, sprints, estimation) — like Jira, but open-source and XP-native
 
 > **Best with MCP** — Karajan Code is designed to be used as an MCP server inside your AI agent (Claude, Codex, etc.). The agent sends tasks to `kj_run`, gets real-time progress notifications, and receives structured results — no copy-pasting needed.
 
@@ -401,7 +401,7 @@ Karajan Code works great on its own, but combining it with these MCP servers giv
 
 | MCP | Why | Use case |
 |-----|-----|----------|
-| [**Planning Game MCP**](https://www.npmjs.com/package/planning-game-mcp) | Agile project management (tasks, sprints, estimation, XP methodology). Like Jira, but open-source | `kj_run` with `--pg-task` fetches full task context and updates card status on completion |
+| [**Planning Game MCP**](https://github.com/AgenteIA-Geniova/planning-game-mcp) | MCP bridge for [Planning Game](https://github.com/AgenteIA-Geniova/planning-game), an open-source agile project manager (tasks, sprints, estimation, XP). Only needed if you use Planning Game for task management | `kj_run` with `--pg-task` fetches full task context and updates card status on completion |
 | [**GitHub MCP**](https://github.com/modelcontextprotocol/servers/tree/main/src/github) | Create PRs, manage issues, read repos directly from the agent | Combine with `--auto-push` for end-to-end: code → review → push → PR |
 | [**Serena**](https://github.com/oramasearch/serena) | Symbol-level code navigation (find references, go-to-definition) for JS/TS projects | Enable with `--enable-serena` to inject symbol context into coder/reviewer prompts |
 | [**Chrome DevTools MCP**](https://github.com/anthropics/anthropic-quickstarts/tree/main/chrome-devtools-mcp) | Browser automation, screenshots, console/network inspection | Verify UI changes visually after `kj` modifies frontend code |
