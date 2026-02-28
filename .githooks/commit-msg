@@ -1,0 +1,52 @@
+#!/bin/bash
+#
+# commit-msg hook: BLOCKS any commit message containing LLM/AI attribution.
+# This hook validates the commit MESSAGE (not file contents).
+# The pre-commit hook handles file content checks separately.
+#
+
+COMMIT_MSG_FILE="$1"
+COMMIT_MSG=$(cat "$COMMIT_MSG_FILE")
+
+# Patterns to detect in commit messages
+CO_AUTHOR_PATTERN='Co-[Aa]uthored-[Bb]y:.*\b(Claude|Anthropic|OpenAI|ChatGPT|GPT-[0-9]|Copilot|Gemini|BecarIA|Cursor|Windsurf|Codeium|noreply@anthropic|noreply@openai)\b'
+ATTRIBUTION_PATTERN='(Generated|Created|Written|Made|Built|Authored|Assisted|Powered|Produced) (by|with|using|via) .*(Claude|Anthropic|OpenAI|ChatGPT|Copilot|Gemini|BecarIA|Cursor|Windsurf|Codeium)'
+SIGNED_OFF_PATTERN='Signed-off-by:.*\b(Claude|Anthropic|OpenAI|ChatGPT|Copilot|Gemini|BecarIA|Cursor|Windsurf|Codeium)\b'
+
+BLOCKED=0
+MATCHES=""
+
+for pattern in "$CO_AUTHOR_PATTERN" "$ATTRIBUTION_PATTERN" "$SIGNED_OFF_PATTERN"; do
+    FOUND=$(echo "$COMMIT_MSG" | grep -i -E "$pattern" || true)
+    if [ -n "$FOUND" ]; then
+        MATCHES="${MATCHES}  > ${FOUND}
+"
+        BLOCKED=1
+    fi
+done
+
+if [ "$BLOCKED" -eq 1 ]; then
+    echo ""
+    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+    echo "!!                                                        !!"
+    echo "!!   COMMIT RECHAZADO: Atribucion a IA detectada          !!"
+    echo "!!                                                        !!"
+    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+    echo ""
+    echo "  El mensaje del commit contiene referencias de autoria"
+    echo "  a herramientas de IA. Esto esta PROHIBIDO."
+    echo ""
+    echo "  Lineas bloqueadas:"
+    echo "$MATCHES"
+    echo ""
+    echo "  ELIMINA estas lineas del mensaje y vuelve a hacer commit."
+    echo ""
+    echo "  IMPORTANTE: NO uses --no-verify para saltarte esta regla."
+    echo "  Es una politica del proyecto, no una sugerencia."
+    echo ""
+    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+    echo ""
+    exit 1
+fi
+
+exit 0
