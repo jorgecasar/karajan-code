@@ -26,13 +26,22 @@ Instead of running one AI agent and manually reviewing its output, `kj` chains a
 **Key features:**
 - **Multi-agent pipeline** with 11 configurable roles
 - **4 AI agents supported**: Claude, Codex, Gemini, Aider
+- **MCP server** with 11 tools — use `kj` from Claude, Codex, or any MCP-compatible host without leaving your agent. [See MCP setup](#mcp-server)
 - **TDD enforcement** — test changes required when source files change
-- **SonarQube integration** — static analysis with quality gate enforcement
+- **SonarQube integration** — static analysis with quality gate enforcement (requires [Docker](#requirements))
 - **Review profiles** — standard, strict, relaxed, paranoid
 - **Budget tracking** — per-session token and cost monitoring with `--trace`
-- **MCP server** — 11 tools for integration with any MCP-compatible host
 - **Git automation** — auto-commit, auto-push, auto-PR after approval
 - **Session management** — pause/resume with fail-fast detection
+- **Planning Game integration** — pair with [Planning Game MCP](https://www.npmjs.com/package/planning-game-mcp) for full project management (tasks, sprints, estimation) — like Jira, but open-source and XP-native
+
+> **Best with MCP** — Karajan Code is designed to be used as an MCP server inside your AI agent (Claude, Codex, etc.). The agent sends tasks to `kj_run`, gets real-time progress notifications, and receives structured results — no copy-pasting needed.
+
+## Requirements
+
+- **Node.js** >= 18
+- **Docker** — required for SonarQube static analysis. If you don't have Docker or don't need SonarQube, disable it with `--no-sonar` or set `sonarqube.enabled: false` in config
+- At least one AI agent CLI installed: Claude, Codex, Gemini, or Aider
 
 ## Pipeline
 
@@ -386,6 +395,17 @@ After `npm install -g karajan-code`, the MCP server is auto-registered in Claude
 | `kj_review` | Run reviewer-only mode |
 | `kj_plan` | Generate implementation plan |
 
+### Recommended Companion MCPs
+
+Karajan Code works great on its own, but combining it with these MCP servers gives your AI agent a complete development environment:
+
+| MCP | Why | Use case |
+|-----|-----|----------|
+| [**Planning Game MCP**](https://www.npmjs.com/package/planning-game-mcp) | Agile project management (tasks, sprints, estimation, XP methodology). Like Jira, but open-source | `kj_run` with `--pg-task` fetches full task context and updates card status on completion |
+| [**GitHub MCP**](https://github.com/modelcontextprotocol/servers/tree/main/src/github) | Create PRs, manage issues, read repos directly from the agent | Combine with `--auto-push` for end-to-end: code → review → push → PR |
+| [**Serena**](https://github.com/oramasearch/serena) | Symbol-level code navigation (find references, go-to-definition) for JS/TS projects | Enable with `--enable-serena` to inject symbol context into coder/reviewer prompts |
+| [**Chrome DevTools MCP**](https://github.com/anthropics/anthropic-quickstarts/tree/main/chrome-devtools-mcp) | Browser automation, screenshots, console/network inspection | Verify UI changes visually after `kj` modifies frontend code |
+
 ## Role Templates
 
 Each role has a `.md` template with instructions that the AI agent follows. Templates are resolved in priority order:
@@ -404,7 +424,7 @@ Use `kj roles show <role>` to inspect any template. Create a project override to
 git clone https://github.com/manufosela/karajan-code.git
 cd karajan-code
 npm install
-npm test              # Run 762+ tests with Vitest
+npm test              # Run 761+ tests with Vitest
 npm run test:watch    # Watch mode
 npm run validate      # Lint + test
 ```
