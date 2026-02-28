@@ -43,18 +43,27 @@ done
 MATCHES=$(echo "$MATCHES" | sed '/^$/d')
 
 if [ -n "$MATCHES" ]; then
-    echo "============================================================"
-    echo " COMMIT BLOCKED: LLM attribution references detected"
-    echo "============================================================"
     echo ""
-    echo "The following lines attribute work to LLM tools,"
-    echo "which should not appear in commits:"
+    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+    echo "!!                                                        !!"
+    echo "!!   COMMIT RECHAZADO: Atribucion a IA en ficheros        !!"
+    echo "!!                                                        !!"
+    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
     echo ""
+    echo "  Los siguientes ficheros contienen referencias de autoria"
+    echo "  a herramientas de IA. Esto esta PROHIBIDO."
+    echo ""
+    echo "  Lineas bloqueadas:"
     echo "$MATCHES"
     echo ""
-    echo "Please remove these references before committing."
-    echo "If this is a false positive, use: git commit --no-verify"
-    echo "============================================================"
+    echo "  ELIMINA estas referencias de los ficheros y vuelve a"
+    echo "  hacer commit."
+    echo ""
+    echo "  IMPORTANTE: NO uses --no-verify para saltarte esta regla."
+    echo "  Es una politica del proyecto, no una sugerencia."
+    echo ""
+    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+    echo ""
     exit 1
 fi
 
