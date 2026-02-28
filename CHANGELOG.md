@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-02-28
+
+### Added
+- **`kj report --trace`**: chronological pipeline stage breakdown with per-stage provider, duration, tokens in/out, and cost in USD/EUR (#55)
+- **`kj init` interactive wizard**: auto-detects installed agents (claude, codex, gemini, aider) and guides configuration; single agent auto-assigns all roles without prompting (#56)
+- **`kj roles` command**: list pipeline roles with provider/status or show `.md` template instructions; supports custom project overrides (#57)
+- MCP tool `kj_roles` with `list`/`show` actions
+- CLI flags: `--trace`, `--currency` for report; `--no-interactive` for init
+- Budget config: `budget.currency` and `budget.exchange_rate_eur` defaults
+- Shared `agent-detect` module extracted from `doctor` for reuse in `init`
+- 41 new tests (762 total)
+
 ## [1.1.0] - 2026-02-28
 
 ### Added
@@ -75,7 +87,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI/CD**: GitHub Actions workflow with validation and PR annotations
 - **716+ unit tests** with Vitest
 
-[Unreleased]: https://github.com/manufosela/karajan-code/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/manufosela/karajan-code/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/manufosela/karajan-code/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/manufosela/karajan-code/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/manufosela/karajan-code/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/manufosela/karajan-code/compare/v0.1.0...v0.2.0
