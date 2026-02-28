@@ -30,6 +30,7 @@
     "src/",
     "templates/",
     "scripts/",
+    "docs/karajan-code-logo.png",
     "LICENSE",
     "README.md"
   ],
