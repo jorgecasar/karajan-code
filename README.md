@@ -15,6 +15,10 @@
   <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg" alt="Node.js"></a>
 </p>
 
+<p align="center">
+  <a href="docs/README.es.md">Leer en Español</a>
+</p>
+
 ---
 
 ## What is Karajan Code?
