@@ -1,36 +1,76 @@
-# Karajan Code
+<p align="center">
+  <img src="docs/karajan-code-logo.png" alt="Karajan Code" width="200">
+</p>
 
-Local CLI to orchestrate two coding agents with SonarQube and an automated review loop.
+<h1 align="center">Karajan Code</h1>
 
-## Quick start
+<p align="center">
+  Local multi-agent coding orchestrator with TDD, SonarQube, and automated code review.
+</p>
 
-```bash
-git clone git@github.com:manufosela/karajan-code.git
-cd karajan-code
-./scripts/install.sh
-# or: npm run setup
+<p align="center">
+  <a href="https://www.npmjs.com/package/karajan-code"><img src="https://img.shields.io/npm/v/karajan-code.svg" alt="npm version"></a>
+  <a href="https://github.com/manufosela/karajan-code/actions"><img src="https://github.com/manufosela/karajan-code/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://www.gnu.org/licenses/agpl-3.0"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="License"></a>
+  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg" alt="Node.js"></a>
+</p>
+
+---
+
+## What is Karajan Code?
+
+Karajan Code (`kj`) orchestrates multiple AI coding agents through an automated pipeline: code generation, static analysis, code review, testing, and security audits — all in a single command.
+
+Instead of running one AI agent and manually reviewing its output, `kj` chains agents together with quality gates. The coder writes code, SonarQube scans it, the reviewer checks it, and if issues are found, the coder gets another attempt. This loop runs until the code is approved or the iteration limit is reached.
+
+**Key features:**
+- **Multi-agent pipeline** with 11 configurable roles
+- **4 AI agents supported**: Claude, Codex, Gemini, Aider
+- **TDD enforcement** — test changes required when source files change
+- **SonarQube integration** — static analysis with quality gate enforcement
+- **Review profiles** — standard, strict, relaxed, paranoid
+- **Budget tracking** — per-session token and cost monitoring with `--trace`
+- **MCP server** — 11 tools for integration with any MCP-compatible host
+- **Git automation** — auto-commit, auto-push, auto-PR after approval
+- **Session management** — pause/resume with fail-fast detection
+
+## Pipeline
+
+```
+triage? ─> researcher? ─> planner? ─> coder ─> refactorer? ─> sonar? ─> reviewer ─> tester? ─> security? ─> commiter?
 ```
 
-The installer asks for:
-- if previous instances exist, action:
-  - `actualizar (editar configuracion de una instancia existente)`
-  - `reemplazar (eliminar lo que hay y configurarlo todo de nuevo)`
-  - `anadir nueva (crear otra instancia mas de KJ)`
-- if an interrupted install is detected:
-  - `continuar (retomar e intentar completar desde el estado actual)`
-  - `comenzar desde el principio (borrando lo generado para esa instancia)`
-- SonarQube host and token bootstrap
-- Default coder/reviewer/fallback
-- `KJ_HOME` path
-- Automatic MCP registration in Claude and Codex config files
-- Optional `kj doctor` execution
-- Checks selected AI CLIs; if missing, warns with install URLs (does not block install)
+| Role | Description | Default |
+|------|-------------|---------|
+| **triage** | Classifies task complexity (trivial/simple/medium/complex) and activates only necessary roles | Off |
+| **researcher** | Investigates codebase context before planning | Off |
+| **planner** | Generates structured implementation plans | Off |
+| **coder** | Writes code and tests following TDD methodology | **Always on** |
+| **refactorer** | Improves code clarity without changing behavior | Off |
+| **sonar** | Runs SonarQube static analysis and quality gate checks | On (if configured) |
+| **reviewer** | Code review with configurable strictness profiles | **Always on** |
+| **tester** | Test quality gate and coverage verification | Off |
+| **security** | OWASP security audit | Off |
+| **solomon** | Conflict resolver when coder and reviewer disagree | Off |
+| **commiter** | Git commit, push, and PR automation after approval | Off |
 
-After installation:
+Roles marked with `?` are optional and can be enabled per-run or via config.
+
+## Installation
+
+### From npm (recommended)
 
 ```bash
-source .karajan/karajan.env
-kj run "Implement authentication flow" --coder codex --reviewer claude --methodology tdd
+npm install -g karajan-code
+kj init
+```
+
+### From source
+
+```bash
+git clone https://github.com/manufosela/karajan-code.git
+cd karajan-code
+./scripts/install.sh
 ```
 
 ### Non-interactive setup (CI/automation)
@@ -38,114 +78,344 @@ kj run "Implement authentication flow" --coder codex --reviewer claude --methodo
 ```bash
 ./scripts/install.sh \
   --non-interactive \
-  --link-global false \
-  --kj-home /absolute/path/to/.karajan \
+  --kj-home /path/to/.karajan \
   --sonar-host http://localhost:9000 \
   --sonar-token "$KJ_SONAR_TOKEN" \
-  --coder codex \
-  --reviewer claude \
-  --reviewer-fallback codex \
-  --setup-mcp-claude true \
-  --setup-mcp-codex true \
+  --coder claude \
+  --reviewer codex \
   --run-doctor true
 ```
 
-You can also pass the same values via environment variables (see `node scripts/install.js --help`).
+### Multi-instance setup
 
-### Multi-instance setup (personal/pro)
-
-Full guide (step by step, with ready-to-copy examples):
-
-- `docs/multi-instance.md`
-- `docs/install-two-instances.md` (bloques exactos para crear `personal` y `profesional`)
-
-One-command helper script:
+Full guides: [`docs/multi-instance.md`](docs/multi-instance.md) | [`docs/install-two-instances.md`](docs/install-two-instances.md)
 
 ```bash
 ./scripts/setup-multi-instance.sh
 ```
 
-## Commands
+## Supported Agents
 
-- `kj init`
-- `kj run <task>`
-- `kj code <task>`
-- `kj review <task>`
-- `kj scan`
-- `kj doctor`
-- `kj report [--list]`
-- `kj resume <session-id>`
-- `kj sonar status|start|stop|logs`
+| Agent | CLI | Install |
+|-------|-----|---------|
+| **Claude** | `claude` | `npm install -g @anthropic-ai/claude-code` |
+| **Codex** | `codex` | `npm install -g @openai/codex` |
+| **Gemini** | `gemini` | See [Gemini CLI docs](https://github.com/google-gemini/gemini-cli) |
+| **Aider** | `aider` | `pip install aider-chat` |
 
-## Agent Defaults
+`kj init` auto-detects installed agents. If only one is available, it is assigned to all roles automatically.
 
-- `CLAUDE.md`: comportamiento por defecto para Claude Code (`PG -> KJ` con `kj_run`).
-- `AGENTS.md`: comportamiento por defecto para Codex (`PG -> KJ` con `kj_run`).
-
-## Notes
-
-- Default mode is `standard` (critical/important focus).
-- Default development methodology is `TDD` (test-first). `kj` enforces test updates when source files change.
-- You can override per run with `--methodology tdd|standard` (for example, `--methodology standard`).
-- Set `review_mode: paranoid` and `sonarqube.enforcement_profile: paranoid` for strict gate compliance.
-- Optional coverage pre-step is configured in `kj.config.yml` under `sonarqube.coverage`.
-- `sonarqube.coverage` supports both modes: run `coverage.command` before scan, or consume an existing `lcov_report_path` without command.
-- Sonar project key is isolated per repo by default; override with `sonarqube.project_key` if you need a fixed key.
-- Use env vars for secrets (`KJ_SONAR_TOKEN`, provider keys).
-- If `--auto-commit/--auto-push/--auto-pr` is enabled, `kj` enforces base branch sync and uses auto-rebase by default.
-- Disable automatic rebase only if needed with `--no-auto-rebase`.
-
-## Use From Other Agents
-
-### Option A: Subprocess (quickest)
-
-Any agent that can run shell commands can invoke `kj` directly:
+## Quick Start
 
 ```bash
-kj run "Fix Sonar critical issues in auth module" \
-  --coder codex \
-  --reviewer claude \
-  --reviewer-fallback codex \
-  --max-iteration-minutes 5 \
-  --methodology tdd
+# Run a task with defaults (claude=coder, codex=reviewer, TDD)
+kj run "Implement user authentication with JWT"
+
+# Coder-only mode (skip review)
+kj code "Add input validation to the signup form"
+
+# Review-only mode (review current diff)
+kj review "Check the authentication changes"
+
+# Generate an implementation plan
+kj plan "Refactor the database layer to use connection pooling"
+
+# Full pipeline with all options
+kj run "Fix critical SQL injection in search endpoint" \
+  --coder claude \
+  --reviewer codex \
+  --reviewer-fallback claude \
+  --methodology tdd \
+  --enable-triage \
+  --enable-tester \
+  --enable-security \
+  --auto-commit \
+  --auto-push \
+  --max-iterations 5
 ```
 
-### Option B: MCP Server (recommended for reusable tools)
+## CLI Commands
 
-Start the MCP server:
+### `kj init`
+
+Interactive setup wizard. Auto-detects installed agents and guides coder/reviewer selection, SonarQube configuration, and methodology choice.
 
 ```bash
-npm run mcp
+kj init                  # Interactive wizard
+kj init --no-interactive # Use defaults (for CI)
 ```
 
-Exposed MCP tools:
-- `kj_init`
-- `kj_doctor`
-- `kj_config`
-- `kj_scan`
-- `kj_run`
-- `kj_resume`
-- `kj_report`
-- `kj_code`
-- `kj_review`
-- `kj_plan`
+### `kj run <task>`
 
-#### Example MCP config (Claude/Codex style)
+Run the full pipeline: coder → sonar → reviewer loop.
+
+```bash
+kj run "Fix the login bug" [options]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--coder <name>` | AI agent for coding (claude, codex, gemini, aider) |
+| `--reviewer <name>` | AI agent for review |
+| `--reviewer-fallback <name>` | Fallback reviewer if primary fails |
+| `--coder-model <name>` | Specific model for coder |
+| `--reviewer-model <name>` | Specific model for reviewer |
+| `--planner-model <name>` | Specific model for planner |
+| `--methodology <name>` | `tdd` or `standard` |
+| `--mode <name>` | Review mode: `standard`, `strict`, `paranoid`, `relaxed` |
+| `--max-iterations <n>` | Max coder/reviewer loops |
+| `--max-iteration-minutes <n>` | Timeout per iteration |
+| `--max-total-minutes <n>` | Total session timeout |
+| `--base-branch <name>` | Base branch for diff (default: `main`) |
+| `--base-ref <ref>` | Explicit base ref for diff |
+| `--enable-planner` | Enable planner role |
+| `--enable-refactorer` | Enable refactorer role |
+| `--enable-researcher` | Enable researcher role |
+| `--enable-tester` | Enable tester role |
+| `--enable-security` | Enable security audit role |
+| `--enable-triage` | Enable dynamic triage |
+| `--enable-serena` | Enable Serena MCP integration |
+| `--auto-commit` | Git commit after approval |
+| `--auto-push` | Git push after commit |
+| `--auto-pr` | Create PR after push |
+| `--no-auto-rebase` | Disable auto-rebase before push |
+| `--branch-prefix <prefix>` | Branch naming prefix (default: `feat/`) |
+| `--no-sonar` | Skip SonarQube analysis |
+| `--pg-task <cardId>` | Planning Game card ID for task context |
+| `--pg-project <projectId>` | Planning Game project ID |
+| `--dry-run` | Show what would run without executing |
+| `--json` | Output JSON only |
+
+### `kj code <task>`
+
+Run coder only (no review loop).
+
+```bash
+kj code "Add error handling to the API client" --coder claude --coder-model sonnet
+```
+
+### `kj review <task>`
+
+Run reviewer only against current diff.
+
+```bash
+kj review "Check auth changes" --reviewer codex --base-ref HEAD~3
+```
+
+### `kj plan <task>`
+
+Generate an implementation plan without writing code.
+
+```bash
+kj plan "Migrate from REST to GraphQL" --planner claude --context "We use Apollo Server"
+```
+
+### `kj scan`
+
+Run SonarQube analysis on the current project.
+
+### `kj doctor`
+
+Check environment: git, Docker, SonarQube, agent CLIs, rule files.
+
+### `kj config`
+
+Show current configuration.
+
+```bash
+kj config          # Pretty print
+kj config --json   # JSON output
+kj config --edit   # Open in $EDITOR
+```
+
+### `kj report`
+
+Show session reports with budget tracking.
+
+```bash
+kj report                          # Latest session report
+kj report --list                   # List all session IDs
+kj report --session-id <id>        # Specific session
+kj report --trace                  # Chronological stage breakdown
+kj report --trace --currency eur   # Costs in EUR
+kj report --format json            # JSON output
+```
+
+### `kj resume <sessionId>`
+
+Resume a paused session (e.g., after fail-fast).
+
+```bash
+kj resume s_2026-02-28T20-47-24-270Z --answer "yes, proceed with the fix"
+```
+
+### `kj roles`
+
+Inspect pipeline roles and their template instructions.
+
+```bash
+kj roles              # List all roles with provider and status
+kj roles show coder   # Show coder role template
+kj roles show reviewer-paranoid  # Show paranoid review variant
+```
+
+### `kj sonar`
+
+Manage the SonarQube Docker container.
+
+```bash
+kj sonar status   # Check container status
+kj sonar start    # Start container
+kj sonar stop     # Stop container
+kj sonar logs     # View container logs
+kj sonar open     # Open dashboard in browser
+```
+
+## Configuration
+
+Configuration file: `~/.karajan/kj.config.yml` (or `$KJ_HOME/kj.config.yml`)
+
+Generated by `kj init`. Full reference:
+
+```yaml
+# AI Agents
+coder: claude
+reviewer: codex
+
+# Review settings
+review_mode: standard          # standard | strict | paranoid | relaxed
+max_iterations: 5
+review_rules: ./review-rules.md
+coder_rules: ./coder-rules.md
+base_branch: main
+
+# Coder settings
+coder_options:
+  model: null                  # Override model (e.g., sonnet, o4-mini)
+  auto_approve: true
+
+# Reviewer settings
+reviewer_options:
+  output_format: json
+  require_schema: true
+  model: null
+  deterministic: true
+  retries: 1
+  fallback_reviewer: codex
+
+# Development methodology
+development:
+  methodology: tdd             # tdd | standard
+  require_test_changes: true
+
+# SonarQube
+sonarqube:
+  enabled: true
+  host: http://localhost:9000
+  token: null                  # Set via KJ_SONAR_TOKEN env var
+  quality_gate: true
+  enforcement_profile: pragmatic
+  fail_on: [BLOCKER, CRITICAL]
+  ignore_on: [INFO]
+  max_scan_retries: 3
+
+# Git automation (post-approval)
+git:
+  auto_commit: false
+  auto_push: false
+  auto_pr: false
+  auto_rebase: true
+  branch_prefix: feat/
+
+# Session limits
+session:
+  max_iteration_minutes: 15
+  max_total_minutes: 120
+  max_budget_usd: null         # null = unlimited
+  fail_fast_repeats: 2
+
+# Budget tracking
+budget:
+  currency: usd                # usd | eur
+  exchange_rate_eur: 0.92
+
+# Output
+output:
+  report_dir: ./.reviews
+  log_level: info              # debug | info | warn | error
+```
+
+### Environment variables
+
+| Variable | Description |
+|----------|-------------|
+| `KJ_HOME` | Override config/sessions directory |
+| `KJ_SONAR_TOKEN` | SonarQube authentication token |
+
+## MCP Server
+
+Karajan Code exposes an MCP server for integration with any MCP-compatible host (Claude, Codex, custom agents).
+
+### Setup
+
+After `npm install -g karajan-code`, the MCP server is auto-registered in Claude and Codex configs. Manual config:
 
 ```json
 {
   "mcpServers": {
     "karajan-mcp": {
-      "command": "node",
-      "args": ["/ABSOLUTE/PATH/TO/karajan-code/src/mcp/server.js"],
-      "cwd": "/ABSOLUTE/PATH/TO/karajan-code"
+      "command": "karajan-mcp"
     }
   }
 }
 ```
 
-If you need runtime state in a project-local directory, set:
+### MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `kj_init` | Initialize config and SonarQube |
+| `kj_doctor` | Check system dependencies |
+| `kj_config` | Show configuration |
+| `kj_scan` | Run SonarQube scan |
+| `kj_run` | Run full pipeline (with real-time progress notifications) |
+| `kj_resume` | Resume a paused session |
+| `kj_report` | Read session reports (supports `--trace`) |
+| `kj_roles` | List roles or show role templates |
+| `kj_code` | Run coder-only mode |
+| `kj_review` | Run reviewer-only mode |
+| `kj_plan` | Generate implementation plan |
+
+## Role Templates
+
+Each role has a `.md` template with instructions that the AI agent follows. Templates are resolved in priority order:
+
+1. **Project override**: `.karajan/roles/<role>.md` (in project root)
+2. **User override**: `$KJ_HOME/roles/<role>.md`
+3. **Built-in**: `templates/roles/<role>.md` (shipped with the package)
+
+Use `kj roles show <role>` to inspect any template. Create a project override to customize behavior per-project.
+
+**Review variants**: `reviewer-strict`, `reviewer-relaxed`, `reviewer-paranoid` — selectable via `--mode` flag or `review_mode` config.
+
+## Contributing
 
 ```bash
-KJ_HOME=/ABSOLUTE/PATH/TO/karajan-code/.karajan
+git clone https://github.com/manufosela/karajan-code.git
+cd karajan-code
+npm install
+npm test              # Run 762+ tests with Vitest
+npm run test:watch    # Watch mode
+npm run validate      # Lint + test
 ```
+
+- Tests: [Vitest](https://vitest.dev/)
+- Commits: [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `refactor:`, `test:`, `chore:`)
+- PRs: one purpose per PR, < 300 lines changed
+
+## Links
+
+- [Changelog](CHANGELOG.md)
+- [Security Policy](SECURITY.md)
+- [License (AGPL-3.0)](LICENSE)
+- [Issues](https://github.com/manufosela/karajan-code/issues)
