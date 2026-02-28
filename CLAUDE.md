@@ -14,9 +14,9 @@ Si el usuario pide implementar/fix/refactor (o "hacer la siguiente tarea priorit
 2. Ejecutar `kj_run` con estos defaults:
    - `mode: "standard"`
    - `methodology: "tdd"`
-   - `coder: "codex"`
-   - `reviewer: "claude"`
-   - `reviewerFallback: "codex"`
+   - `coder: "claude"`
+   - `reviewer: "codex"`
+   - `reviewerFallback: "claude"`
    - `maxIterations: 5`
    - `maxIterationMinutes: 5`
 3. Mostrar resultado y resumen de cambios.
