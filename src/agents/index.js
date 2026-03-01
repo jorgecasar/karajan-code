@@ -20,6 +20,11 @@ export function getAvailableAgents() {
   }));
 }
 
+export function getAgentMeta(name) {
+  const entry = agentRegistry.get(name);
+  return entry ? { ...entry.meta } : null;
+}
+
 export function createAgent(agentName, config, logger) {
   const entry = agentRegistry.get(agentName);
   if (!entry) {
@@ -28,8 +33,8 @@ export function createAgent(agentName, config, logger) {
   return new entry.AgentClass(agentName, config, logger);
 }
 
-// Auto-register built-in agents
-registerAgent("claude", ClaudeAgent);
-registerAgent("codex", CodexAgent);
-registerAgent("gemini", GeminiAgent);
-registerAgent("aider", AiderAgent);
+// Auto-register built-in agents with CLI metadata
+registerAgent("claude", ClaudeAgent, { bin: "claude", installUrl: "https://docs.anthropic.com/en/docs/claude-code" });
+registerAgent("codex", CodexAgent, { bin: "codex", installUrl: "https://developers.openai.com/codex/cli" });
+registerAgent("gemini", GeminiAgent, { bin: "gemini", installUrl: "https://github.com/google-gemini/gemini-cli" });
+registerAgent("aider", AiderAgent, { bin: "aider", installUrl: "https://aider.chat/docs/install.html" });
