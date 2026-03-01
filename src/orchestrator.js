@@ -27,7 +27,7 @@ import { runTesterStage, runSecurityStage } from "./orchestrator/post-loop-stage
 
 
 
-export async function runFlow({ task, config, logger, flags = {}, emitter = null, askQuestion = null }) {
+export async function runFlow({ task, config, logger, flags = {}, emitter = null, askQuestion = null, pgTaskId = null, pgProject = null }) {
   const plannerRole = resolveRole(config, "planner");
   const coderRole = resolveRole(config, "coder");
   const reviewerRole = resolveRole(config, "reviewer");
@@ -136,7 +136,7 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
   }
 
   const baseRef = await computeBaseRef({ baseBranch: config.base_branch, baseRef: flags.baseRef || null });
-  const session = await createSession({
+  const sessionInit = {
     task,
     config_snapshot: config,
     base_ref: baseRef,
@@ -149,7 +149,10 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
     sonar_repeat_count: 0,
     last_reviewer_issue_signature: null,
     reviewer_repeat_count: 0
-  });
+  };
+  if (pgTaskId) sessionInit.pg_task_id = pgTaskId;
+  if (pgProject) sessionInit.pg_project_id = pgProject;
+  const session = await createSession(sessionInit);
 
   eventBase.sessionId = session.id;
 
