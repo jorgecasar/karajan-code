@@ -38,6 +38,7 @@ Instead of running one AI agent and manually reviewing its output, `kj` chains a
 - **Git automation** — auto-commit, auto-push, auto-PR after approval
 - **Session management** — pause/resume with fail-fast detection and automatic cleanup of expired sessions
 - **Plugin system** — extend with custom agents via `.karajan/plugins/`
+- **Smart model selection** — auto-selects optimal model per role based on triage complexity (lighter models for trivial tasks, powerful models for complex ones)
 - **Retry with backoff** — automatic recovery from transient API errors (429, 5xx) with exponential backoff and jitter
 - **Planning Game integration** — optionally pair with [Planning Game](https://github.com/AgenteIA-Geniova/planning-game) for agile project management (tasks, sprints, estimation) — like Jira, but open-source and XP-native
 
@@ -195,6 +196,8 @@ kj run "Fix the login bug" [options]
 | `--auto-pr` | Create PR after push |
 | `--no-auto-rebase` | Disable auto-rebase before push |
 | `--branch-prefix <prefix>` | Branch naming prefix (default: `feat/`) |
+| `--smart-models` | Enable smart model selection based on triage complexity |
+| `--no-smart-models` | Disable smart model selection |
 | `--no-sonar` | Skip SonarQube analysis |
 | `--pg-task <cardId>` | Planning Game card ID for task context |
 | `--pg-project <projectId>` | Planning Game project ID |
@@ -354,6 +357,16 @@ budget:
   currency: usd                # usd | eur
   exchange_rate_eur: 0.92
 
+# Smart model selection (requires --enable-triage)
+model_selection:
+  enabled: true                # Auto-select models based on triage complexity
+  tiers:                       # Override default tier map per provider
+    claude:
+      simple: claude/sonnet    # Use sonnet even for simple tasks
+  role_overrides:              # Override level mapping per role
+    reviewer:
+      trivial: medium          # Reviewer always at least medium tier
+
 # Output
 output:
   report_dir: ./.reviews
@@ -430,7 +443,7 @@ Use `kj roles show <role>` to inspect any template. Create a project override to
 git clone https://github.com/manufosela/karajan-code.git
 cd karajan-code
 npm install
-npm test              # Run 899+ tests with Vitest
+npm test              # Run 964+ tests with Vitest
 npm run test:watch    # Watch mode
 npm run validate      # Lint + test
 ```
