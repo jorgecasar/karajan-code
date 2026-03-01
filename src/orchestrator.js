@@ -9,16 +9,16 @@ import {
   saveSession
 } from "./session-store.js";
 import { computeBaseRef, generateDiff } from "./review/diff-generator.js";
-import { parseJsonOutput } from "./review/parser.js";
 import { validateReviewResult } from "./review/schema.js";
 import { evaluateTddPolicy } from "./review/tdd-policy.js";
 import { buildCoderPrompt } from "./prompts/coder.js";
+import { parsePlannerOutput } from "./prompts/planner.js";
 import { buildReviewerPrompt } from "./prompts/reviewer.js";
 import { resolveRole } from "./config.js";
 import { SonarRole } from "./roles/sonar-role.js";
-import { RepeatDetector } from "./repeat-detector.js";
+import { RepeatDetector, getRepeatThreshold } from "./repeat-detector.js";
 import { emitProgress, makeEvent } from "./utils/events.js";
-import { BudgetTracker } from "./utils/budget.js";
+import { BudgetTracker, extractUsageMetrics } from "./utils/budget.js";
 import {
   commitMessageFromTask,
   prepareGitAutomation,
@@ -30,221 +30,13 @@ import { ResearcherRole } from "./roles/researcher-role.js";
 import { TriageRole } from "./roles/triage-role.js";
 import { TesterRole } from "./roles/tester-role.js";
 import { SecurityRole } from "./roles/security-role.js";
-import { SolomonRole } from "./roles/solomon-role.js";
 import { RefactorerRole } from "./roles/refactorer-role.js";
 import { PlannerRole } from "./roles/planner-role.js";
 import { CoderRole } from "./roles/coder-role.js";
-import { ReviewerRole } from "./roles/reviewer-role.js";
+import { runReviewerWithFallback } from "./orchestrator/reviewer-fallback.js";
+import { invokeSolomon, escalateToHuman } from "./orchestrator/solomon-escalation.js";
 
-function parsePlannerOutput(output) {
-  const text = String(output || "").trim();
-  if (!text) return null;
 
-  const lines = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  let title = null;
-  let approach = null;
-  const steps = [];
-
-  for (const line of lines) {
-    if (!title) {
-      const titleMatch = line.match(/^title\s*:\s*(.+)$/i);
-      if (titleMatch) {
-        title = titleMatch[1].trim();
-        continue;
-      }
-    }
-
-    if (!approach) {
-      const approachMatch = line.match(/^(approach|strategy)\s*:\s*(.+)$/i);
-      if (approachMatch) {
-        approach = approachMatch[2].trim();
-        continue;
-      }
-    }
-
-    const numberedStep = line.match(/^\d+[\).:-]\s*(.+)$/);
-    if (numberedStep) {
-      steps.push(numberedStep[1].trim());
-      continue;
-    }
-
-    const bulletStep = line.match(/^[-*]\s+(.+)$/);
-    if (bulletStep) {
-      steps.push(bulletStep[1].trim());
-      continue;
-    }
-  }
-
-  if (!title) {
-    const firstFreeLine = lines.find((line) => !/^(approach|strategy)\s*:/i.test(line) && !/^\d+[\).:-]\s*/.test(line));
-    title = firstFreeLine || null;
-  }
-
-  return { title, approach, steps };
-}
-
-function getRepeatThreshold(config) {
-  const raw =
-    config?.failFast?.repeatThreshold ??
-    config?.session?.repeat_detection_threshold ??
-    config?.session?.fail_fast_repeats ??
-    2;
-  const value = Number(raw);
-  if (Number.isFinite(value) && value > 0) return value;
-  return 2;
-}
-
-function extractUsageMetrics(result, defaultModel = null) {
-  const usage = result?.usage || result?.metrics || {};
-  const tokens_in =
-    result?.tokens_in ??
-    usage?.tokens_in ??
-    usage?.input_tokens ??
-    usage?.prompt_tokens ??
-    0;
-  const tokens_out =
-    result?.tokens_out ??
-    usage?.tokens_out ??
-    usage?.output_tokens ??
-    usage?.completion_tokens ??
-    0;
-  const cost_usd =
-    result?.cost_usd ??
-    usage?.cost_usd ??
-    usage?.usd_cost ??
-    usage?.cost;
-  const model =
-    result?.model ??
-    usage?.model ??
-    usage?.model_name ??
-    usage?.model_id ??
-    defaultModel ??
-    null;
-
-  return { tokens_in, tokens_out, cost_usd, model };
-}
-
-async function runReviewerWithFallback({ reviewerName, config, logger, emitter, reviewInput, session, iteration, onAttemptResult }) {
-  const fallbackReviewer = config.reviewer_options?.fallback_reviewer;
-  const retries = Math.max(0, Number(config.reviewer_options?.retries ?? 1));
-  const candidates = [reviewerName];
-  if (fallbackReviewer && fallbackReviewer !== reviewerName) {
-    candidates.push(fallbackReviewer);
-  }
-
-  const attempts = [];
-  for (const name of candidates) {
-    const reviewerConfig = { ...config, roles: { ...config.roles, reviewer: { ...config.roles?.reviewer, provider: name } } };
-    const role = new ReviewerRole({ config: reviewerConfig, logger, emitter, createAgentFn: createAgent });
-    await role.init();
-    for (let attempt = 1; attempt <= retries + 1; attempt += 1) {
-      const execResult = await role.execute(reviewInput);
-      if (onAttemptResult) {
-        await onAttemptResult({ reviewer: name, result: execResult.result });
-      }
-      attempts.push({ reviewer: name, attempt, ok: execResult.ok, result: execResult.result, execResult });
-      await addCheckpoint(session, {
-        stage: "reviewer-attempt",
-        iteration,
-        reviewer: name,
-        attempt,
-        ok: execResult.ok
-      });
-
-      if (execResult.ok) {
-        return { execResult, attempts };
-      }
-    }
-  }
-
-  return { execResult: null, attempts };
-}
-
-async function invokeSolomon({ config, logger, emitter, eventBase, stage, conflict, askQuestion, session, iteration }) {
-  const solomonEnabled = Boolean(config.pipeline?.solomon?.enabled);
-
-  if (!solomonEnabled) {
-    return escalateToHuman({ askQuestion, session, emitter, eventBase, stage, conflict, iteration });
-  }
-
-  emitProgress(
-    emitter,
-    makeEvent("solomon:start", { ...eventBase, stage: "solomon" }, {
-      message: `Solomon arbitrating ${stage} conflict`,
-      detail: { conflictStage: stage }
-    })
-  );
-
-  const solomon = new SolomonRole({ config, logger, emitter });
-  await solomon.init({ task: conflict.task || session.task, iteration });
-  const ruling = await solomon.run({ conflict });
-
-  emitProgress(
-    emitter,
-    makeEvent("solomon:end", { ...eventBase, stage: "solomon" }, {
-      message: `Solomon ruling: ${ruling.result?.ruling || "unknown"}`,
-      detail: ruling.result
-    })
-  );
-
-  await addCheckpoint(session, {
-    stage: "solomon",
-    iteration,
-    ruling: ruling.result?.ruling,
-    escalate: ruling.result?.escalate,
-    subtask: ruling.result?.subtask?.title || null
-  });
-
-  if (!ruling.ok) {
-    // escalate_human
-    return escalateToHuman({
-      askQuestion, session, emitter, eventBase, stage, iteration,
-      conflict: { ...conflict, solomonReason: ruling.result?.escalate_reason }
-    });
-  }
-
-  const r = ruling.result?.ruling;
-  if (r === "approve" || r === "approve_with_conditions") {
-    return { action: "continue", conditions: ruling.result?.conditions || [], ruling };
-  }
-
-  if (r === "create_subtask") {
-    return { action: "subtask", subtask: ruling.result?.subtask, ruling };
-  }
-
-  return { action: "continue", conditions: [], ruling };
-}
-
-async function escalateToHuman({ askQuestion, session, emitter, eventBase, stage, conflict, iteration }) {
-  const reason = conflict?.solomonReason || `${stage} conflict unresolved`;
-  const question = `${stage} conflict requires human intervention: ${reason}\nDetails: ${JSON.stringify(conflict?.history?.slice(-2) || [], null, 2)}\n\nHow should we proceed?`;
-
-  if (askQuestion) {
-    const answer = await askQuestion(question, { iteration, stage });
-    if (answer) {
-      return { action: "continue", humanGuidance: answer };
-    }
-  }
-
-  await pauseSession(session, {
-    question,
-    context: { iteration, stage, conflict }
-  });
-  emitProgress(
-    emitter,
-    makeEvent("question", { ...eventBase, stage }, {
-      status: "paused",
-      message: question,
-      detail: { question, sessionId: session.id }
-    })
-  );
-
-  return { action: "pause", question };
-}
 
 export async function runFlow({ task, config, logger, flags = {}, emitter = null, askQuestion = null }) {
   const plannerRole = resolveRole(config, "planner");
