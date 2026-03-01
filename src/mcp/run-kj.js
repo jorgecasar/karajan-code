@@ -18,7 +18,7 @@ function addOptionalValue(args, flag, value) {
 }
 
 function resolveTimeout(options) {
-  const iterMinutes = options.maxIterationMinutes ? Number(options.maxIterationMinutes) : 5;
+  const iterMinutes = options.maxIterationMinutes ? Number(options.maxIterationMinutes) : 30;
   const agentTimeoutMs = iterMinutes * 60 * 1000;
   const callerTimeoutMs = options.timeoutMs ? Number(options.timeoutMs) : 0;
 
@@ -100,8 +100,8 @@ export async function runKjCommand({ command, commandArgs = [], options = {}, en
   if (result.timedOut) {
     payload.ok = false;
     payload.timedOut = true;
-    const iterMin = options.maxIterationMinutes || 5;
-    payload.stderr = `Process timed out after ${Math.round(timeout / 1000)}s. The agent did not complete within the allowed time. Consider: (1) increasing --max-iteration-minutes (current: ${iterMin}), (2) splitting the task into smaller pieces, or (3) running kj_code instead of kj_run for single-agent tasks.`;
+    const iterMin = options.maxIterationMinutes || 30;
+    payload.stderr = `Process timed out after ${Math.round(timeout / 1000)}s (safety limit: ${iterMin} min). The agent CLI may be stuck. Consider: (1) splitting the task into smaller pieces, (2) enabling triage (--enable-triage) to detect complex tasks before execution, or (3) increasing --max-iteration-minutes if the task genuinely needs more time.`;
   }
 
   if (result.killed && !payload.timedOut) {
