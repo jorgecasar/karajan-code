@@ -33,5 +33,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
   }
 });
 
+// --- Orphan process protection ---
+import { setupOrphanGuard } from "./orphan-guard.js";
+setupOrphanGuard();
+
 const transport = new StdioServerTransport();
 await server.connect(transport);
