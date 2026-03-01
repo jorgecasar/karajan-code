@@ -118,6 +118,13 @@ const DEFAULTS = {
   },
   failFast: {
     repeatThreshold: 2
+  },
+  retry: {
+    max_attempts: 3,
+    initial_backoff_ms: 1000,
+    max_backoff_ms: 30000,
+    backoff_multiplier: 2,
+    jitter_factor: 0.1
   }
 };
 
