@@ -71,6 +71,7 @@ program
   .option("--max-total-minutes <n>")
   .option("--base-branch <name>")
   .option("--base-ref <ref>")
+  .option("--coder-fallback <name>")
   .option("--reviewer-fallback <name>")
   .option("--reviewer-retries <n>")
   .option("--auto-commit")
