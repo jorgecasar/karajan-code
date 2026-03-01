@@ -25,7 +25,13 @@ export async function runTesterStage({ config, logger, emitter, eventBase, sessi
     duration_ms: Date.now() - testerStart
   });
 
-  await addCheckpoint(session, { stage: "tester", iteration, ok: testerOutput.ok });
+  await addCheckpoint(session, {
+    stage: "tester",
+    iteration,
+    ok: testerOutput.ok,
+    provider: config?.roles?.tester?.provider || coderRole.provider,
+    model: config?.roles?.tester?.model || coderRole.model || null
+  });
 
   emitProgress(
     emitter,
@@ -93,7 +99,13 @@ export async function runSecurityStage({ config, logger, emitter, eventBase, ses
     duration_ms: Date.now() - securityStart
   });
 
-  await addCheckpoint(session, { stage: "security", iteration, ok: securityOutput.ok });
+  await addCheckpoint(session, {
+    stage: "security",
+    iteration,
+    ok: securityOutput.ok,
+    provider: config?.roles?.security?.provider || coderRole.provider,
+    model: config?.roles?.security?.model || coderRole.model || null
+  });
 
   emitProgress(
     emitter,

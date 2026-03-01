@@ -28,7 +28,13 @@ export async function runTriageStage({ config, logger, emitter, eventBase, sessi
     duration_ms: Date.now() - triageStart
   });
 
-  await addCheckpoint(session, { stage: "triage", iteration: 0, ok: triageOutput.ok });
+  await addCheckpoint(session, {
+    stage: "triage",
+    iteration: 0,
+    ok: triageOutput.ok,
+    provider: config?.roles?.triage?.provider || coderRole.provider,
+    model: config?.roles?.triage?.model || coderRole.model || null
+  });
 
   const recommendedRoles = new Set(triageOutput.result?.roles || []);
   const roleOverrides = {};
@@ -106,7 +112,13 @@ export async function runResearcherStage({ config, logger, emitter, eventBase, s
     duration_ms: Date.now() - researchStart
   });
 
-  await addCheckpoint(session, { stage: "researcher", iteration: 0, ok: researchOutput.ok });
+  await addCheckpoint(session, {
+    stage: "researcher",
+    iteration: 0,
+    ok: researchOutput.ok,
+    provider: config?.roles?.researcher?.provider || coderRole.provider,
+    model: config?.roles?.researcher?.model || coderRole.model || null
+  });
 
   emitProgress(
     emitter,
@@ -139,6 +151,13 @@ export async function runPlannerStage({ config, logger, emitter, eventBase, sess
   const plannerStart = Date.now();
   const planResult = await planRole.execute(task);
   trackBudget({ role: "planner", provider: plannerRole.provider, model: plannerRole.model, result: planResult.result, duration_ms: Date.now() - plannerStart });
+  await addCheckpoint(session, {
+    stage: "planner",
+    iteration: 0,
+    ok: planResult.ok,
+    provider: plannerRole.provider,
+    model: plannerRole.model || null
+  });
 
   if (!planResult.ok) {
     await markSessionStatus(session, "failed");
