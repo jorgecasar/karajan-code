@@ -73,7 +73,7 @@ export async function runCoderStage({ coderRoleInstance, coderRole, config, logg
         });
 
         if (fallbackResult.execResult?.ok) {
-          await addCheckpoint(session, { stage: "coder", iteration, note: `Coder completed via fallback (${fallbackCoder})` });
+          await addCheckpoint(session, { stage: "coder", iteration, note: `Coder completed via fallback (${fallbackCoder})`, provider: fallbackCoder, model: null });
           emitProgress(
             emitter,
             makeEvent("coder:end", { ...eventBase, stage: "coder" }, {
@@ -112,7 +112,7 @@ export async function runCoderStage({ coderRoleInstance, coderRole, config, logg
     throw new Error(`Coder failed: ${details}`);
   }
 
-  await addCheckpoint(session, { stage: "coder", iteration, note: "Coder applied changes" });
+  await addCheckpoint(session, { stage: "coder", iteration, note: "Coder applied changes", provider: coderRole.provider, model: coderRole.model || null });
   emitProgress(
     emitter,
     makeEvent("coder:end", { ...eventBase, stage: "coder" }, {
@@ -169,7 +169,7 @@ export async function runRefactorerStage({ refactorerRole, config, logger, emitt
     );
     throw new Error(`Refactorer failed: ${details}`);
   }
-  await addCheckpoint(session, { stage: "refactorer", iteration, note: "Refactorer applied cleanups" });
+  await addCheckpoint(session, { stage: "refactorer", iteration, note: "Refactorer applied cleanups", provider: refactorerRole.provider, model: refactorerRole.model || null });
   emitProgress(
     emitter,
     makeEvent("refactorer:end", { ...eventBase, stage: "refactorer" }, {
@@ -285,7 +285,9 @@ export async function runSonarStage({ config, logger, emitter, eventBase, sessio
     iteration,
     project_key: sonarResult.projectKey,
     quality_gate: sonarResult.gateStatus,
-    open_issues: sonarResult.openIssuesTotal
+    open_issues: sonarResult.openIssuesTotal,
+    provider: "sonar",
+    model: null
   });
 
   emitProgress(
@@ -472,7 +474,9 @@ export async function runReviewerStage({ reviewerRole, config, logger, emitter, 
     stage: "reviewer",
     iteration,
     approved: review.approved,
-    blocking_issues: review.blocking_issues.length
+    blocking_issues: review.blocking_issues.length,
+    provider: reviewerRole.provider,
+    model: reviewerRole.model || null
   });
 
   emitProgress(

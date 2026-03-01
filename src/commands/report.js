@@ -233,13 +233,14 @@ function printTraceTable(trace, { currency = "usd", exchangeRate = 0.92 } = {}) 
 
   const currencyLabel = currency.toUpperCase();
 
-  const headers = ["#", "Stage", "Provider", "Duration", "Tokens In", "Tokens Out", `Cost ${currencyLabel}`];
+  const headers = ["#", "Stage", "Provider", "Model", "Duration", "Tokens In", "Tokens Out", `Cost ${currencyLabel}`];
   const rows = trace.map((entry) => {
     const cost = convertCost(entry.cost_usd, currency, exchangeRate);
     return [
       String(entry.index ?? "-"),
       entry.role,
       entry.provider || "-",
+      entry.model || "-",
       formatDuration(entry.duration_ms),
       String(entry.tokens_in),
       String(entry.tokens_out),
@@ -262,6 +263,7 @@ function printTraceTable(trace, { currency = "usd", exchangeRate = 0.92 } = {}) 
     "",
     "TOTAL",
     "",
+    "",
     formatDuration(totals.duration),
     String(totals.tokens_in),
     String(totals.tokens_out),
@@ -273,7 +275,7 @@ function printTraceTable(trace, { currency = "usd", exchangeRate = 0.92 } = {}) 
     Math.max(...allRows.map((row) => String(row[colIdx]).length))
   );
 
-  const rightAligned = new Set([0, 3, 4, 5, 6]);
+  const rightAligned = new Set([0, 4, 5, 6, 7]);
   function formatRow(row) {
     return row
       .map((cell, idx) =>
