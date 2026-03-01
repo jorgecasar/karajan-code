@@ -1,5 +1,35 @@
 import { calculateUsageCostUsd, DEFAULT_MODEL_PRICING, mergePricing } from "./pricing.js";
 
+export function extractUsageMetrics(result, defaultModel = null) {
+  const usage = result?.usage || result?.metrics || {};
+  const tokens_in =
+    result?.tokens_in ??
+    usage?.tokens_in ??
+    usage?.input_tokens ??
+    usage?.prompt_tokens ??
+    0;
+  const tokens_out =
+    result?.tokens_out ??
+    usage?.tokens_out ??
+    usage?.output_tokens ??
+    usage?.completion_tokens ??
+    0;
+  const cost_usd =
+    result?.cost_usd ??
+    usage?.cost_usd ??
+    usage?.usd_cost ??
+    usage?.cost;
+  const model =
+    result?.model ??
+    usage?.model ??
+    usage?.model_name ??
+    usage?.model_id ??
+    defaultModel ??
+    null;
+
+  return { tokens_in, tokens_out, cost_usd, model };
+}
+
 function toSafeNumber(value) {
   const n = Number(value);
   if (!Number.isFinite(n) || n < 0) return 0;

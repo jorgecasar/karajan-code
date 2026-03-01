@@ -40,6 +40,17 @@ function parseThreshold(value) {
   return DEFAULT_THRESHOLD;
 }
 
+export function getRepeatThreshold(config) {
+  const raw =
+    config?.failFast?.repeatThreshold ??
+    config?.session?.repeat_detection_threshold ??
+    config?.session?.fail_fast_repeats ??
+    2;
+  const value = Number(raw);
+  if (Number.isFinite(value) && value > 0) return value;
+  return 2;
+}
+
 export class RepeatDetector {
   constructor({ threshold = DEFAULT_THRESHOLD } = {}) {
     this.threshold = parseThreshold(threshold);
