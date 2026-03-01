@@ -3,17 +3,33 @@ import { CodexAgent } from "./codex-agent.js";
 import { GeminiAgent } from "./gemini-agent.js";
 import { AiderAgent } from "./aider-agent.js";
 
-export function createAgent(agentName, config, logger) {
-  switch (agentName) {
-    case "claude":
-      return new ClaudeAgent(agentName, config, logger);
-    case "codex":
-      return new CodexAgent(agentName, config, logger);
-    case "gemini":
-      return new GeminiAgent(agentName, config, logger);
-    case "aider":
-      return new AiderAgent(agentName, config, logger);
-    default:
-      throw new Error(`Unsupported agent: ${agentName}`);
+const agentRegistry = new Map();
+
+export function registerAgent(name, AgentClass, meta = {}) {
+  if (!name || typeof name !== "string") {
+    throw new Error("Agent name must be a non-empty string");
   }
+  agentRegistry.set(name, { AgentClass, meta });
 }
+
+export function getAvailableAgents() {
+  return [...agentRegistry.entries()].map(([name, { AgentClass, meta }]) => ({
+    name,
+    AgentClass,
+    ...meta,
+  }));
+}
+
+export function createAgent(agentName, config, logger) {
+  const entry = agentRegistry.get(agentName);
+  if (!entry) {
+    throw new Error(`Unsupported agent: ${agentName}`);
+  }
+  return new entry.AgentClass(agentName, config, logger);
+}
+
+// Auto-register built-in agents
+registerAgent("claude", ClaudeAgent);
+registerAgent("codex", CodexAgent);
+registerAgent("gemini", GeminiAgent);
+registerAgent("aider", AiderAgent);
