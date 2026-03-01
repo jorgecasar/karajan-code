@@ -26,10 +26,10 @@ function buildPrompt({ task, instructions }) {
   }
 
   sections.push(
-    "Classify the task complexity and recommend only the necessary pipeline roles.",
+    "Classify the task complexity, recommend only the necessary pipeline roles, and assess whether the task should be decomposed into smaller subtasks.",
     "Keep the reasoning short and practical.",
     "Return a single valid JSON object and nothing else.",
-    'JSON schema: {"level":"trivial|simple|medium|complex","roles":["planner|researcher|refactorer|reviewer|tester|security"],"reasoning":string}'
+    'JSON schema: {"level":"trivial|simple|medium|complex","roles":["planner|researcher|refactorer|reviewer|tester|security"],"reasoning":string,"shouldDecompose":boolean,"subtasks":string[]}'
   );
 
   sections.push(`## Task\n${task}`);
@@ -47,6 +47,14 @@ function parseTriageOutput(raw) {
 function normalizeRoles(roles) {
   if (!Array.isArray(roles)) return [];
   return Array.from(new Set(roles.filter((role) => VALID_ROLES.has(role))));
+}
+
+function normalizeSubtasks(subtasks) {
+  if (!Array.isArray(subtasks)) return [];
+  return subtasks
+    .map((s) => (typeof s === "string" ? s.trim() : ""))
+    .filter(Boolean)
+    .slice(0, 5);
 }
 
 export class TriageRole extends BaseRole {
@@ -98,16 +106,28 @@ export class TriageRole extends BaseRole {
       const level = VALID_LEVELS.has(parsed.level) ? parsed.level : "medium";
       const roles = normalizeRoles(parsed.roles);
       const reasoning = String(parsed.reasoning || "").trim() || "No reasoning provided.";
+      const shouldDecompose = Boolean(parsed.shouldDecompose);
+      const subtasks = normalizeSubtasks(parsed.subtasks);
 
+      const triageResult = {
+        level,
+        roles,
+        reasoning,
+        provider
+      };
+
+      if (shouldDecompose && subtasks.length > 0) {
+        triageResult.shouldDecompose = true;
+        triageResult.subtasks = subtasks;
+      } else {
+        triageResult.shouldDecompose = false;
+      }
+
+      const decomposeNote = shouldDecompose ? " — decomposition recommended" : "";
       return {
         ok: true,
-        result: {
-          level,
-          roles,
-          reasoning,
-          provider
-        },
-        summary: `Triage: ${level} (${roles.length} role${roles.length === 1 ? "" : "s"})`,
+        result: triageResult,
+        summary: `Triage: ${level} (${roles.length} role${roles.length === 1 ? "" : "s"})${decomposeNote}`,
         usage: result.usage
       };
     } catch {

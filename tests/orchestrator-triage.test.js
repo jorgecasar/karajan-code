@@ -257,6 +257,68 @@ describe("orchestrator triage pipeline", () => {
     expect(agents.filter((a) => a === "claude")).toHaveLength(1);
   });
 
+  it("stores shouldDecompose and subtasks in triage stageResult", async () => {
+    triageRunMock.mockResolvedValueOnce({
+      ok: true,
+      result: {
+        level: "complex",
+        roles: ["planner", "reviewer"],
+        reasoning: "Large refactor",
+        shouldDecompose: true,
+        subtasks: ["Extract auth module", "Update API endpoints", "Add tests"]
+      },
+      usage: { tokens_in: 150, tokens_out: 120 }
+    });
+
+    const emitter = new EventEmitter();
+    const events = [];
+    emitter.on("progress", (event) => events.push(event));
+
+    await runFlow({ task: "refactor auth", config: baseConfig, logger, flags: {}, emitter });
+
+    const triageEnd = events.find((e) => e.type === "triage:end");
+    expect(triageEnd).toBeTruthy();
+    expect(triageEnd.detail.shouldDecompose).toBe(true);
+    expect(triageEnd.detail.subtasks).toHaveLength(3);
+    expect(triageEnd.detail.subtasks[0]).toBe("Extract auth module");
+  });
+
+  it("emits triage:decompose event when decomposition is recommended", async () => {
+    triageRunMock.mockResolvedValueOnce({
+      ok: true,
+      result: {
+        level: "complex",
+        roles: ["planner", "reviewer"],
+        reasoning: "Needs splitting",
+        shouldDecompose: true,
+        subtasks: ["Part 1", "Part 2"]
+      },
+      usage: { tokens_in: 100, tokens_out: 80 }
+    });
+
+    const emitter = new EventEmitter();
+    const events = [];
+    emitter.on("progress", (event) => events.push(event));
+
+    await runFlow({ task: "big task", config: baseConfig, logger, flags: {}, emitter });
+
+    const decomposeEvent = events.find((e) => e.type === "triage:decompose");
+    expect(decomposeEvent).toBeTruthy();
+    expect(decomposeEvent.detail.shouldDecompose).toBe(true);
+    expect(decomposeEvent.detail.subtasks).toHaveLength(2);
+  });
+
+  it("does not emit triage:decompose when shouldDecompose is false", async () => {
+    const emitter = new EventEmitter();
+    const events = [];
+    emitter.on("progress", (event) => events.push(event));
+
+    await runFlow({ task: "tiny fix", config: baseConfig, logger, flags: {}, emitter });
+
+    const decomposeEvent = events.find((e) => e.type === "triage:decompose");
+    expect(decomposeEvent).toBeUndefined();
+  });
+
   it("registers triage budget usage under 500 tokens", async () => {
     triageRunMock.mockResolvedValueOnce({
       ok: true,

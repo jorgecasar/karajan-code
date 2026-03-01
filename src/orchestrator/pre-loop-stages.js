@@ -47,11 +47,16 @@ export async function runTriageStage({ config, logger, emitter, eventBase, sessi
     roleOverrides.securityEnabled = recommendedRoles.has("security");
   }
 
+  const shouldDecompose = triageOutput.result?.shouldDecompose || false;
+  const subtasks = triageOutput.result?.subtasks || [];
+
   const stageResult = {
     ok: triageOutput.ok,
     level: triageOutput.result?.level || null,
     roles: Array.from(recommendedRoles),
-    reasoning: triageOutput.result?.reasoning || null
+    reasoning: triageOutput.result?.reasoning || null,
+    shouldDecompose,
+    subtasks
   };
 
   let modelSelection = null;
@@ -77,6 +82,16 @@ export async function runTriageStage({ config, logger, emitter, eventBase, sessi
 
   if (modelSelection) {
     stageResult.modelSelection = modelSelection;
+  }
+
+  if (shouldDecompose && subtasks.length > 0) {
+    emitProgress(
+      emitter,
+      makeEvent("triage:decompose", { ...eventBase, stage: "triage" }, {
+        message: `Task decomposition recommended: ${subtasks.length} subtask${subtasks.length === 1 ? "" : "s"}`,
+        detail: { shouldDecompose, subtasks }
+      })
+    );
   }
 
   emitProgress(
