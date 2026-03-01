@@ -34,6 +34,7 @@ import { SolomonRole } from "./roles/solomon-role.js";
 import { RefactorerRole } from "./roles/refactorer-role.js";
 import { PlannerRole } from "./roles/planner-role.js";
 import { CoderRole } from "./roles/coder-role.js";
+import { ReviewerRole } from "./roles/reviewer-role.js";
 
 function parsePlannerOutput(output) {
   const text = String(output || "").trim();
@@ -127,7 +128,7 @@ function extractUsageMetrics(result, defaultModel = null) {
   return { tokens_in, tokens_out, cost_usd, model };
 }
 
-async function runReviewerWithFallback({ reviewerName, config, logger, prompt, session, iteration, onOutput, onAttemptResult }) {
+async function runReviewerWithFallback({ reviewerName, config, logger, emitter, reviewInput, session, iteration, onAttemptResult }) {
   const fallbackReviewer = config.reviewer_options?.fallback_reviewer;
   const retries = Math.max(0, Number(config.reviewer_options?.retries ?? 1));
   const candidates = [reviewerName];
@@ -137,28 +138,30 @@ async function runReviewerWithFallback({ reviewerName, config, logger, prompt, s
 
   const attempts = [];
   for (const name of candidates) {
-    const reviewer = createAgent(name, config, logger);
+    const reviewerConfig = { ...config, roles: { ...config.roles, reviewer: { ...config.roles?.reviewer, provider: name } } };
+    const role = new ReviewerRole({ config: reviewerConfig, logger, emitter, createAgentFn: createAgent });
+    await role.init();
     for (let attempt = 1; attempt <= retries + 1; attempt += 1) {
-      const result = await reviewer.reviewTask({ prompt, onOutput, role: "reviewer" });
+      const execResult = await role.execute(reviewInput);
       if (onAttemptResult) {
-        await onAttemptResult({ reviewer: name, result });
+        await onAttemptResult({ reviewer: name, result: execResult.result });
       }
-      attempts.push({ reviewer: name, attempt, ok: result.ok, result });
+      attempts.push({ reviewer: name, attempt, ok: execResult.ok, result: execResult.result, execResult });
       await addCheckpoint(session, {
         stage: "reviewer-attempt",
         iteration,
         reviewer: name,
         attempt,
-        ok: result.ok
+        ok: execResult.ok
       });
 
-      if (result.ok) {
-        return { result, attempts };
+      if (execResult.ok) {
+        return { execResult, attempts };
       }
     }
   }
 
-  return { result: null, attempts };
+  return { execResult: null, attempts };
 }
 
 async function invokeSolomon({ config, logger, emitter, eventBase, stage, conflict, askQuestion, session, iteration }) {
@@ -879,13 +882,6 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
       );
 
       const diff = await generateDiff({ baseRef: session.session_start_sha });
-      const reviewerPrompt = buildReviewerPrompt({
-        task,
-        diff,
-        reviewRules,
-        mode: config.review_mode,
-        serenaEnabled: Boolean(config.serena?.enabled)
-      });
       const reviewerOnOutput = ({ stream, line }) => {
         emitProgress(emitter, makeEvent("agent:output", { ...eventBase, stage: "reviewer" }, {
           message: line,
@@ -897,22 +893,22 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
         reviewerName: reviewerRole.provider,
         config,
         logger,
-        prompt: reviewerPrompt,
+        emitter,
+        reviewInput: { task, diff, reviewRules, onOutput: reviewerOnOutput },
         session,
         iteration: i,
-        onOutput: reviewerOnOutput,
         onAttemptResult: ({ reviewer, result }) => {
           trackBudget({ role: "reviewer", provider: reviewer, model: reviewerRole.model, result, duration_ms: Date.now() - reviewerStart });
         }
       });
 
-      if (!reviewerExec.result || !reviewerExec.result.ok) {
+      if (!reviewerExec.execResult || !reviewerExec.execResult.ok) {
         await markSessionStatus(session, "failed");
         const lastAttempt = reviewerExec.attempts.at(-1);
         const details =
           lastAttempt?.result?.error ||
-          lastAttempt?.result?.output ||
-          `reviewer=${lastAttempt?.reviewer || "unknown"} exitCode=${lastAttempt?.result?.exitCode ?? "unknown"}`;
+          lastAttempt?.execResult?.summary ||
+          `reviewer=${lastAttempt?.reviewer || "unknown"}`;
         emitProgress(
           emitter,
           makeEvent("reviewer:end", { ...eventBase, stage: "reviewer" }, {
@@ -923,14 +919,17 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
         throw new Error(`Reviewer failed: ${details}`);
       }
 
+      const reviewResult = reviewerExec.execResult.result;
       try {
-        const parsed = parseJsonOutput(reviewerExec.result.output);
-        if (!parsed) {
-          throw new Error("Reviewer output is not valid JSON");
-        }
-        review = validateReviewResult(parsed);
+        review = validateReviewResult({
+          approved: reviewResult.approved,
+          blocking_issues: reviewResult.blocking_issues || [],
+          non_blocking_suggestions: reviewResult.non_blocking_suggestions || [],
+          summary: reviewResult.raw_summary || "",
+          confidence: reviewResult.confidence ?? 0
+        });
       } catch (parseErr) {
-        logger.warn(`Reviewer output parse/validation failed: ${parseErr.message}`);
+        logger.warn(`Reviewer output validation failed: ${parseErr.message}`);
         review = {
           approved: false,
           blocking_issues: [{

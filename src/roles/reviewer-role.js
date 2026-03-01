@@ -101,29 +101,36 @@ export class ReviewerRole extends BaseRole {
 
     try {
       const parsed = parseReviewOutput(result.output);
-      const approved = Boolean(parsed.approved);
       const blockingIssues = parsed.blocking_issues || [];
 
       return {
         ok: true,
         result: {
-          approved,
+          ...result,
+          approved: parsed.approved,
           blocking_issues: blockingIssues,
           non_blocking_suggestions: parsed.non_blocking_suggestions || [],
           confidence: parsed.confidence ?? null,
           raw_summary: parsed.summary || ""
         },
-        summary: approved
+        summary: parsed.approved
           ? `Approved: ${parsed.summary || "no issues found"}`
           : `Rejected: ${blockingIssues.length} blocking issue(s) — ${parsed.summary || ""}`
       };
     } catch (err) {
       return {
-        ok: false,
+        ok: true,
         result: {
-          error: `Failed to parse reviewer output: ${err.message}`,
+          ...result,
           approved: false,
-          blocking_issues: []
+          blocking_issues: [{
+            id: "PARSE_ERROR",
+            severity: "high",
+            description: `Reviewer output could not be parsed: ${err.message}`
+          }],
+          non_blocking_suggestions: [],
+          confidence: 0,
+          raw_summary: `Parse error: ${err.message}`
         },
         summary: `Reviewer output parse error: ${err.message}`
       };
