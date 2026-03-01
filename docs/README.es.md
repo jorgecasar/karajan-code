@@ -36,7 +36,9 @@ En lugar de ejecutar un agente de IA y revisar manualmente su output, `kj` encad
 - **Perfiles de revision** — standard, strict, relaxed, paranoid
 - **Tracking de presupuesto** — monitorizacion de tokens y costes por sesion con `--trace`
 - **Automatizacion Git** — auto-commit, auto-push, auto-PR tras aprobacion
-- **Gestion de sesiones** — pausa/reanudacion con deteccion fail-fast
+- **Gestion de sesiones** — pausa/reanudacion con deteccion fail-fast y limpieza automatica de sesiones expiradas
+- **Sistema de plugins** — extiende con agentes custom via `.karajan/plugins/`
+- **Retry con backoff** — recuperacion automatica ante errores transitorios de API (429, 5xx) con backoff exponencial y jitter
 - **Integracion con Planning Game** — combina opcionalmente con [Planning Game](https://github.com/AgenteIA-Geniova/planning-game) para gestion agil de proyectos (tareas, sprints, estimacion) — como Jira, pero open-source y nativo XP
 
 > **Mejor con MCP** — Karajan Code esta disenado para usarse como servidor MCP dentro de tu agente de IA (Claude, Codex, etc.). El agente envia tareas a `kj_run`, recibe notificaciones de progreso en tiempo real, y obtiene resultados estructurados — sin copiar y pegar.
@@ -227,7 +229,7 @@ Usa `kj roles show <rol>` para inspeccionar cualquier template. Crea un override
 git clone https://github.com/manufosela/karajan-code.git
 cd karajan-code
 npm install
-npm test              # Ejecutar 761+ tests con Vitest
+npm test              # Ejecutar 899+ tests con Vitest
 npm run test:watch    # Modo watch
 npm run validate      # Lint + test
 ```
@@ -238,6 +240,7 @@ npm run validate      # Lint + test
 
 ## Enlaces
 
+- [Web](https://karajancode.com) (tambien [kj-code.com](https://kj-code.com))
 - [Changelog](../CHANGELOG.md)
 - [Politica de seguridad](../SECURITY.md)
 - [Licencia (AGPL-3.0)](../LICENSE)
