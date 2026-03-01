@@ -114,7 +114,8 @@ const DEFAULTS = {
     max_sonar_retries: 3,
     max_reviewer_retries: 3,
     max_tester_retries: 1,
-    max_security_retries: 1
+    max_security_retries: 1,
+    expiry_days: 30
   },
   failFast: {
     repeatThreshold: 2
