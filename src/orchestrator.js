@@ -33,6 +33,7 @@ import { SecurityRole } from "./roles/security-role.js";
 import { SolomonRole } from "./roles/solomon-role.js";
 import { RefactorerRole } from "./roles/refactorer-role.js";
 import { PlannerRole } from "./roles/planner-role.js";
+import { CoderRole } from "./roles/coder-role.js";
 
 function parsePlannerOutput(output) {
   const text = String(output || "").trim();
@@ -311,7 +312,7 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
   }
 
   const repeatDetector = new RepeatDetector({ threshold: getRepeatThreshold(config) });
-  const coder = createAgent(coderRole.provider, config, logger);
+  const coderRoleInstance = new CoderRole({ config, logger, emitter, createAgentFn: createAgent });
   const startedAt = Date.now();
   const eventBase = { sessionId: null, iteration: 0, stage: null, startedAt };
   const budgetTracker = new BudgetTracker({ pricing: config?.budget?.pricing });
@@ -542,7 +543,7 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
 
   const projectDir = config.projectDir || process.cwd();
   const { rules: reviewRules } = await resolveReviewProfile({ mode: config.review_mode, projectDir });
-  const coderRules = await loadFirstExisting(resolveRoleMdPath("coder", projectDir));
+  await coderRoleInstance.init();
 
   for (let i = 1; i <= config.max_iterations; i += 1) {
     const elapsedMinutes = (Date.now() - startedAt) / 60000;
@@ -598,14 +599,6 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
       })
     );
 
-    const coderPrompt = buildCoderPrompt({
-      task: plannedTask,
-      reviewerFeedback: session.last_reviewer_feedback,
-      sonarSummary: session.last_sonar_summary,
-      coderRules,
-      methodology: config.development?.methodology || "tdd",
-      serenaEnabled: Boolean(config.serena?.enabled)
-    });
     const coderOnOutput = ({ stream, line }) => {
       emitProgress(emitter, makeEvent("agent:output", { ...eventBase, stage: "coder" }, {
         message: line,
@@ -613,12 +606,17 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
       }));
     };
     const coderStart = Date.now();
-    const coderResult = await coder.runTask({ prompt: coderPrompt, onOutput: coderOnOutput, role: "coder" });
-    trackBudget({ role: "coder", provider: coderRole.provider, model: coderRole.model, result: coderResult, duration_ms: Date.now() - coderStart });
+    const coderExecResult = await coderRoleInstance.execute({
+      task: plannedTask,
+      reviewerFeedback: session.last_reviewer_feedback,
+      sonarSummary: session.last_sonar_summary,
+      onOutput: coderOnOutput
+    });
+    trackBudget({ role: "coder", provider: coderRole.provider, model: coderRole.model, result: coderExecResult.result, duration_ms: Date.now() - coderStart });
 
-    if (!coderResult.ok) {
+    if (!coderExecResult.ok) {
       await markSessionStatus(session, "failed");
-      const details = coderResult.error || coderResult.output || `exitCode=${coderResult.exitCode ?? "unknown"}`;
+      const details = coderExecResult.result?.error || coderExecResult.summary || "unknown error";
       emitProgress(
         emitter,
         makeEvent("coder:end", { ...eventBase, stage: "coder" }, {
