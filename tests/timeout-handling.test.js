@@ -68,6 +68,6 @@ describe("config default max_iteration_minutes", () => {
   it("defaults to 5 minutes", async () => {
     const configMod = await import("../src/config.js");
     const { config } = await configMod.loadConfig();
-    expect(config.session.max_iteration_minutes).toBe(5);
+    expect(config.session.max_iteration_minutes).toBe(30);
   });
 });

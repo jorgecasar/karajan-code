@@ -112,7 +112,7 @@ const DEFAULTS = {
     role_overrides: {}
   },
   session: {
-    max_iteration_minutes: 5,
+    max_iteration_minutes: 30,
     max_total_minutes: 120,
     fail_fast_repeats: 2,
     repeat_detection_threshold: 2,
