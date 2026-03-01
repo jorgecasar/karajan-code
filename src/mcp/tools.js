@@ -118,6 +118,7 @@ export const tools = [
         format: { type: "string", enum: ["text", "json"] },
         trace: { type: "boolean", description: "Show chronological trace of all pipeline stages" },
         currency: { type: "string", enum: ["usd", "eur"], description: "Display costs in this currency" },
+        pgTask: { type: "string", description: "Filter reports by Planning Game card ID (e.g., KJC-TSK-0042)" },
         kjHome: { type: "string" }
       }
     }

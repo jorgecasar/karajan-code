@@ -145,7 +145,9 @@ export async function handleRunDirect(a, server, extra) {
   if (progressNotifier) emitter.on("progress", progressNotifier);
 
   const askQuestion = buildAskQuestion(server);
-  const result = await runFlow({ task: a.task, config, logger, flags: a, emitter, askQuestion });
+  const pgTaskId = a.pgTask || null;
+  const pgProject = a.pgProject || config.planning_game?.project_id || null;
+  const result = await runFlow({ task: a.task, config, logger, flags: a, emitter, askQuestion, pgTaskId, pgProject });
   return { ok: !result.paused && (result.approved !== false), ...result };
 }
 
@@ -212,6 +214,7 @@ export async function handleToolCall(name, args, server, extra) {
     if (a.format) commandArgs.push("--format", String(a.format));
     if (a.trace) commandArgs.push("--trace");
     if (a.currency) commandArgs.push("--currency", String(a.currency));
+    if (a.pgTask) commandArgs.push("--pg-task", String(a.pgTask));
     return runKjCommand({
       command: "report",
       commandArgs,

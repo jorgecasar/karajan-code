@@ -140,6 +140,7 @@ program
   .option("--format <type>", "Output format: text|json", "text")
   .option("--trace", "Show chronological trace of all pipeline stages")
   .option("--currency <code>", "Display costs in currency: usd|eur", "usd")
+  .option("--pg-task <cardId>", "Filter reports by Planning Game card ID")
   .action(async (flags) => {
     await reportCommand(flags);
   });

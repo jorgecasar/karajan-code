@@ -66,7 +66,7 @@ export async function runCommandHandler({ task, config, logger, flags }) {
   }
 
   const startDate = new Date().toISOString();
-  const result = await runFlow({ task: enrichedTask, config, logger, flags, emitter });
+  const result = await runFlow({ task: enrichedTask, config, logger, flags, emitter, pgTaskId: pgCardId || null, pgProject: pgProject || null });
 
   // --- Planning Game: update card on completion ---
   if (pgCard && pgProject && result?.approved) {
