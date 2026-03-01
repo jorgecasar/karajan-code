@@ -31,6 +31,7 @@ import { TriageRole } from "./roles/triage-role.js";
 import { TesterRole } from "./roles/tester-role.js";
 import { SecurityRole } from "./roles/security-role.js";
 import { SolomonRole } from "./roles/solomon-role.js";
+import { RefactorerRole } from "./roles/refactorer-role.js";
 
 function parsePlannerOutput(output) {
   const text = String(output || "").trim();
@@ -650,29 +651,14 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
           detail: { refactorer: refactorerRole.provider }
         })
       );
-      const refactorer = createAgent(refactorerRole.provider, config, logger);
-      const refactorPrompt = [
-        `Task context:\n${plannedTask}`,
-        "",
-        "Refactor the current changes for clarity and maintainability without changing behavior.",
-        "Do not expand scope and keep tests green."
-      ].join("\n");
-      const refactorerOnOutput = ({ stream, line }) => {
-        emitProgress(emitter, makeEvent("agent:output", { ...eventBase, stage: "refactorer" }, {
-          message: line,
-          detail: { stream, agent: refactorerRole.provider }
-        }));
-      };
+      const refRole = new RefactorerRole({ config, logger, emitter, createAgentFn: createAgent });
+      await refRole.init();
       const refactorerStart = Date.now();
-      const refactorResult = await refactorer.runTask({
-        prompt: refactorPrompt,
-        onOutput: refactorerOnOutput,
-        role: "refactorer"
-      });
-      trackBudget({ role: "refactorer", provider: refactorerRole.provider, model: refactorerRole.model, result: refactorResult, duration_ms: Date.now() - refactorerStart });
-      if (!refactorResult.ok) {
+      const refResult = await refRole.execute(plannedTask);
+      trackBudget({ role: "refactorer", provider: refactorerRole.provider, model: refactorerRole.model, result: refResult.result, duration_ms: Date.now() - refactorerStart });
+      if (!refResult.ok) {
         await markSessionStatus(session, "failed");
-        const details = refactorResult.error || refactorResult.output || `exitCode=${refactorResult.exitCode ?? "unknown"}`;
+        const details = refResult.result?.error || refResult.summary || "unknown error";
         emitProgress(
           emitter,
           makeEvent("refactorer:end", { ...eventBase, stage: "refactorer" }, {
