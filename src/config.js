@@ -33,7 +33,7 @@ const DEFAULTS = {
   review_rules: "./review-rules.md",
   coder_rules: "./coder-rules.md",
   base_branch: "main",
-  coder_options: { model: null, auto_approve: true },
+  coder_options: { model: null, auto_approve: true, fallback_coder: null },
   reviewer_options: {
     output_format: "json",
     require_schema: true,
@@ -240,6 +240,7 @@ export function applyRunOverrides(config, flags) {
   if (flags.maxIterationMinutes) out.session.max_iteration_minutes = Number(flags.maxIterationMinutes);
   if (flags.maxTotalMinutes) out.session.max_total_minutes = Number(flags.maxTotalMinutes);
   if (flags.baseBranch) out.base_branch = flags.baseBranch;
+  if (flags.coderFallback) out.coder_options.fallback_coder = flags.coderFallback;
   if (flags.reviewerFallback) out.reviewer_options.fallback_reviewer = flags.reviewerFallback;
   if (flags.reviewerRetries !== undefined) out.reviewer_options.retries = Number(flags.reviewerRetries);
   if (flags.autoCommit !== undefined) out.git.auto_commit = Boolean(flags.autoCommit);
