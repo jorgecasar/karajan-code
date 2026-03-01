@@ -14,7 +14,8 @@ describe("sonar/api", () => {
   const baseConfig = {
     sonarqube: {
       host: "http://localhost:9000",
-      token: "test-token"
+      token: "test-token",
+      max_scan_retries: 1
     }
   };
 
