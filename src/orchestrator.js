@@ -32,6 +32,7 @@ import { TesterRole } from "./roles/tester-role.js";
 import { SecurityRole } from "./roles/security-role.js";
 import { SolomonRole } from "./roles/solomon-role.js";
 import { RefactorerRole } from "./roles/refactorer-role.js";
+import { PlannerRole } from "./roles/planner-role.js";
 
 function parsePlannerOutput(output) {
   const text = String(output || "").trim();
@@ -499,22 +500,15 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
         detail: { planner: plannerRole.provider }
       })
     );
-    const planner = createAgent(plannerRole.provider, config, logger);
+    const planRole = new PlannerRole({ config, logger, emitter, createAgentFn: createAgent });
+    planRole.context = { task, research: researchContext };
+    await planRole.init();
     const plannerStart = Date.now();
-    const plannerPromptParts = [
-      "Create an implementation plan for this task.",
-      "Return concise numbered steps focused on execution order and risk.",
-      "",
-      task
-    ];
-    if (researchContext) {
-      plannerPromptParts.push("", "## Research findings", JSON.stringify(researchContext, null, 2));
-    }
-    const plannerResult = await planner.runTask({ prompt: plannerPromptParts.join("\n"), role: "planner" });
-    trackBudget({ role: "planner", provider: plannerRole.provider, model: plannerRole.model, result: plannerResult, duration_ms: Date.now() - plannerStart });
-    if (!plannerResult.ok) {
+    const planResult = await planRole.execute(task);
+    trackBudget({ role: "planner", provider: plannerRole.provider, model: plannerRole.model, result: planResult.result, duration_ms: Date.now() - plannerStart });
+    if (!planResult.ok) {
       await markSessionStatus(session, "failed");
-      const details = plannerResult.error || plannerResult.output || `exitCode=${plannerResult.exitCode ?? "unknown"}`;
+      const details = planResult.result?.error || planResult.summary || "unknown error";
       emitProgress(
         emitter,
         makeEvent("planner:end", { ...eventBase, stage: "planner" }, {
@@ -524,10 +518,11 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
       );
       throw new Error(`Planner failed: ${details}`);
     }
-    if (plannerResult.output?.trim()) {
-      plannedTask = `${task}\n\nExecution plan:\n${plannerResult.output.trim()}`;
+    const planOutput = planResult.result?.plan || "";
+    if (planOutput) {
+      plannedTask = `${task}\n\nExecution plan:\n${planOutput}`;
     }
-    const parsedPlan = parsePlannerOutput(plannerResult.output);
+    const parsedPlan = parsePlannerOutput(planOutput);
     stageResults.planner = {
       ok: true,
       title: parsedPlan?.title || null,
