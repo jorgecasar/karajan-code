@@ -5,6 +5,7 @@ import { createAgent } from "../agents/index.js";
 import { addCheckpoint, markSessionStatus } from "../session-store.js";
 import { emitProgress, makeEvent } from "../utils/events.js";
 import { parsePlannerOutput } from "../prompts/planner.js";
+import { selectModelsForRoles } from "../utils/model-selector.js";
 
 export async function runTriageStage({ config, logger, emitter, eventBase, session, coderRole, trackBudget }) {
   logger.setContext({ iteration: 0, stage: "triage" });
@@ -46,6 +47,31 @@ export async function runTriageStage({ config, logger, emitter, eventBase, sessi
     roles: Array.from(recommendedRoles),
     reasoning: triageOutput.result?.reasoning || null
   };
+
+  let modelSelection = null;
+  if (triageOutput.ok && config?.model_selection?.enabled) {
+    const level = triageOutput.result?.level;
+    if (level) {
+      const { modelOverrides, reasoning } = selectModelsForRoles({ level, config });
+      for (const [role, model] of Object.entries(modelOverrides)) {
+        if (config.roles?.[role] && !config.roles[role].model) {
+          config.roles[role].model = model;
+        }
+      }
+      modelSelection = { modelOverrides, reasoning };
+      emitProgress(
+        emitter,
+        makeEvent("model-selection:applied", { ...eventBase, stage: "triage" }, {
+          message: "Smart model selection applied",
+          detail: modelSelection
+        })
+      );
+    }
+  }
+
+  if (modelSelection) {
+    stageResult.modelSelection = modelSelection;
+  }
 
   emitProgress(
     emitter,

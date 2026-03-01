@@ -106,6 +106,11 @@ const DEFAULTS = {
     currency: "usd",
     exchange_rate_eur: 0.92
   },
+  model_selection: {
+    enabled: true,
+    tiers: {},
+    role_overrides: {}
+  },
   session: {
     max_iteration_minutes: 15,
     max_total_minutes: 120,
@@ -260,6 +265,9 @@ export function applyRunOverrides(config, flags) {
   out.planning_game = out.planning_game || {};
   if (flags.pgTask) out.planning_game.enabled = true;
   if (flags.pgProject) out.planning_game.project_id = flags.pgProject;
+  out.model_selection = out.model_selection || { enabled: true, tiers: {}, role_overrides: {} };
+  if (flags.smartModels === true) out.model_selection.enabled = true;
+  if (flags.smartModels === false || flags.noSmartModels === true) out.model_selection.enabled = false;
   return out;
 }
 
