@@ -85,6 +85,7 @@ export const tools = [
         autoPr: { type: "boolean" },
         autoRebase: { type: "boolean" },
         branchPrefix: { type: "string" },
+        smartModels: { type: "boolean", description: "Enable/disable smart model selection based on triage complexity" },
         noSonar: { type: "boolean" },
         kjHome: { type: "string" },
         sonarToken: { type: "string" },

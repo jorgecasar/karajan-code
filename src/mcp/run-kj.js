@@ -49,6 +49,8 @@ export async function runKjCommand({ command, commandArgs = [], options = {}, en
   normalizeBoolFlag(options.autoPr, "--auto-pr", args);
   if (options.autoRebase === false) args.push("--no-auto-rebase");
   normalizeBoolFlag(options.noSonar, "--no-sonar", args);
+  if (options.smartModels === true) args.push("--smart-models");
+  if (options.smartModels === false) args.push("--no-smart-models");
   addOptionalValue(args, "--pg-task", options.pgTask);
   addOptionalValue(args, "--pg-project", options.pgProject);
 
