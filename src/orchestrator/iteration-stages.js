@@ -8,6 +8,7 @@ import { validateReviewResult } from "../review/schema.js";
 import { emitProgress, makeEvent } from "../utils/events.js";
 import { runReviewerWithFallback } from "./reviewer-fallback.js";
 import { invokeSolomon } from "./solomon-escalation.js";
+import { detectRateLimit } from "../utils/rate-limit-detector.js";
 
 export async function runCoderStage({ coderRoleInstance, coderRole, config, logger, emitter, eventBase, session, plannedTask, trackBudget, iteration }) {
   logger.setContext({ iteration, stage: "coder" });
@@ -35,8 +36,30 @@ export async function runCoderStage({ coderRoleInstance, coderRole, config, logg
   trackBudget({ role: "coder", provider: coderRole.provider, model: coderRole.model, result: coderExecResult.result, duration_ms: Date.now() - coderStart });
 
   if (!coderExecResult.ok) {
-    await markSessionStatus(session, "failed");
     const details = coderExecResult.result?.error || coderExecResult.summary || "unknown error";
+    const rateLimitCheck = detectRateLimit({
+      stderr: coderExecResult.result?.error || "",
+      stdout: coderExecResult.result?.output || ""
+    });
+
+    if (rateLimitCheck.isRateLimit) {
+      const question = `Agent ${coderRole.provider} hit a rate limit: ${rateLimitCheck.message}. Session paused until the token window resets.`;
+      await pauseSession(session, {
+        question,
+        context: { iteration, stage: "coder", reason: "rate_limit", agent: coderRole.provider, detail: rateLimitCheck.message }
+      });
+      emitProgress(
+        emitter,
+        makeEvent("coder:rate_limit", { ...eventBase, stage: "coder" }, {
+          status: "paused",
+          message: question,
+          detail: { agent: coderRole.provider, rateLimitMessage: rateLimitCheck.message, sessionId: session.id }
+        })
+      );
+      return { action: "pause", result: { paused: true, sessionId: session.id, question, context: "rate_limit" } };
+    }
+
+    await markSessionStatus(session, "failed");
     emitProgress(
       emitter,
       makeEvent("coder:end", { ...eventBase, stage: "coder" }, {
@@ -71,8 +94,30 @@ export async function runRefactorerStage({ refactorerRole, config, logger, emitt
   const refResult = await refRole.execute(plannedTask);
   trackBudget({ role: "refactorer", provider: refactorerRole.provider, model: refactorerRole.model, result: refResult.result, duration_ms: Date.now() - refactorerStart });
   if (!refResult.ok) {
-    await markSessionStatus(session, "failed");
     const details = refResult.result?.error || refResult.summary || "unknown error";
+    const rateLimitCheck = detectRateLimit({
+      stderr: refResult.result?.error || "",
+      stdout: refResult.result?.output || ""
+    });
+
+    if (rateLimitCheck.isRateLimit) {
+      const question = `Agent ${refactorerRole.provider} hit a rate limit: ${rateLimitCheck.message}. Session paused until the token window resets.`;
+      await pauseSession(session, {
+        question,
+        context: { iteration, stage: "refactorer", reason: "rate_limit", agent: refactorerRole.provider, detail: rateLimitCheck.message }
+      });
+      emitProgress(
+        emitter,
+        makeEvent("refactorer:rate_limit", { ...eventBase, stage: "refactorer" }, {
+          status: "paused",
+          message: question,
+          detail: { agent: refactorerRole.provider, rateLimitMessage: rateLimitCheck.message, sessionId: session.id }
+        })
+      );
+      return { action: "pause", result: { paused: true, sessionId: session.id, question, context: "rate_limit" } };
+    }
+
+    await markSessionStatus(session, "failed");
     emitProgress(
       emitter,
       makeEvent("refactorer:end", { ...eventBase, stage: "refactorer" }, {
@@ -318,12 +363,35 @@ export async function runReviewerStage({ reviewerRole, config, logger, emitter, 
   });
 
   if (!reviewerExec.execResult || !reviewerExec.execResult.ok) {
-    await markSessionStatus(session, "failed");
     const lastAttempt = reviewerExec.attempts.at(-1);
     const details =
       lastAttempt?.result?.error ||
       lastAttempt?.execResult?.summary ||
       `reviewer=${lastAttempt?.reviewer || "unknown"}`;
+
+    const rateLimitCheck = detectRateLimit({
+      stderr: lastAttempt?.result?.error || "",
+      stdout: lastAttempt?.result?.output || ""
+    });
+
+    if (rateLimitCheck.isRateLimit) {
+      const question = `Reviewer ${reviewerRole.provider} hit a rate limit: ${rateLimitCheck.message}. Session paused until the token window resets.`;
+      await pauseSession(session, {
+        question,
+        context: { iteration, stage: "reviewer", reason: "rate_limit", agent: reviewerRole.provider, detail: rateLimitCheck.message }
+      });
+      emitProgress(
+        emitter,
+        makeEvent("reviewer:rate_limit", { ...eventBase, stage: "reviewer" }, {
+          status: "paused",
+          message: question,
+          detail: { agent: reviewerRole.provider, rateLimitMessage: rateLimitCheck.message, sessionId: session.id }
+        })
+      );
+      return { action: "pause", result: { paused: true, sessionId: session.id, question, context: "rate_limit" } };
+    }
+
+    await markSessionStatus(session, "failed");
     emitProgress(
       emitter,
       makeEvent("reviewer:end", { ...eventBase, stage: "reviewer" }, {
