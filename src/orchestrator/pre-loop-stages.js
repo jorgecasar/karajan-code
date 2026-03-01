@@ -149,7 +149,7 @@ export async function runResearcherStage({ config, logger, emitter, eventBase, s
   return { researchContext, stageResult };
 }
 
-export async function runPlannerStage({ config, logger, emitter, eventBase, session, plannerRole, researchContext, trackBudget }) {
+export async function runPlannerStage({ config, logger, emitter, eventBase, session, plannerRole, researchContext, triageDecomposition = null, trackBudget }) {
   const task = session.task;
   logger.setContext({ iteration: 0, stage: "planner" });
   emitProgress(
@@ -161,7 +161,7 @@ export async function runPlannerStage({ config, logger, emitter, eventBase, sess
   );
 
   const planRole = new PlannerRole({ config, logger, emitter, createAgentFn: createAgent });
-  planRole.context = { task, research: researchContext };
+  planRole.context = { task, research: researchContext, triageDecomposition };
   await planRole.init();
   const plannerStart = Date.now();
   const planResult = await planRole.execute(task);
