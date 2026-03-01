@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-03-01
+
+### Added
+- **Smart model selection**: automatically selects optimal model per role based on triage complexity level — trivial/simple tasks use lighter models (haiku, flash, o4-mini), complex tasks use powerful models (opus, o3, pro)
+- CLI flags: `--smart-models` / `--no-smart-models` to enable/disable smart model selection
+- MCP parameter: `smartModels` for `kj_run`
+- New module `src/utils/model-selector.js` with configurable tier maps and role overrides
+- User-configurable tiers and role overrides via `model_selection` in `kj.config.yml`
+- Reviewer role override: always uses at least "medium" tier for review quality
+- Triage role override: always uses lightweight models regardless of task complexity
+- 34 new tests (964 total)
+
+### Changed
+- `model_selection.enabled: true` by default — smart selection activates automatically when triage is enabled
+- Explicit `--coder-model` / `--reviewer-model` flags always take precedence over smart selection
+
+## [1.4.0] - 2026-03-01
+
+### Added
+- **Auto-fallback to available agent**: when the primary agent hits a rate limit, Karajan automatically falls back to another available agent for the same role (#66)
+- 7 new tests (930 total)
+
+## [1.3.0] - 2026-03-01
+
+### Added
+- **Rate limit detection**: detects CLI agent rate limits (Claude, Codex) and pauses the session instead of failing, allowing resumption when the token window resets (#65)
+- 5 new tests (923 total)
+
 ## [1.2.0] - 2026-02-28
 
 ### Added
@@ -87,7 +115,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI/CD**: GitHub Actions workflow with validation and PR annotations
 - **716+ unit tests** with Vitest
 
-[Unreleased]: https://github.com/manufosela/karajan-code/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/manufosela/karajan-code/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/manufosela/karajan-code/compare/v1.4.0...v1.5.0
+[1.4.0]: https://github.com/manufosela/karajan-code/compare/v1.3.0...v1.4.0
+[1.3.0]: https://github.com/manufosela/karajan-code/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/manufosela/karajan-code/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/manufosela/karajan-code/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/manufosela/karajan-code/compare/v0.2.0...v1.0.0
