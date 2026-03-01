@@ -26,15 +26,13 @@ import {
 } from "./git/automation.js";
 import { resolveRoleMdPath, loadFirstExisting } from "./roles/base-role.js";
 import { resolveReviewProfile } from "./review/profiles.js";
-import { ResearcherRole } from "./roles/researcher-role.js";
-import { TriageRole } from "./roles/triage-role.js";
 import { TesterRole } from "./roles/tester-role.js";
 import { SecurityRole } from "./roles/security-role.js";
 import { RefactorerRole } from "./roles/refactorer-role.js";
-import { PlannerRole } from "./roles/planner-role.js";
 import { CoderRole } from "./roles/coder-role.js";
 import { runReviewerWithFallback } from "./orchestrator/reviewer-fallback.js";
 import { invokeSolomon, escalateToHuman } from "./orchestrator/solomon-escalation.js";
+import { runTriageStage, runResearcherStage, runPlannerStage } from "./orchestrator/pre-loop-stages.js";
 
 
 
@@ -183,155 +181,37 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
   let sonarIssuesFinal = null;
 
   if (triageEnabled) {
-    logger.setContext({ iteration: 0, stage: "triage" });
-    emitProgress(
-      emitter,
-      makeEvent("triage:start", { ...eventBase, stage: "triage" }, {
-        message: "Triage classifying task complexity"
-      })
-    );
-
-    const triage = new TriageRole({ config, logger, emitter });
-    await triage.init({ task, sessionId: session.id, iteration: 0 });
-    const triageStart = Date.now();
-    const triageOutput = await triage.run({ task });
-    trackBudget({
-      role: "triage",
-      provider: config?.roles?.triage?.provider || coderRole.provider,
-      model: config?.roles?.triage?.model || coderRole.model,
-      result: triageOutput,
-      duration_ms: Date.now() - triageStart
-    });
-
-    await addCheckpoint(session, { stage: "triage", iteration: 0, ok: triageOutput.ok });
-
-    const recommendedRoles = new Set(triageOutput.result?.roles || []);
-    if (triageOutput.ok) {
-      plannerEnabled = recommendedRoles.has("planner");
-      researcherEnabled = recommendedRoles.has("researcher");
-      refactorerEnabled = recommendedRoles.has("refactorer");
-      reviewerEnabled = recommendedRoles.has("reviewer");
-      testerEnabled = recommendedRoles.has("tester");
-      securityEnabled = recommendedRoles.has("security");
-    }
-
-    if (flags.enablePlanner !== undefined) plannerEnabled = Boolean(flags.enablePlanner);
-    if (flags.enableResearcher !== undefined) researcherEnabled = Boolean(flags.enableResearcher);
-    if (flags.enableRefactorer !== undefined) refactorerEnabled = Boolean(flags.enableRefactorer);
-    if (flags.enableReviewer !== undefined) reviewerEnabled = Boolean(flags.enableReviewer);
-    if (flags.enableTester !== undefined) testerEnabled = Boolean(flags.enableTester);
-    if (flags.enableSecurity !== undefined) securityEnabled = Boolean(flags.enableSecurity);
-
-    stageResults.triage = {
-      ok: triageOutput.ok,
-      level: triageOutput.result?.level || null,
-      roles: Array.from(recommendedRoles),
-      reasoning: triageOutput.result?.reasoning || null
-    };
-
-    emitProgress(
-      emitter,
-      makeEvent("triage:end", { ...eventBase, stage: "triage" }, {
-        status: triageOutput.ok ? "ok" : "fail",
-        message: triageOutput.ok ? "Triage completed" : `Triage failed: ${triageOutput.summary}`,
-        detail: stageResults.triage
-      })
-    );
-  } else {
-    if (flags.enablePlanner !== undefined) plannerEnabled = Boolean(flags.enablePlanner);
-    if (flags.enableResearcher !== undefined) researcherEnabled = Boolean(flags.enableResearcher);
-    if (flags.enableRefactorer !== undefined) refactorerEnabled = Boolean(flags.enableRefactorer);
-    if (flags.enableReviewer !== undefined) reviewerEnabled = Boolean(flags.enableReviewer);
-    if (flags.enableTester !== undefined) testerEnabled = Boolean(flags.enableTester);
-    if (flags.enableSecurity !== undefined) securityEnabled = Boolean(flags.enableSecurity);
+    const triageResult = await runTriageStage({ config, logger, emitter, eventBase, session, coderRole, trackBudget });
+    if (triageResult.roleOverrides.plannerEnabled !== undefined) plannerEnabled = triageResult.roleOverrides.plannerEnabled;
+    if (triageResult.roleOverrides.researcherEnabled !== undefined) researcherEnabled = triageResult.roleOverrides.researcherEnabled;
+    if (triageResult.roleOverrides.refactorerEnabled !== undefined) refactorerEnabled = triageResult.roleOverrides.refactorerEnabled;
+    if (triageResult.roleOverrides.reviewerEnabled !== undefined) reviewerEnabled = triageResult.roleOverrides.reviewerEnabled;
+    if (triageResult.roleOverrides.testerEnabled !== undefined) testerEnabled = triageResult.roleOverrides.testerEnabled;
+    if (triageResult.roleOverrides.securityEnabled !== undefined) securityEnabled = triageResult.roleOverrides.securityEnabled;
+    stageResults.triage = triageResult.stageResult;
   }
+
+  if (flags.enablePlanner !== undefined) plannerEnabled = Boolean(flags.enablePlanner);
+  if (flags.enableResearcher !== undefined) researcherEnabled = Boolean(flags.enableResearcher);
+  if (flags.enableRefactorer !== undefined) refactorerEnabled = Boolean(flags.enableRefactorer);
+  if (flags.enableReviewer !== undefined) reviewerEnabled = Boolean(flags.enableReviewer);
+  if (flags.enableTester !== undefined) testerEnabled = Boolean(flags.enableTester);
+  if (flags.enableSecurity !== undefined) securityEnabled = Boolean(flags.enableSecurity);
 
   // --- Researcher (pre-planning) ---
   let researchContext = null;
   if (researcherEnabled) {
-    logger.setContext({ iteration: 0, stage: "researcher" });
-    emitProgress(
-      emitter,
-      makeEvent("researcher:start", { ...eventBase, stage: "researcher" }, {
-        message: "Researcher investigating codebase"
-      })
-    );
-
-    const researcher = new ResearcherRole({ config, logger, emitter });
-    await researcher.init({ task });
-    const researchStart = Date.now();
-    const researchOutput = await researcher.run({ task });
-    trackBudget({
-      role: "researcher",
-      provider: config?.roles?.researcher?.provider || coderRole.provider,
-      model: config?.roles?.researcher?.model || coderRole.model,
-      result: researchOutput,
-      duration_ms: Date.now() - researchStart
-    });
-
-    await addCheckpoint(session, { stage: "researcher", iteration: 0, ok: researchOutput.ok });
-
-    emitProgress(
-      emitter,
-      makeEvent("researcher:end", { ...eventBase, stage: "researcher" }, {
-        status: researchOutput.ok ? "ok" : "fail",
-        message: researchOutput.ok ? "Research completed" : `Research failed: ${researchOutput.summary}`
-      })
-    );
-
-    stageResults.researcher = { ok: researchOutput.ok, summary: researchOutput.summary || null };
-    if (researchOutput.ok) {
-      researchContext = researchOutput.result;
-    }
+    const researcherResult = await runResearcherStage({ config, logger, emitter, eventBase, session, coderRole, trackBudget });
+    researchContext = researcherResult.researchContext;
+    stageResults.researcher = researcherResult.stageResult;
   }
 
   // --- Planner ---
   let plannedTask = task;
   if (plannerEnabled) {
-    logger.setContext({ iteration: 0, stage: "planner" });
-    emitProgress(
-      emitter,
-      makeEvent("planner:start", { ...eventBase, stage: "planner" }, {
-        message: `Planner (${plannerRole.provider}) running`,
-        detail: { planner: plannerRole.provider }
-      })
-    );
-    const planRole = new PlannerRole({ config, logger, emitter, createAgentFn: createAgent });
-    planRole.context = { task, research: researchContext };
-    await planRole.init();
-    const plannerStart = Date.now();
-    const planResult = await planRole.execute(task);
-    trackBudget({ role: "planner", provider: plannerRole.provider, model: plannerRole.model, result: planResult.result, duration_ms: Date.now() - plannerStart });
-    if (!planResult.ok) {
-      await markSessionStatus(session, "failed");
-      const details = planResult.result?.error || planResult.summary || "unknown error";
-      emitProgress(
-        emitter,
-        makeEvent("planner:end", { ...eventBase, stage: "planner" }, {
-          status: "fail",
-          message: `Planner failed: ${details}`
-        })
-      );
-      throw new Error(`Planner failed: ${details}`);
-    }
-    const planOutput = planResult.result?.plan || "";
-    if (planOutput) {
-      plannedTask = `${task}\n\nExecution plan:\n${planOutput}`;
-    }
-    const parsedPlan = parsePlannerOutput(planOutput);
-    stageResults.planner = {
-      ok: true,
-      title: parsedPlan?.title || null,
-      approach: parsedPlan?.approach || null,
-      steps: parsedPlan?.steps || [],
-      completedSteps: []
-    };
-    emitProgress(
-      emitter,
-      makeEvent("planner:end", { ...eventBase, stage: "planner" }, {
-        message: "Planner completed"
-      })
-    );
+    const plannerResult = await runPlannerStage({ config, logger, emitter, eventBase, session, plannerRole, researchContext, trackBudget });
+    plannedTask = plannerResult.plannedTask;
+    stageResults.planner = plannerResult.stageResult;
   }
 
   const gitCtx = await prepareGitAutomation({ config, task, logger, session });
