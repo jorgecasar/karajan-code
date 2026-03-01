@@ -1,0 +1,149 @@
+import { TriageRole } from "../roles/triage-role.js";
+import { ResearcherRole } from "../roles/researcher-role.js";
+import { PlannerRole } from "../roles/planner-role.js";
+import { createAgent } from "../agents/index.js";
+import { addCheckpoint, markSessionStatus } from "../session-store.js";
+import { emitProgress, makeEvent } from "../utils/events.js";
+import { parsePlannerOutput } from "../prompts/planner.js";
+
+export async function runTriageStage({ config, logger, emitter, eventBase, session, coderRole, trackBudget }) {
+  logger.setContext({ iteration: 0, stage: "triage" });
+  emitProgress(
+    emitter,
+    makeEvent("triage:start", { ...eventBase, stage: "triage" }, {
+      message: "Triage classifying task complexity"
+    })
+  );
+
+  const triage = new TriageRole({ config, logger, emitter });
+  await triage.init({ task: session.task, sessionId: session.id, iteration: 0 });
+  const triageStart = Date.now();
+  const triageOutput = await triage.run({ task: session.task });
+  trackBudget({
+    role: "triage",
+    provider: config?.roles?.triage?.provider || coderRole.provider,
+    model: config?.roles?.triage?.model || coderRole.model,
+    result: triageOutput,
+    duration_ms: Date.now() - triageStart
+  });
+
+  await addCheckpoint(session, { stage: "triage", iteration: 0, ok: triageOutput.ok });
+
+  const recommendedRoles = new Set(triageOutput.result?.roles || []);
+  const roleOverrides = {};
+  if (triageOutput.ok) {
+    roleOverrides.plannerEnabled = recommendedRoles.has("planner");
+    roleOverrides.researcherEnabled = recommendedRoles.has("researcher");
+    roleOverrides.refactorerEnabled = recommendedRoles.has("refactorer");
+    roleOverrides.reviewerEnabled = recommendedRoles.has("reviewer");
+    roleOverrides.testerEnabled = recommendedRoles.has("tester");
+    roleOverrides.securityEnabled = recommendedRoles.has("security");
+  }
+
+  const stageResult = {
+    ok: triageOutput.ok,
+    level: triageOutput.result?.level || null,
+    roles: Array.from(recommendedRoles),
+    reasoning: triageOutput.result?.reasoning || null
+  };
+
+  emitProgress(
+    emitter,
+    makeEvent("triage:end", { ...eventBase, stage: "triage" }, {
+      status: triageOutput.ok ? "ok" : "fail",
+      message: triageOutput.ok ? "Triage completed" : `Triage failed: ${triageOutput.summary}`,
+      detail: stageResult
+    })
+  );
+
+  return { roleOverrides, stageResult };
+}
+
+export async function runResearcherStage({ config, logger, emitter, eventBase, session, coderRole, trackBudget }) {
+  logger.setContext({ iteration: 0, stage: "researcher" });
+  emitProgress(
+    emitter,
+    makeEvent("researcher:start", { ...eventBase, stage: "researcher" }, {
+      message: "Researcher investigating codebase"
+    })
+  );
+
+  const researcher = new ResearcherRole({ config, logger, emitter });
+  await researcher.init({ task: session.task });
+  const researchStart = Date.now();
+  const researchOutput = await researcher.run({ task: session.task });
+  trackBudget({
+    role: "researcher",
+    provider: config?.roles?.researcher?.provider || coderRole.provider,
+    model: config?.roles?.researcher?.model || coderRole.model,
+    result: researchOutput,
+    duration_ms: Date.now() - researchStart
+  });
+
+  await addCheckpoint(session, { stage: "researcher", iteration: 0, ok: researchOutput.ok });
+
+  emitProgress(
+    emitter,
+    makeEvent("researcher:end", { ...eventBase, stage: "researcher" }, {
+      status: researchOutput.ok ? "ok" : "fail",
+      message: researchOutput.ok ? "Research completed" : `Research failed: ${researchOutput.summary}`
+    })
+  );
+
+  const stageResult = { ok: researchOutput.ok, summary: researchOutput.summary || null };
+  const researchContext = researchOutput.ok ? researchOutput.result : null;
+
+  return { researchContext, stageResult };
+}
+
+export async function runPlannerStage({ config, logger, emitter, eventBase, session, plannerRole, researchContext, trackBudget }) {
+  const task = session.task;
+  logger.setContext({ iteration: 0, stage: "planner" });
+  emitProgress(
+    emitter,
+    makeEvent("planner:start", { ...eventBase, stage: "planner" }, {
+      message: `Planner (${plannerRole.provider}) running`,
+      detail: { planner: plannerRole.provider }
+    })
+  );
+
+  const planRole = new PlannerRole({ config, logger, emitter, createAgentFn: createAgent });
+  planRole.context = { task, research: researchContext };
+  await planRole.init();
+  const plannerStart = Date.now();
+  const planResult = await planRole.execute(task);
+  trackBudget({ role: "planner", provider: plannerRole.provider, model: plannerRole.model, result: planResult.result, duration_ms: Date.now() - plannerStart });
+
+  if (!planResult.ok) {
+    await markSessionStatus(session, "failed");
+    const details = planResult.result?.error || planResult.summary || "unknown error";
+    emitProgress(
+      emitter,
+      makeEvent("planner:end", { ...eventBase, stage: "planner" }, {
+        status: "fail",
+        message: `Planner failed: ${details}`
+      })
+    );
+    throw new Error(`Planner failed: ${details}`);
+  }
+
+  const planOutput = planResult.result?.plan || "";
+  const plannedTask = planOutput ? `${task}\n\nExecution plan:\n${planOutput}` : task;
+  const parsedPlan = parsePlannerOutput(planOutput);
+  const stageResult = {
+    ok: true,
+    title: parsedPlan?.title || null,
+    approach: parsedPlan?.approach || null,
+    steps: parsedPlan?.steps || [],
+    completedSteps: []
+  };
+
+  emitProgress(
+    emitter,
+    makeEvent("planner:end", { ...eventBase, stage: "planner" }, {
+      message: "Planner completed"
+    })
+  );
+
+  return { plannedTask, stageResult };
+}

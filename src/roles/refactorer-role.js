@@ -47,6 +47,7 @@ export class RefactorerRole extends BaseRole {
       return {
         ok: false,
         result: {
+          ...result,
           error: result.error || result.output || "Refactorer failed",
           provider
         },
@@ -57,6 +58,7 @@ export class RefactorerRole extends BaseRole {
     return {
       ok: true,
       result: {
+        ...result,
         output: result.output?.trim() || "",
         provider
       },

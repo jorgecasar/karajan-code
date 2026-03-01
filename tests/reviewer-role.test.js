@@ -86,8 +86,9 @@ describe("ReviewerRole", () => {
     await role.init({ task: "Task" });
     const output = await role.run({ task: "Task", diff: "diff" });
 
-    expect(output.ok).toBe(false);
-    expect(output.result.error).toContain("parse");
+    expect(output.ok).toBe(true);
+    expect(output.result.approved).toBe(false);
+    expect(output.result.blocking_issues[0].id).toBe("PARSE_ERROR");
   });
 
   it("includes review rules and instructions in prompt", async () => {

@@ -1,0 +1,128 @@
+import { describe, expect, it } from "vitest";
+import {
+  registerModel,
+  getModelPricing,
+  isModelDeprecated,
+  getModelInfo,
+  getRegisteredModels,
+  buildDefaultPricingTable,
+} from "../src/agents/model-registry.js";
+
+describe("model-registry", () => {
+  describe("built-in models", () => {
+    it("registers all 11 built-in models", () => {
+      const models = getRegisteredModels();
+      expect(models.length).toBeGreaterThanOrEqual(11);
+    });
+
+    it("returns pricing for claude/sonnet", () => {
+      const pricing = getModelPricing("claude/sonnet");
+      expect(pricing).toEqual({ input_per_million: 3, output_per_million: 15 });
+    });
+
+    it("returns pricing for codex/o4-mini", () => {
+      const pricing = getModelPricing("codex/o4-mini");
+      expect(pricing).toEqual({ input_per_million: 1.5, output_per_million: 4 });
+    });
+
+    it("returns pricing for gemini/flash", () => {
+      const pricing = getModelPricing("gemini/flash");
+      expect(pricing).toEqual({ input_per_million: 0.075, output_per_million: 0.3 });
+    });
+
+    it("returns null for unknown model", () => {
+      expect(getModelPricing("gpt5")).toBeNull();
+    });
+  });
+
+  describe("registerModel", () => {
+    it("registers a new model and retrieves its pricing", () => {
+      registerModel("test/custom-model", {
+        provider: "test-provider",
+        pricing: { input_per_million: 2, output_per_million: 8 },
+      });
+      expect(getModelPricing("test/custom-model")).toEqual({
+        input_per_million: 2,
+        output_per_million: 8,
+      });
+    });
+
+    it("throws for empty model name", () => {
+      expect(() => registerModel("", { pricing: { input_per_million: 1, output_per_million: 1 } }))
+        .toThrow("Model name must be a non-empty string");
+    });
+
+    it("throws when pricing is missing", () => {
+      expect(() => registerModel("test/no-pricing", {}))
+        .toThrow('requires pricing');
+    });
+
+    it("infers provider from model name when not specified", () => {
+      registerModel("newprovider/v1", {
+        pricing: { input_per_million: 1, output_per_million: 2 },
+      });
+      const info = getModelInfo("newprovider/v1");
+      expect(info.provider).toBe("newprovider");
+    });
+  });
+
+  describe("isModelDeprecated", () => {
+    it("returns false for non-deprecated models", () => {
+      expect(isModelDeprecated("claude")).toBe(false);
+    });
+
+    it("returns false for unknown models", () => {
+      expect(isModelDeprecated("nonexistent")).toBe(false);
+    });
+
+    it("returns true for a model with past deprecation date", () => {
+      registerModel("test/old-model", {
+        provider: "test",
+        pricing: { input_per_million: 1, output_per_million: 1 },
+        deprecated: "2020-01-01",
+      });
+      expect(isModelDeprecated("test/old-model")).toBe(true);
+    });
+
+    it("returns false for a model with future deprecation date", () => {
+      registerModel("test/future-model", {
+        provider: "test",
+        pricing: { input_per_million: 1, output_per_million: 1 },
+        deprecated: "2099-12-31",
+      });
+      expect(isModelDeprecated("test/future-model")).toBe(false);
+    });
+  });
+
+  describe("getModelInfo", () => {
+    it("returns full info for a registered model", () => {
+      const info = getModelInfo("claude/opus");
+      expect(info).toEqual({
+        name: "claude/opus",
+        provider: "anthropic",
+        pricing: { input_per_million: 15, output_per_million: 75 },
+        deprecated: null,
+      });
+    });
+
+    it("returns null for unknown model", () => {
+      expect(getModelInfo("unknown")).toBeNull();
+    });
+  });
+
+  describe("buildDefaultPricingTable", () => {
+    it("returns a plain object with all registered models", () => {
+      const table = buildDefaultPricingTable();
+      expect(table["claude"]).toEqual({ input_per_million: 3, output_per_million: 15 });
+      expect(table["codex/o3"]).toEqual({ input_per_million: 10, output_per_million: 40 });
+      expect(table["gemini/flash"]).toEqual({ input_per_million: 0.075, output_per_million: 0.3 });
+    });
+
+    it("returns defensive copies (mutations do not affect registry)", () => {
+      const table = buildDefaultPricingTable();
+      table["claude"].input_per_million = 999;
+      const fresh = buildDefaultPricingTable();
+      expect(fresh["claude"].input_per_million).toBe(3);
+    });
+  });
+});

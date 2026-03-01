@@ -66,7 +66,7 @@ export class PlannerRole extends BaseRole {
     if (!result.ok) {
       return {
         ok: false,
-        result: { error: result.error || result.output || "Planner agent failed", plan: null },
+        result: { ...result, error: result.error || result.output || "Planner agent failed", plan: null },
         summary: `Planner failed: ${result.error || "unknown error"}`
       };
     }
@@ -74,7 +74,7 @@ export class PlannerRole extends BaseRole {
     const plan = result.output?.trim() || "";
     return {
       ok: true,
-      result: { plan, provider },
+      result: { ...result, plan, provider },
       summary: plan ? `Plan generated (${plan.split("\n").length} lines)` : "Empty plan generated"
     };
   }

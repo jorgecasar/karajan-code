@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { EventEmitter } from "node:events";
+import { makeConfig, noopLogger, reapplyDefaultMocks } from "./fixtures/orchestrator-mocks.js";
 
 vi.mock("../src/agents/index.js", () => ({
   createAgent: vi.fn()
@@ -73,64 +74,18 @@ vi.mock("node:fs/promises", () => ({
   }
 }));
 
-function makeConfig(overrides = {}) {
-  return {
-    coder: "codex",
-    reviewer: "claude",
-    review_mode: "standard",
-    max_iterations: 5,
-    base_branch: "main",
-    roles: {
-      planner: { provider: null },
-      coder: { provider: "codex" },
-      reviewer: { provider: "claude" },
-      refactorer: { provider: null }
-    },
-    pipeline: { planner: { enabled: false }, refactorer: { enabled: false }, solomon: { enabled: false } },
-    coder_options: { auto_approve: true },
-    reviewer_options: { retries: 0, fallback_reviewer: "codex" },
-    development: { methodology: "tdd", require_test_changes: true },
-    sonarqube: { enabled: true, host: "http://localhost:9000", enforcement_profile: "pragmatic" },
-    git: { auto_commit: false, auto_push: false, auto_pr: false },
-    session: {
-      max_iteration_minutes: 15,
-      max_total_minutes: 120,
-      fail_fast_repeats: 2,
-      repeat_detection_threshold: 2,
-      max_sonar_retries: 3,
-      max_reviewer_retries: 3
-    },
-    failFast: { repeatThreshold: 2 },
-    output: { log_level: "error" },
-    ...overrides
-  };
-}
-
-const noopLogger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), setContext: vi.fn() };
-
 describe("dry-run mode", () => {
   let runFlow;
 
   beforeEach(async () => {
     vi.resetAllMocks();
-
-    const { createAgent } = await import("../src/agents/index.js");
-    createAgent.mockReturnValue({
-      runTask: vi.fn().mockResolvedValue({ ok: true, output: "" }),
-      reviewTask: vi.fn().mockResolvedValue({ ok: true, output: "{}" })
-    });
-
-    const { computeBaseRef } = await import("../src/review/diff-generator.js");
-    computeBaseRef.mockResolvedValue("abc123");
+    await reapplyDefaultMocks("{}");
 
     const { buildCoderPrompt } = await import("../src/prompts/coder.js");
     buildCoderPrompt.mockReturnValue("coder prompt content");
 
     const { buildReviewerPrompt } = await import("../src/prompts/reviewer.js");
     buildReviewerPrompt.mockReturnValue("reviewer prompt content");
-
-    const fs = await import("node:fs/promises");
-    fs.default.readFile.mockResolvedValue("role instructions");
 
     const mod = await import("../src/orchestrator.js");
     runFlow = mod.runFlow;
@@ -139,7 +94,7 @@ describe("dry-run mode", () => {
   it("returns dry_run=true without executing agents", async () => {
     const { createAgent } = await import("../src/agents/index.js");
 
-    const config = makeConfig();
+    const config = makeConfig({ reviewer_options: { retries: 0, fallback_reviewer: "codex" } });
     const result = await runFlow({
       task: "Add login",
       config,
@@ -148,7 +103,6 @@ describe("dry-run mode", () => {
     });
 
     expect(result.dry_run).toBe(true);
-    // Agents should never be called
     const agent = createAgent.mock.results[0]?.value;
     if (agent) {
       expect(agent.runTask).not.toHaveBeenCalled();
@@ -157,7 +111,7 @@ describe("dry-run mode", () => {
   });
 
   it("includes resolved roles in dry-run output", async () => {
-    const config = makeConfig();
+    const config = makeConfig({ reviewer_options: { retries: 0, fallback_reviewer: "codex" } });
     const result = await runFlow({
       task: "Add login",
       config,
@@ -170,7 +124,7 @@ describe("dry-run mode", () => {
   });
 
   it("includes pipeline configuration", async () => {
-    const config = makeConfig();
+    const config = makeConfig({ reviewer_options: { retries: 0, fallback_reviewer: "codex" } });
     const result = await runFlow({
       task: "Add login",
       config,
@@ -185,7 +139,7 @@ describe("dry-run mode", () => {
   });
 
   it("includes session limits", async () => {
-    const config = makeConfig();
+    const config = makeConfig({ reviewer_options: { retries: 0, fallback_reviewer: "codex" } });
     const result = await runFlow({
       task: "Add login",
       config,
@@ -198,7 +152,7 @@ describe("dry-run mode", () => {
   });
 
   it("includes sample prompts", async () => {
-    const config = makeConfig();
+    const config = makeConfig({ reviewer_options: { retries: 0, fallback_reviewer: "codex" } });
     const result = await runFlow({
       task: "Add login",
       config,
@@ -213,7 +167,7 @@ describe("dry-run mode", () => {
   it("does not create a session store entry", async () => {
     const { createSession } = await import("../src/session-store.js");
 
-    const config = makeConfig();
+    const config = makeConfig({ reviewer_options: { retries: 0, fallback_reviewer: "codex" } });
     await runFlow({
       task: "Add login",
       config,
@@ -227,7 +181,7 @@ describe("dry-run mode", () => {
   it("does not run sonar scan", async () => {
     const { runSonarScan } = await import("../src/sonar/scanner.js");
 
-    const config = makeConfig();
+    const config = makeConfig({ reviewer_options: { retries: 0, fallback_reviewer: "codex" } });
     await runFlow({
       task: "Add login",
       config,
@@ -243,7 +197,7 @@ describe("dry-run mode", () => {
     const events = [];
     emitter.on("progress", (e) => events.push(e));
 
-    const config = makeConfig();
+    const config = makeConfig({ reviewer_options: { retries: 0, fallback_reviewer: "codex" } });
     await runFlow({
       task: "Add login",
       config,
