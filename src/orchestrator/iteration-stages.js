@@ -1,4 +1,5 @@
 import { createAgent } from "../agents/index.js";
+import { CoderRole } from "../roles/coder-role.js";
 import { RefactorerRole } from "../roles/refactorer-role.js";
 import { SonarRole } from "../roles/sonar-role.js";
 import { addCheckpoint, markSessionStatus, saveSession, pauseSession } from "../session-store.js";
@@ -7,6 +8,7 @@ import { evaluateTddPolicy } from "../review/tdd-policy.js";
 import { validateReviewResult } from "../review/schema.js";
 import { emitProgress, makeEvent } from "../utils/events.js";
 import { runReviewerWithFallback } from "./reviewer-fallback.js";
+import { runCoderWithFallback } from "./agent-fallback.js";
 import { invokeSolomon } from "./solomon-escalation.js";
 import { detectRateLimit } from "../utils/rate-limit-detector.js";
 
@@ -43,6 +45,46 @@ export async function runCoderStage({ coderRoleInstance, coderRole, config, logg
     });
 
     if (rateLimitCheck.isRateLimit) {
+      // Try fallback agent if configured
+      const fallbackCoder = config.coder_options?.fallback_coder;
+      if (fallbackCoder && fallbackCoder !== coderRole.provider) {
+        logger.warn(`Coder ${coderRole.provider} hit rate limit, falling back to ${fallbackCoder}`);
+        emitProgress(
+          emitter,
+          makeEvent("coder:fallback", { ...eventBase, stage: "coder" }, {
+            message: `Coder ${coderRole.provider} rate-limited, switching to ${fallbackCoder}`,
+            detail: { primary: coderRole.provider, fallback: fallbackCoder }
+          })
+        );
+
+        const fallbackResult = await runCoderWithFallback({
+          coderName: fallbackCoder,
+          fallbackCoder: null,
+          config,
+          logger,
+          emitter,
+          RoleClass: CoderRole,
+          roleInput: { task: plannedTask, reviewerFeedback: session.last_reviewer_feedback, sonarSummary: session.last_sonar_summary, onOutput: coderOnOutput },
+          session,
+          iteration,
+          onAttemptResult: ({ coder, result }) => {
+            trackBudget({ role: "coder", provider: coder, model: coderRole.model, result, duration_ms: Date.now() - coderStart });
+          }
+        });
+
+        if (fallbackResult.execResult?.ok) {
+          await addCheckpoint(session, { stage: "coder", iteration, note: `Coder completed via fallback (${fallbackCoder})` });
+          emitProgress(
+            emitter,
+            makeEvent("coder:end", { ...eventBase, stage: "coder" }, {
+              message: `Coder completed (fallback: ${fallbackCoder})`
+            })
+          );
+          return;
+        }
+      }
+
+      // No fallback or fallback also failed — pause
       const question = `Agent ${coderRole.provider} hit a rate limit: ${rateLimitCheck.message}. Session paused until the token window resets.`;
       await pauseSession(session, {
         question,
