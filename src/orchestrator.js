@@ -255,11 +255,17 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
     logger.info(`Iteration ${i}/${config.max_iterations}`);
 
     // --- Coder ---
-    await runCoderStage({ coderRoleInstance, coderRole, config, logger, emitter, eventBase, session, plannedTask, trackBudget, iteration: i });
+    const coderResult = await runCoderStage({ coderRoleInstance, coderRole, config, logger, emitter, eventBase, session, plannedTask, trackBudget, iteration: i });
+    if (coderResult?.action === "pause") {
+      return coderResult.result;
+    }
 
     // --- Refactorer ---
     if (refactorerEnabled) {
-      await runRefactorerStage({ refactorerRole, config, logger, emitter, eventBase, session, plannedTask, trackBudget, iteration: i });
+      const refResult = await runRefactorerStage({ refactorerRole, config, logger, emitter, eventBase, session, plannedTask, trackBudget, iteration: i });
+      if (refResult?.action === "pause") {
+        return refResult.result;
+      }
     }
 
     // --- TDD Policy ---
@@ -302,6 +308,9 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
         reviewerRole, config, logger, emitter, eventBase, session, trackBudget,
         iteration: i, reviewRules, task, repeatDetector, budgetSummary
       });
+      if (reviewerResult.action === "pause") {
+        return reviewerResult.result;
+      }
       review = reviewerResult.review;
       if (reviewerResult.stalled) {
         return reviewerResult.stalledResult;
