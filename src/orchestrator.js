@@ -1,10 +1,8 @@
 import { createAgent } from "./agents/index.js";
 import {
-  addCheckpoint,
   createSession,
   loadSession,
   markSessionStatus,
-  pauseSession,
   resumeSessionWithAnswer,
   saveSession
 } from "./session-store.js";
@@ -16,18 +14,16 @@ import { RepeatDetector, getRepeatThreshold } from "./repeat-detector.js";
 import { emitProgress, makeEvent } from "./utils/events.js";
 import { BudgetTracker, extractUsageMetrics } from "./utils/budget.js";
 import {
-  commitMessageFromTask,
   prepareGitAutomation,
   finalizeGitAutomation
 } from "./git/automation.js";
 import { resolveRoleMdPath, loadFirstExisting } from "./roles/base-role.js";
 import { resolveReviewProfile } from "./review/profiles.js";
-import { TesterRole } from "./roles/tester-role.js";
-import { SecurityRole } from "./roles/security-role.js";
 import { CoderRole } from "./roles/coder-role.js";
 import { invokeSolomon } from "./orchestrator/solomon-escalation.js";
 import { runTriageStage, runResearcherStage, runPlannerStage } from "./orchestrator/pre-loop-stages.js";
 import { runCoderStage, runRefactorerStage, runTddCheckStage, runSonarStage, runReviewerStage } from "./orchestrator/iteration-stages.js";
+import { runTesterStage, runSecurityStage } from "./orchestrator/post-loop-stages.js";
 
 
 
@@ -328,139 +324,35 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
       // --- Post-loop stages: Tester → Security ---
       const postLoopDiff = await generateDiff({ baseRef: session.session_start_sha });
 
-      // --- Tester ---
       if (testerEnabled) {
-        logger.setContext({ iteration: i, stage: "tester" });
-        emitProgress(
-          emitter,
-          makeEvent("tester:start", { ...eventBase, stage: "tester" }, {
-            message: "Tester evaluating test quality"
-          })
-        );
-
-        const tester = new TesterRole({ config, logger, emitter });
-        await tester.init({ task, iteration: i });
-        const testerStart = Date.now();
-        const testerOutput = await tester.run({ task, diff: postLoopDiff });
-        trackBudget({
-          role: "tester",
-          provider: config?.roles?.tester?.provider || coderRole.provider,
-          model: config?.roles?.tester?.model || coderRole.model,
-          result: testerOutput,
-          duration_ms: Date.now() - testerStart
+        const testerResult = await runTesterStage({
+          config, logger, emitter, eventBase, session, coderRole, trackBudget,
+          iteration: i, task, diff: postLoopDiff, askQuestion
         });
-
-        await addCheckpoint(session, { stage: "tester", iteration: i, ok: testerOutput.ok });
-
-        emitProgress(
-          emitter,
-          makeEvent("tester:end", { ...eventBase, stage: "tester" }, {
-            status: testerOutput.ok ? "ok" : "fail",
-            message: testerOutput.ok ? "Tester passed" : `Tester: ${testerOutput.summary}`
-          })
-        );
-
-        if (!testerOutput.ok) {
-          const maxTesterRetries = config.session?.max_tester_retries ?? 1;
-          session.tester_retry_count = (session.tester_retry_count || 0) + 1;
-          await saveSession(session);
-
-          if (session.tester_retry_count >= maxTesterRetries) {
-            const solomonResult = await invokeSolomon({
-              config, logger, emitter, eventBase, stage: "tester", askQuestion, session, iteration: i,
-              conflict: {
-                stage: "tester",
-                task,
-                diff: postLoopDiff,
-                iterationCount: session.tester_retry_count,
-                maxIterations: maxTesterRetries,
-                history: [{ agent: "tester", feedback: testerOutput.summary }]
-              }
-            });
-
-            if (solomonResult.action === "pause") {
-              return { paused: true, sessionId: session.id, question: solomonResult.question, context: "tester_fail_fast" };
-            }
-            if (solomonResult.action === "subtask") {
-              return { paused: true, sessionId: session.id, subtask: solomonResult.subtask, context: "tester_subtask" };
-            }
-            // continue = Solomon approved, proceed to next stage
-          } else {
-            session.last_reviewer_feedback = `Tester feedback: ${testerOutput.summary}`;
-            await saveSession(session);
-            continue;
-          }
-        } else {
-          session.tester_retry_count = 0;
-          stageResults.tester = { ok: true, summary: testerOutput.summary || "All tests passed" };
+        if (testerResult.action === "pause") {
+          return testerResult.result;
+        }
+        if (testerResult.action === "continue") {
+          continue;
+        }
+        if (testerResult.stageResult) {
+          stageResults.tester = testerResult.stageResult;
         }
       }
 
-      // --- Security ---
       if (securityEnabled) {
-        logger.setContext({ iteration: i, stage: "security" });
-        emitProgress(
-          emitter,
-          makeEvent("security:start", { ...eventBase, stage: "security" }, {
-            message: "Security auditing code"
-          })
-        );
-
-        const security = new SecurityRole({ config, logger, emitter });
-        await security.init({ task, iteration: i });
-        const securityStart = Date.now();
-        const securityOutput = await security.run({ task, diff: postLoopDiff });
-        trackBudget({
-          role: "security",
-          provider: config?.roles?.security?.provider || coderRole.provider,
-          model: config?.roles?.security?.model || coderRole.model,
-          result: securityOutput,
-          duration_ms: Date.now() - securityStart
+        const securityResult = await runSecurityStage({
+          config, logger, emitter, eventBase, session, coderRole, trackBudget,
+          iteration: i, task, diff: postLoopDiff, askQuestion
         });
-
-        await addCheckpoint(session, { stage: "security", iteration: i, ok: securityOutput.ok });
-
-        emitProgress(
-          emitter,
-          makeEvent("security:end", { ...eventBase, stage: "security" }, {
-            status: securityOutput.ok ? "ok" : "fail",
-            message: securityOutput.ok ? "Security audit passed" : `Security: ${securityOutput.summary}`
-          })
-        );
-
-        if (!securityOutput.ok) {
-          const maxSecurityRetries = config.session?.max_security_retries ?? 1;
-          session.security_retry_count = (session.security_retry_count || 0) + 1;
-          await saveSession(session);
-
-          if (session.security_retry_count >= maxSecurityRetries) {
-            const solomonResult = await invokeSolomon({
-              config, logger, emitter, eventBase, stage: "security", askQuestion, session, iteration: i,
-              conflict: {
-                stage: "security",
-                task,
-                diff: postLoopDiff,
-                iterationCount: session.security_retry_count,
-                maxIterations: maxSecurityRetries,
-                history: [{ agent: "security", feedback: securityOutput.summary }]
-              }
-            });
-
-            if (solomonResult.action === "pause") {
-              return { paused: true, sessionId: session.id, question: solomonResult.question, context: "security_fail_fast" };
-            }
-            if (solomonResult.action === "subtask") {
-              return { paused: true, sessionId: session.id, subtask: solomonResult.subtask, context: "security_subtask" };
-            }
-            // continue = Solomon approved, proceed
-          } else {
-            session.last_reviewer_feedback = `Security feedback: ${securityOutput.summary}`;
-            await saveSession(session);
-            continue;
-          }
-        } else {
-          session.security_retry_count = 0;
-          stageResults.security = { ok: true, summary: securityOutput.summary || "No vulnerabilities found" };
+        if (securityResult.action === "pause") {
+          return securityResult.result;
+        }
+        if (securityResult.action === "continue") {
+          continue;
+        }
+        if (securityResult.stageResult) {
+          stageResults.security = securityResult.stageResult;
         }
       }
 
