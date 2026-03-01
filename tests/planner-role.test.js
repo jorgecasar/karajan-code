@@ -158,6 +158,44 @@ describe("PlannerRole", () => {
     expect(createAgent).toHaveBeenCalledWith("gemini", config, logger);
   });
 
+  it("includes triage decomposition in prompt when provided", async () => {
+    const fakeAgent = {
+      runTask: vi.fn().mockResolvedValue({ ok: true, output: "1. Do first subtask" })
+    };
+    const createAgent = vi.fn().mockReturnValue(fakeAgent);
+
+    const role = new PlannerRole({ config: {}, logger, createAgentFn: createAgent });
+    await role.init({ task: "Big refactor" });
+    role.context = {
+      ...role.context,
+      triageDecomposition: ["Extract auth module", "Update API endpoints", "Add E2E tests"]
+    };
+    await role.run("Big refactor");
+
+    const prompt = fakeAgent.runTask.mock.calls[0][0].prompt;
+    expect(prompt).toContain("Triage decomposition recommendation");
+    expect(prompt).toContain("1. Extract auth module");
+    expect(prompt).toContain("2. Update API endpoints");
+    expect(prompt).toContain("3. Add E2E tests");
+    expect(prompt).toContain("FIRST subtask only");
+    expect(prompt).toContain("pending_subtasks");
+  });
+
+  it("does not include decomposition section when not provided", async () => {
+    const fakeAgent = {
+      runTask: vi.fn().mockResolvedValue({ ok: true, output: "1. Simple plan" })
+    };
+    const createAgent = vi.fn().mockReturnValue(fakeAgent);
+
+    const role = new PlannerRole({ config: {}, logger, createAgentFn: createAgent });
+    role.context = { task: "Small fix" };
+    await role.init();
+    await role.run("Small fix");
+
+    const prompt = fakeAgent.runTask.mock.calls[0][0].prompt;
+    expect(prompt).not.toContain("Triage decomposition");
+  });
+
   it("falls back to coder provider when planner not configured", async () => {
     const fakeAgent = {
       runTask: vi.fn().mockResolvedValue({ ok: true, output: "Done" })

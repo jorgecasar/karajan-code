@@ -9,7 +9,7 @@ function resolveProvider(config) {
   );
 }
 
-function buildPrompt({ task, instructions, research }) {
+function buildPrompt({ task, instructions, research, triageDecomposition }) {
   const sections = [];
 
   if (instructions) {
@@ -20,6 +20,17 @@ function buildPrompt({ task, instructions, research }) {
   sections.push("Create an implementation plan for this task.");
   sections.push("Return concise numbered steps focused on execution order and risk.");
   sections.push("");
+
+  if (triageDecomposition?.length) {
+    sections.push("## Triage decomposition recommendation");
+    sections.push("The triage stage determined this task should be decomposed. Suggested subtasks:");
+    for (let i = 0; i < triageDecomposition.length; i++) {
+      sections.push(`${i + 1}. ${triageDecomposition[i]}`);
+    }
+    sections.push("");
+    sections.push("Focus your plan on the FIRST subtask only. List the remaining subtasks as 'pending_subtasks' in your output for documentation.");
+    sections.push("");
+  }
 
   if (research) {
     sections.push("## Research findings");
@@ -56,10 +67,11 @@ export class PlannerRole extends BaseRole {
   async execute(input) {
     const task = input || this.context?.task || "";
     const research = this.context?.research || null;
+    const triageDecomposition = this.context?.triageDecomposition || null;
     const provider = resolveProvider(this.config);
 
     const agent = this._createAgent(provider, this.config, this.logger);
-    const prompt = buildPrompt({ task, instructions: this.instructions, research });
+    const prompt = buildPrompt({ task, instructions: this.instructions, research, triageDecomposition });
 
     const result = await agent.runTask({ prompt, role: "planner" });
 

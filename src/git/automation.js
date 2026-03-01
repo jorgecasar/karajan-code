@@ -52,7 +52,37 @@ export async function prepareGitAutomation({ config, task, logger, session }) {
   return { enabled: true, branch, baseBranch, autoRebase };
 }
 
-export async function finalizeGitAutomation({ config, gitCtx, task, logger, session }) {
+export function buildPrBody({ task, stageResults }) {
+  const sections = ["Created by Karajan Code."];
+
+  const approach = stageResults?.planner?.approach;
+  if (approach) {
+    sections.push("", "## Approach", approach);
+  }
+
+  const steps = stageResults?.planner?.steps;
+  if (steps?.length) {
+    sections.push("", "## Steps");
+    for (let i = 0; i < steps.length; i++) {
+      sections.push(`${i + 1}. ${steps[i]}`);
+    }
+  }
+
+  const triageSubtasks = stageResults?.triage?.subtasks;
+  const shouldDecompose = stageResults?.triage?.shouldDecompose;
+  const pendingSubtasks = shouldDecompose && triageSubtasks?.length > 1 ? triageSubtasks.slice(1) : [];
+  if (pendingSubtasks.length > 0) {
+    sections.push("", "## Pending subtasks");
+    sections.push("This PR addresses part of a larger task. The following subtasks were identified but not included:");
+    for (const subtask of pendingSubtasks) {
+      sections.push(`- [ ] ${subtask}`);
+    }
+  }
+
+  return sections.join("\n");
+}
+
+export async function finalizeGitAutomation({ config, gitCtx, task, logger, session, stageResults = null }) {
   if (!gitCtx?.enabled) return { git: "disabled", commits: [] };
 
   const commitMsg = config.git.commit_message || commitMessageFromTask(task);
@@ -86,11 +116,12 @@ export async function finalizeGitAutomation({ config, gitCtx, task, logger, sess
 
   let prUrl = null;
   if (config.git.auto_pr) {
+    const body = buildPrBody({ task, stageResults });
     prUrl = await createPullRequest({
       baseBranch: gitCtx.baseBranch,
       branch: gitCtx.branch,
       title: commitMessageFromTask(task),
-      body: "Created by Karajan Code."
+      body
     });
     await addCheckpoint(session, { stage: "git-pr", branch: gitCtx.branch, pr: prUrl });
     logger.info("Pull request created");

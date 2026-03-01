@@ -201,8 +201,9 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
 
   // --- Planner ---
   let plannedTask = task;
+  const triageDecomposition = stageResults.triage?.shouldDecompose ? stageResults.triage.subtasks : null;
   if (plannerEnabled) {
-    const plannerResult = await runPlannerStage({ config, logger, emitter, eventBase, session, plannerRole, researchContext, trackBudget });
+    const plannerResult = await runPlannerStage({ config, logger, emitter, eventBase, session, plannerRole, researchContext, triageDecomposition, trackBudget });
     plannedTask = plannerResult.plannedTask;
     stageResults.planner = plannerResult.stageResult;
   }
@@ -369,7 +370,7 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
       }
 
       // --- All post-loop checks passed → finalize ---
-      const gitResult = await finalizeGitAutomation({ config, gitCtx, task, logger, session });
+      const gitResult = await finalizeGitAutomation({ config, gitCtx, task, logger, session, stageResults });
       if (stageResults.planner?.ok) {
         stageResults.planner.completedSteps = [...(stageResults.planner.steps || [])];
       }
