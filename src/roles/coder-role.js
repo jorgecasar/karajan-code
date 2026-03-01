@@ -29,7 +29,8 @@ export class CoderRole extends BaseRole {
       reviewerFeedback: reviewerFeedback || null,
       sonarSummary: sonarSummary || null,
       coderRules: this.instructions,
-      methodology: this.config?.development?.methodology || "tdd"
+      methodology: this.config?.development?.methodology || "tdd",
+      serenaEnabled: Boolean(this.config?.serena?.enabled)
     });
 
     const coderArgs = { prompt, role: "coder" };
@@ -41,6 +42,7 @@ export class CoderRole extends BaseRole {
       return {
         ok: false,
         result: {
+          ...result,
           error: result.error || result.output || "Coder failed",
           provider
         },
@@ -51,6 +53,7 @@ export class CoderRole extends BaseRole {
     return {
       ok: true,
       result: {
+        ...result,
         output: result.output || "",
         provider
       },
