@@ -1,4 +1,5 @@
 import { runCommand } from "../utils/process.js";
+import { withRetry } from "../utils/retry.js";
 import { resolveSonarProjectKey } from "./project-key.js";
 
 export class SonarApiError extends Error {
@@ -22,16 +23,18 @@ function parseHttpResponse(stdout) {
   return { httpCode, body };
 }
 
-async function sonarFetch(config, urlPath) {
+async function sonarFetchOnce(config, urlPath) {
   const token = tokenFromConfig(config);
   const url = `${config.sonarqube.host}${urlPath}`;
   const res = await runCommand("curl", ["-s", "-w", "\n%{http_code}", "-u", `${token}:`, url]);
 
   if (res.exitCode !== 0) {
-    throw new SonarApiError(
+    const err = new SonarApiError(
       `SonarQube is not reachable at ${config.sonarqube.host}. Check that SonarQube is running ('kj sonar start').`,
       { url, hint: "Run 'kj sonar start' or verify Docker is running." }
     );
+    err.httpStatus = 503;
+    throw err;
   }
 
   const { httpCode, body } = parseHttpResponse(res.stdout);
@@ -44,13 +47,23 @@ async function sonarFetch(config, urlPath) {
   }
 
   if (httpCode >= 400) {
-    throw new SonarApiError(
+    const err = new SonarApiError(
       `SonarQube API returned HTTP ${httpCode} for ${url}.`,
       { url, httpStatus: httpCode }
     );
+    err.httpStatus = httpCode;
+    throw err;
   }
 
   return body;
+}
+
+async function sonarFetch(config, urlPath) {
+  const maxAttempts = config.sonarqube?.max_scan_retries ?? 3;
+  return withRetry(
+    () => sonarFetchOnce(config, urlPath),
+    { maxAttempts, initialBackoffMs: 2000, maxBackoffMs: 15000 }
+  );
 }
 
 export async function getQualityGateStatus(config, projectKey = null) {
