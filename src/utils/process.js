@@ -7,6 +7,20 @@ export async function runCommand(command, args = [], options = {}) {
     ...rest
   });
 
+  let stdoutAccum = "";
+  let stderrAccum = "";
+
+  if (subprocess.stdout) {
+    subprocess.stdout.on("data", (chunk) => {
+      stdoutAccum += chunk.toString();
+    });
+  }
+  if (subprocess.stderr) {
+    subprocess.stderr.on("data", (chunk) => {
+      stderrAccum += chunk.toString();
+    });
+  }
+
   if (onOutput) {
     const handler = (stream) => {
       let partial = "";
@@ -25,7 +39,8 @@ export async function runCommand(command, args = [], options = {}) {
 
   try {
     if (!timeout) {
-      return await subprocess;
+      const result = await subprocess;
+      return enrichResult(result, stdoutAccum, stderrAccum);
     }
 
     let timer = null;
@@ -38,15 +53,17 @@ export async function runCommand(command, args = [], options = {}) {
         }
         resolve({
           exitCode: 143,
-          stdout: "",
-          stderr: `Command timed out after ${timeout}ms`
+          stdout: stdoutAccum,
+          stderr: `Command timed out after ${timeout}ms`,
+          timedOut: true,
+          signal: "SIGKILL"
         });
       }, timeout);
     });
 
     const result = await Promise.race([subprocess, timeoutResult]);
     if (timer) clearTimeout(timer);
-    return result;
+    return enrichResult(result, stdoutAccum, stderrAccum);
   } catch (error) {
     const details = [
       error?.shortMessage,
@@ -60,8 +77,29 @@ export async function runCommand(command, args = [], options = {}) {
 
     return {
       exitCode: 1,
-      stdout: error?.stdout || "",
-      stderr: details || String(error)
+      stdout: error?.stdout || stdoutAccum,
+      stderr: details || String(error),
+      signal: error?.signal || null
     };
   }
+}
+
+function enrichResult(result, stdoutAccum, stderrAccum) {
+  if (result.timedOut) return result;
+
+  const killed = result.killed || !!result.signal;
+  const signal = result.signal || null;
+
+  if (killed && !result.stderr) {
+    return {
+      ...result,
+      stdout: result.stdout || stdoutAccum,
+      stderr: signal
+        ? `Process killed by signal ${signal}`
+        : "Process was killed externally",
+      signal
+    };
+  }
+
+  return result;
 }
