@@ -66,7 +66,7 @@ export function classifyError(error) {
   if (lower.includes("timed out") || lower.includes("timeout")) {
     return {
       category: "timeout",
-      suggestion: "The operation timed out. Try increasing timeoutMs or maxIterationMinutes. If a scan timed out, check SonarQube health."
+      suggestion: "The agent did not complete in time. Try: (1) increase --max-iteration-minutes (default: 5), (2) split the task into smaller pieces, (3) use kj_code for single-agent tasks. If a SonarQube scan timed out, check Docker health."
     };
   }
 

@@ -5,6 +5,8 @@ import { execa } from "execa";
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const CLI_PATH = path.resolve(MODULE_DIR, "..", "cli.js");
 
+const TIMEOUT_BUFFER_MS = 30_000;
+
 function normalizeBoolFlag(value, flagName, args) {
   if (value === true) args.push(flagName);
 }
@@ -13,6 +15,18 @@ function addOptionalValue(args, flag, value) {
   if (value !== undefined && value !== null && value !== "") {
     args.push(flag, String(value));
   }
+}
+
+function resolveTimeout(options) {
+  const iterMinutes = options.maxIterationMinutes ? Number(options.maxIterationMinutes) : 5;
+  const agentTimeoutMs = iterMinutes * 60 * 1000;
+  const callerTimeoutMs = options.timeoutMs ? Number(options.timeoutMs) : 0;
+
+  if (callerTimeoutMs > 0) {
+    return Math.max(callerTimeoutMs, agentTimeoutMs + TIMEOUT_BUFFER_MS);
+  }
+
+  return agentTimeoutMs + TIMEOUT_BUFFER_MS;
 }
 
 export async function runKjCommand({ command, commandArgs = [], options = {}, env = {} }) {
@@ -67,10 +81,12 @@ export async function runKjCommand({ command, commandArgs = [], options = {}, en
     runEnv.KJ_SONAR_TOKEN = options.sonarToken;
   }
 
+  const timeout = resolveTimeout(options);
+
   const result = await execa("node", args, {
     env: runEnv,
     reject: false,
-    timeout: options.timeoutMs ? Number(options.timeoutMs) : undefined
+    timeout
   });
 
   const ok = result.exitCode === 0;
@@ -81,7 +97,19 @@ export async function runKjCommand({ command, commandArgs = [], options = {}, en
     stderr: result.stderr
   };
 
-  if (!ok && result.stderr) {
+  if (result.timedOut) {
+    payload.ok = false;
+    payload.timedOut = true;
+    const iterMin = options.maxIterationMinutes || 5;
+    payload.stderr = `Process timed out after ${Math.round(timeout / 1000)}s. The agent did not complete within the allowed time. Consider: (1) increasing --max-iteration-minutes (current: ${iterMin}), (2) splitting the task into smaller pieces, or (3) running kj_code instead of kj_run for single-agent tasks.`;
+  }
+
+  if (result.killed && !payload.timedOut) {
+    payload.ok = false;
+    payload.stderr = `Process was killed by signal ${result.signal || "unknown"}. ${result.stderr || ""}`.trim();
+  }
+
+  if (!ok && result.stderr && !payload.timedOut) {
     payload.errorSummary = result.stderr.split("\n").filter(Boolean).slice(-3).join(" | ");
   }
 
