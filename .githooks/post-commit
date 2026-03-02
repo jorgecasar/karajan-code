@@ -1,0 +1,43 @@
+#!/bin/bash
+#
+# Post-commit hook: reminds about release-related tasks after each commit.
+# Non-blocking — always exits 0. Just informational.
+#
+
+# Colors
+CYAN='\033[0;36m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+BOLD='\033[1m'
+
+# Get current version from package.json
+PKG_VERSION=$(node -p "require('./package.json').version" 2>/dev/null || echo "unknown")
+# Get latest git tag
+LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "none")
+
+# Count commits since last tag
+if [ "$LATEST_TAG" != "none" ]; then
+    COMMITS_SINCE_TAG=$(git rev-list "${LATEST_TAG}..HEAD" --count 2>/dev/null || echo "?")
+else
+    COMMITS_SINCE_TAG="?"
+fi
+
+echo ""
+echo -e "${CYAN}┌─────────────────────────────────────────────────────┐${NC}"
+echo -e "${CYAN}│${NC}  ${BOLD}📋 Release checklist${NC}                                ${CYAN}│${NC}"
+echo -e "${CYAN}│${NC}  pkg: v${PKG_VERSION} | tag: ${LATEST_TAG} | commits since: ${COMMITS_SINCE_TAG}  ${CYAN}│${NC}"
+echo -e "${CYAN}├─────────────────────────────────────────────────────┤${NC}"
+echo -e "${CYAN}│${NC}                                                     ${CYAN}│${NC}"
+echo -e "${CYAN}│${NC}  ${YELLOW}Antes de publicar, recuerda:${NC}                        ${CYAN}│${NC}"
+echo -e "${CYAN}│${NC}   1. Bump version en package.json + cli.js           ${CYAN}│${NC}"
+echo -e "${CYAN}│${NC}   2. Actualizar CHANGELOG.md                         ${CYAN}│${NC}"
+echo -e "${CYAN}│${NC}   3. Actualizar README.md + docs/README.es.md        ${CYAN}│${NC}"
+echo -e "${CYAN}│${NC}   4. Crear tag: git tag v<version>                   ${CYAN}│${NC}"
+echo -e "${CYAN}│${NC}   5. Push con tags: git push --follow-tags           ${CYAN}│${NC}"
+echo -e "${CYAN}│${NC}   6. Publicar: npm publish --otp=<code>              ${CYAN}│${NC}"
+echo -e "${CYAN}│${NC}   7. Actualizar landing (karajancode.com)            ${CYAN}│${NC}"
+echo -e "${CYAN}│${NC}                                                     ${CYAN}│${NC}"
+echo -e "${CYAN}└─────────────────────────────────────────────────────┘${NC}"
+echo ""
+
+exit 0
