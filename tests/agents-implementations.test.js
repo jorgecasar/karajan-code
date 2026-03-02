@@ -36,7 +36,7 @@ describe("Agent implementations", () => {
       expect(runCommand).toHaveBeenCalledWith(
         "/usr/local/bin/claude",
         ["-p", "fix bug"],
-        expect.objectContaining({ timeout: 600000 })
+        { onOutput: undefined }
       );
     });
 
@@ -147,7 +147,7 @@ describe("Agent implementations", () => {
       expect(runCommand).toHaveBeenCalledWith(
         "/usr/local/bin/gemini",
         ["-p", "refactor"],
-        expect.objectContaining({ timeout: 600000 })
+        { onOutput: undefined }
       );
     });
 
