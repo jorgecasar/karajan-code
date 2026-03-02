@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-03-02
+
+### Fixed
+- **Agent subprocess timeout removed**: all 4 agent implementations (Claude, Codex, Gemini, Aider) had a hardcoded timeout of `max_iteration_minutes` (default 30 min) that killed the subprocess with SIGKILL. This was the actual cause of the "31 min timeout" — the orchestrator-level fix in v1.6.0 was incomplete. Agents now run without timeout; the orchestrator manages time via interactive checkpoints (MCP) or hard timeout (CLI)
+
 ## [1.6.0] - 2026-03-02
 
 ### Added
@@ -138,7 +143,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI/CD**: GitHub Actions workflow with validation and PR annotations
 - **716+ unit tests** with Vitest
 
-[Unreleased]: https://github.com/manufosela/karajan-code/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/manufosela/karajan-code/compare/v1.6.1...HEAD
+[1.6.1]: https://github.com/manufosela/karajan-code/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/manufosela/karajan-code/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/manufosela/karajan-code/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/manufosela/karajan-code/compare/v1.3.0...v1.4.0
