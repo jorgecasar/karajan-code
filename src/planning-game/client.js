@@ -89,3 +89,31 @@ export async function updateCard({ projectId, cardId, firebaseId, updates, timeo
   );
   return parseJsonResponse(response);
 }
+
+export async function createCard({ projectId, card, timeoutMs = DEFAULT_TIMEOUT_MS }) {
+  const url = `${getApiUrl()}/projects/${encodeURIComponent(projectId)}/cards`;
+  const response = await fetchWithRetry(
+    url,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(card)
+    },
+    timeoutMs
+  );
+  return parseJsonResponse(response);
+}
+
+export async function relateCards({ projectId, sourceCardId, targetCardId, relationType, timeoutMs = DEFAULT_TIMEOUT_MS }) {
+  const url = `${getApiUrl()}/projects/${encodeURIComponent(projectId)}/cards/relate`;
+  const response = await fetchWithRetry(
+    url,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sourceCardId, targetCardId, relationType })
+    },
+    timeoutMs
+  );
+  return parseJsonResponse(response);
+}

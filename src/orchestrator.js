@@ -183,6 +183,57 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
     if (triageResult.roleOverrides.testerEnabled !== undefined) testerEnabled = triageResult.roleOverrides.testerEnabled;
     if (triageResult.roleOverrides.securityEnabled !== undefined) securityEnabled = triageResult.roleOverrides.securityEnabled;
     stageResults.triage = triageResult.stageResult;
+
+    // --- PG decomposition: offer to create subtasks in Planning Game ---
+    const pgDecompose = triageResult.stageResult?.shouldDecompose
+      && triageResult.stageResult.subtasks?.length > 1
+      && pgTaskId
+      && pgProject
+      && config.planning_game?.enabled !== false
+      && askQuestion;
+
+    if (pgDecompose) {
+      try {
+        const { buildDecompositionQuestion, createDecompositionSubtasks } = await import("./planning-game/decomposition.js");
+        const { createCard, relateCards, fetchCard } = await import("./planning-game/client.js");
+
+        const question = buildDecompositionQuestion(triageResult.stageResult.subtasks, pgTaskId);
+        const answer = await askQuestion(question);
+
+        if (answer && (answer.trim().toLowerCase() === "yes" || answer.trim().toLowerCase() === "sí" || answer.trim().toLowerCase() === "si")) {
+          const parentCard = await fetchCard({ projectId: pgProject, cardId: pgTaskId }).catch(() => null);
+          const createdSubtasks = await createDecompositionSubtasks({
+            client: { createCard, relateCards },
+            projectId: pgProject,
+            parentCardId: pgTaskId,
+            parentFirebaseId: parentCard?.firebaseId || null,
+            subtasks: triageResult.stageResult.subtasks,
+            epic: parentCard?.epic || null,
+            sprint: parentCard?.sprint || null,
+            codeveloper: config.planning_game?.codeveloper || null
+          });
+
+          stageResults.triage.pgSubtasks = createdSubtasks;
+          logger.info(`Planning Game: created ${createdSubtasks.length} subtasks from decomposition`);
+
+          emitProgress(
+            emitter,
+            makeEvent("pg:decompose", { ...eventBase, stage: "triage" }, {
+              message: `Created ${createdSubtasks.length} subtasks in Planning Game`,
+              detail: { subtasks: createdSubtasks.map((s) => ({ cardId: s.cardId, title: s.title })) }
+            })
+          );
+
+          await addCheckpoint(session, {
+            stage: "pg-decompose",
+            subtasksCreated: createdSubtasks.length,
+            cardIds: createdSubtasks.map((s) => s.cardId)
+          });
+        }
+      } catch (err) {
+        logger.warn(`Planning Game decomposition failed: ${err.message}`);
+      }
+    }
   }
 
   if (flags.enablePlanner !== undefined) plannerEnabled = Boolean(flags.enablePlanner);
