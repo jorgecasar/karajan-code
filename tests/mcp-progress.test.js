@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildProgressHandler, buildProgressNotifier, PROGRESS_STAGES } from "../src/mcp/progress.js";
+import { EventEmitter } from "node:events";
+import { buildProgressHandler, buildProgressNotifier, buildPipelineTracker, sendTrackerLog, PROGRESS_STAGES } from "../src/mcp/progress.js";
 
 describe("mcp/progress", () => {
   describe("PROGRESS_STAGES", () => {
@@ -22,6 +23,10 @@ describe("mcp/progress", () => {
 
     it("includes dry-run:summary event", () => {
       expect(PROGRESS_STAGES).toContain("dry-run:summary");
+    });
+
+    it("includes pipeline:tracker event", () => {
+      expect(PROGRESS_STAGES).toContain("pipeline:tracker");
     });
 
     it("has iteration:start before iteration:end", () => {
@@ -176,6 +181,136 @@ describe("mcp/progress", () => {
       expect(notifier).not.toBeNull();
       notifier({ type: "session:start", message: "Started" });
       expect(extra.sendNotification).toHaveBeenCalled();
+    });
+  });
+
+  describe("buildPipelineTracker", () => {
+    it("builds stage list from config with only enabled stages", () => {
+      const emitter = new EventEmitter();
+      const config = {
+        pipeline: {
+          triage: { enabled: true },
+          planner: { enabled: true },
+          reviewer: { enabled: true }
+        }
+      };
+      const { stages } = buildPipelineTracker(config, emitter);
+      const names = stages.map(s => s.name);
+      expect(names).toEqual(["triage", "planner", "coder", "reviewer"]);
+      expect(stages.every(s => s.status === "pending")).toBe(true);
+    });
+
+    it("always includes coder and reviewer by default", () => {
+      const emitter = new EventEmitter();
+      const config = { pipeline: {} };
+      const { stages } = buildPipelineTracker(config, emitter);
+      const names = stages.map(s => s.name);
+      expect(names).toContain("coder");
+      expect(names).toContain("reviewer");
+    });
+
+    it("excludes stages not in config", () => {
+      const emitter = new EventEmitter();
+      const config = { pipeline: {} };
+      const { stages } = buildPipelineTracker(config, emitter);
+      const names = stages.map(s => s.name);
+      expect(names).not.toContain("triage");
+      expect(names).not.toContain("planner");
+      expect(names).not.toContain("security");
+    });
+
+    it("sets stage to running on *:start event", () => {
+      const emitter = new EventEmitter();
+      const config = { pipeline: {} };
+      buildPipelineTracker(config, emitter);
+
+      emitter.emit("progress", { type: "coder:start", detail: { coder: "claude" } });
+
+      // Check via the emitted pipeline:tracker event
+      const trackerEvents = [];
+      emitter.on("progress", (e) => { if (e.type === "pipeline:tracker") trackerEvents.push(e); });
+      emitter.emit("progress", { type: "coder:start", detail: { coder: "codex" } });
+
+      expect(trackerEvents).toHaveLength(1);
+      const coderStage = trackerEvents[0].detail.stages.find(s => s.name === "coder");
+      expect(coderStage.status).toBe("running");
+      expect(coderStage.summary).toBe("codex");
+    });
+
+    it("sets stage to done on *:end event", () => {
+      const emitter = new EventEmitter();
+      const config = { pipeline: {} };
+      buildPipelineTracker(config, emitter);
+
+      const trackerEvents = [];
+      emitter.on("progress", (e) => { if (e.type === "pipeline:tracker") trackerEvents.push(e); });
+
+      emitter.emit("progress", { type: "coder:end", status: "ok" });
+
+      expect(trackerEvents).toHaveLength(1);
+      const coderStage = trackerEvents[0].detail.stages.find(s => s.name === "coder");
+      expect(coderStage.status).toBe("done");
+    });
+
+    it("sets stage to failed on *:end with status fail", () => {
+      const emitter = new EventEmitter();
+      const config = { pipeline: {} };
+      buildPipelineTracker(config, emitter);
+
+      const trackerEvents = [];
+      emitter.on("progress", (e) => { if (e.type === "pipeline:tracker") trackerEvents.push(e); });
+
+      emitter.emit("progress", { type: "reviewer:end", status: "fail" });
+
+      expect(trackerEvents).toHaveLength(1);
+      const reviewerStage = trackerEvents[0].detail.stages.find(s => s.name === "reviewer");
+      expect(reviewerStage.status).toBe("failed");
+    });
+
+    it("emits pipeline:tracker event after each transition", () => {
+      const emitter = new EventEmitter();
+      const config = { pipeline: { planner: { enabled: true } } };
+      buildPipelineTracker(config, emitter);
+
+      const trackerEvents = [];
+      emitter.on("progress", (e) => { if (e.type === "pipeline:tracker") trackerEvents.push(e); });
+
+      emitter.emit("progress", { type: "planner:start", detail: { planner: "claude" } });
+      emitter.emit("progress", { type: "planner:end", status: "ok" });
+      emitter.emit("progress", { type: "coder:start", detail: { coder: "codex" } });
+
+      expect(trackerEvents).toHaveLength(3);
+    });
+  });
+
+  describe("sendTrackerLog", () => {
+    it("sends logging message with tracker payload", () => {
+      const server = { sendLoggingMessage: vi.fn() };
+      sendTrackerLog(server, "coder", "running", "claude");
+
+      expect(server.sendLoggingMessage).toHaveBeenCalledWith({
+        level: "info",
+        logger: "karajan",
+        data: {
+          type: "pipeline:tracker",
+          detail: {
+            stages: [{ name: "coder", status: "running", summary: "claude" }]
+          }
+        }
+      });
+    });
+
+    it("omits summary when not provided", () => {
+      const server = { sendLoggingMessage: vi.fn() };
+      sendTrackerLog(server, "reviewer", "done");
+
+      const data = server.sendLoggingMessage.mock.calls[0][0].data;
+      expect(data.detail.stages[0].summary).toBeUndefined();
+    });
+
+    it("does not throw if sendLoggingMessage throws", () => {
+      const server = { sendLoggingMessage: vi.fn().mockImplementation(() => { throw new Error("fail"); }) };
+      expect(() => sendTrackerLog(server, "coder", "running")).not.toThrow();
     });
   });
 });

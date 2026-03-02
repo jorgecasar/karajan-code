@@ -21,8 +21,73 @@ export const PROGRESS_STAGES = [
   "solomon:escalate",
   "question",
   "session:end",
-  "dry-run:summary"
+  "dry-run:summary",
+  "pipeline:tracker"
 ];
+
+const PIPELINE_ORDER = [
+  "triage", "researcher", "planner", "coder", "refactorer", "sonar", "reviewer", "tester", "security", "commiter"
+];
+
+export function buildPipelineTracker(config, emitter) {
+  const pipeline = config.pipeline || {};
+
+  const stages = PIPELINE_ORDER
+    .filter(name => {
+      if (name === "coder") return true;
+      if (name === "reviewer") return pipeline.reviewer?.enabled !== false;
+      if (name === "sonar") return pipeline.sonar?.enabled || config.sonarqube?.enabled;
+      return pipeline[name]?.enabled;
+    })
+    .map(name => ({ name, status: "pending", summary: undefined }));
+
+  const findStage = (name) => stages.find(s => s.name === name);
+
+  const emitTracker = () => {
+    emitter.emit("progress", {
+      type: "pipeline:tracker",
+      detail: { stages: stages.map(s => ({ ...s })) }
+    });
+  };
+
+  emitter.on("progress", (event) => {
+    const match = event.type?.match(/^(\w+):(start|end)$/);
+    if (!match) return;
+
+    const [, name, phase] = match;
+    const stage = findStage(name);
+    if (!stage) return;
+
+    if (phase === "start") {
+      stage.status = "running";
+      stage.summary = event.detail?.[name] || stage.summary;
+    } else {
+      stage.status = event.status === "fail" ? "failed" : "done";
+      stage.summary = event.detail?.summary || event.detail?.gateStatus || stage.summary;
+    }
+
+    emitTracker();
+  });
+
+  return { stages };
+}
+
+export function sendTrackerLog(server, stageName, status, summary) {
+  try {
+    server.sendLoggingMessage({
+      level: "info",
+      logger: "karajan",
+      data: {
+        type: "pipeline:tracker",
+        detail: {
+          stages: [{ name: stageName, status, summary: summary || undefined }]
+        }
+      }
+    });
+  } catch {
+    // best-effort
+  }
+}
 
 export function buildProgressHandler(server) {
   return (event) => {
