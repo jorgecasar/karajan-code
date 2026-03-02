@@ -169,7 +169,7 @@ describe("initCommand", () => {
     );
   });
 
-  it("uses single agent for all roles when only one is available", async () => {
+  it("uses single agent for all roles when only one is available but still asks config questions", async () => {
     isTTY.mockReturnValue(true);
     loadConfig.mockResolvedValue({
       config: {
@@ -190,8 +190,8 @@ describe("initCommand", () => {
 
     const mockWizard = {
       ask: vi.fn(),
-      confirm: vi.fn(),
-      select: vi.fn(),
+      confirm: vi.fn().mockResolvedValue(false),
+      select: vi.fn().mockResolvedValue("tdd"),
       close: vi.fn()
     };
     createWizard.mockReturnValue(mockWizard);
@@ -201,7 +201,9 @@ describe("initCommand", () => {
     const writtenConfig = writeConfig.mock.calls[0][1];
     expect(writtenConfig.coder).toBe("claude");
     expect(writtenConfig.reviewer).toBe("claude");
-    // No select calls needed when only one agent
-    expect(mockWizard.select).not.toHaveBeenCalled();
+    // No agent select calls, but triage/sonar/methodology are still asked
+    expect(mockWizard.confirm).toHaveBeenCalledWith(expect.stringContaining("triage"), false);
+    expect(mockWizard.confirm).toHaveBeenCalledWith(expect.stringContaining("SonarQube"), true);
+    expect(mockWizard.select).toHaveBeenCalledWith(expect.stringContaining("methodology"), expect.any(Array));
   });
 });
