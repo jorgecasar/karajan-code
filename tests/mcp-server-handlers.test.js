@@ -52,7 +52,9 @@ vi.mock("../src/agents/availability.js", () => ({
 
 vi.mock("../src/mcp/progress.js", () => ({
   buildProgressHandler: vi.fn(() => vi.fn()),
-  buildProgressNotifier: vi.fn(() => null)
+  buildProgressNotifier: vi.fn(() => null),
+  buildPipelineTracker: vi.fn(() => ({ stages: [] })),
+  sendTrackerLog: vi.fn()
 }));
 
 vi.mock("../src/mcp/tool-arg-normalizers.js", () => ({
@@ -114,6 +116,7 @@ const { runKjCommand } = await import("../src/mcp/run-kj.js");
 const { runFlow, resumeFlow } = await import("../src/orchestrator.js");
 const { assertAgentsAvailable } = await import("../src/agents/availability.js");
 const { createAgent } = await import("../src/agents/index.js");
+const { sendTrackerLog } = await import("../src/mcp/progress.js");
 
 const mockServer = {
   sendLoggingMessage: vi.fn(),
@@ -452,6 +455,31 @@ describe("mcp/server-handlers", () => {
     it("handles undefined args", async () => {
       await handleToolCall("kj_doctor", undefined, mockServer, {});
       expect(runKjCommand).toHaveBeenCalledWith({ command: "doctor", options: {} });
+    });
+  });
+
+  // --- Single-agent tracker logging ---
+
+  describe("single-agent tracker logging", () => {
+    it("kj_code sends tracker start and done logs", async () => {
+      await handleCodeDirect({ task: "Fix bug" }, mockServer, {});
+
+      expect(sendTrackerLog).toHaveBeenCalledWith(mockServer, "coder", "running", expect.any(String));
+      expect(sendTrackerLog).toHaveBeenCalledWith(mockServer, "coder", "done");
+    });
+
+    it("kj_review sends tracker start and done logs", async () => {
+      await handleReviewDirect({ task: "Review code" }, mockServer, {});
+
+      expect(sendTrackerLog).toHaveBeenCalledWith(mockServer, "reviewer", "running", expect.any(String));
+      expect(sendTrackerLog).toHaveBeenCalledWith(mockServer, "reviewer", "done");
+    });
+
+    it("kj_plan sends tracker start and done logs", async () => {
+      await handlePlanDirect({ task: "Plan feature" }, mockServer, {});
+
+      expect(sendTrackerLog).toHaveBeenCalledWith(mockServer, "planner", "running", expect.any(String));
+      expect(sendTrackerLog).toHaveBeenCalledWith(mockServer, "planner", "done");
     });
   });
 });

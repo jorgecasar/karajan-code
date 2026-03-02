@@ -7,7 +7,7 @@ import { EventEmitter } from "node:events";
 import fs from "node:fs/promises";
 import { runKjCommand } from "./run-kj.js";
 import { normalizePlanArgs } from "./tool-arg-normalizers.js";
-import { buildProgressHandler, buildProgressNotifier } from "./progress.js";
+import { buildProgressHandler, buildProgressNotifier, buildPipelineTracker, sendTrackerLog } from "./progress.js";
 import { runFlow, resumeFlow } from "../orchestrator.js";
 import { loadConfig, applyRunOverrides, validateConfig, resolveRole } from "../config.js";
 import { createLogger } from "../utils/logger.js";
@@ -151,6 +151,7 @@ export async function handleRunDirect(a, server, extra) {
   emitter.on("progress", buildProgressHandler(server));
   const progressNotifier = buildProgressNotifier(extra);
   if (progressNotifier) emitter.on("progress", progressNotifier);
+  buildPipelineTracker(config, emitter);
 
   const askQuestion = buildAskQuestion(server);
   const pgTaskId = a.pgTask || null;
@@ -191,12 +192,15 @@ export async function handlePlanDirect(a, server, extra) {
 
   const planner = createAgent(plannerRole.provider, config, logger);
   const prompt = buildPlannerPrompt({ task: a.task, context: a.context });
+  sendTrackerLog(server, "planner", "running", plannerRole.provider);
   const result = await planner.runTask({ prompt, role: "planner" });
 
   if (!result.ok) {
+    sendTrackerLog(server, "planner", "failed");
     throw new Error(result.error || result.output || "Planner failed");
   }
 
+  sendTrackerLog(server, "planner", "done");
   const parsed = parseMaybeJsonString(result.output);
   return { ok: true, plan: parsed || result.output, raw: result.output };
 }
@@ -216,12 +220,15 @@ export async function handleCodeDirect(a, server, extra) {
     } catch { /* no coder rules file */ }
   }
   const prompt = buildCoderPrompt({ task: a.task, coderRules, methodology: config.development?.methodology || "tdd" });
+  sendTrackerLog(server, "coder", "running", coderRole.provider);
   const result = await coder.runTask({ prompt, role: "coder" });
 
   if (!result.ok) {
+    sendTrackerLog(server, "coder", "failed");
     throw new Error(result.error || result.output || `Coder failed (exit ${result.exitCode})`);
   }
 
+  sendTrackerLog(server, "coder", "done");
   return { ok: true, output: result.output, exitCode: result.exitCode };
 }
 
@@ -238,12 +245,15 @@ export async function handleReviewDirect(a, server, extra) {
   const { rules } = await resolveReviewProfile({ mode: config.review_mode, projectDir: process.cwd() });
 
   const prompt = buildReviewerPrompt({ task: a.task, diff, reviewRules: rules, mode: config.review_mode });
+  sendTrackerLog(server, "reviewer", "running", reviewerRole.provider);
   const result = await reviewer.reviewTask({ prompt, role: "reviewer" });
 
   if (!result.ok) {
+    sendTrackerLog(server, "reviewer", "failed");
     throw new Error(result.error || result.output || `Reviewer failed (exit ${result.exitCode})`);
   }
 
+  sendTrackerLog(server, "reviewer", "done");
   const parsed = parseMaybeJsonString(result.output);
   return { ok: true, review: parsed || result.output, raw: result.output };
 }
