@@ -42,6 +42,7 @@ Instead of running one AI agent and manually reviewing its output, `kj` chains a
 - **Interactive checkpoints** — instead of killing long-running tasks, pauses every 5 minutes with a progress report and lets you decide: continue, stop, or adjust the time
 - **Task decomposition** — triage detects when tasks should be split and recommends subtasks; with Planning Game integration, creates linked cards with sequential blocking
 - **Retry with backoff** — automatic recovery from transient API errors (429, 5xx) with exponential backoff and jitter
+- **Pipeline stage tracker** — cumulative progress view during `kj_run` showing which stages are done, running, or pending — both in CLI and via MCP events for real-time host rendering
 - **Planning Game integration** — optionally pair with [Planning Game](https://github.com/AgenteIA-Geniova/planning-game) for agile project management (tasks, sprints, estimation) — like Jira, but open-source and XP-native
 
 > **Best with MCP** — Karajan Code is designed to be used as an MCP server inside your AI agent (Claude, Codex, etc.). The agent sends tasks to `kj_run`, gets real-time progress notifications, and receives structured results — no copy-pasting needed.
@@ -447,7 +448,7 @@ Use `kj roles show <role>` to inspect any template. Create a project override to
 git clone https://github.com/manufosela/karajan-code.git
 cd karajan-code
 npm install
-npm test              # Run 1025+ tests with Vitest
+npm test              # Run 1040+ tests with Vitest
 npm run test:watch    # Watch mode
 npm run validate      # Lint + test
 ```
