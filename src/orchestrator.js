@@ -4,7 +4,8 @@ import {
   loadSession,
   markSessionStatus,
   resumeSessionWithAnswer,
-  saveSession
+  saveSession,
+  addCheckpoint
 } from "./session-store.js";
 import { computeBaseRef, generateDiff } from "./review/diff-generator.js";
 import { buildCoderPrompt } from "./prompts/coder.js";
@@ -214,9 +215,65 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
   const { rules: reviewRules } = await resolveReviewProfile({ mode: config.review_mode, projectDir });
   await coderRoleInstance.init();
 
+  const checkpointIntervalMs = (config.session.checkpoint_interval_minutes ?? 5) * 60 * 1000;
+  let lastCheckpointAt = Date.now();
+  let checkpointDisabled = false;
+
   for (let i = 1; i <= config.max_iterations; i += 1) {
     const elapsedMinutes = (Date.now() - startedAt) / 60000;
-    if (elapsedMinutes > config.session.max_total_minutes) {
+
+    // --- Interactive checkpoint: pause and ask every N minutes ---
+    if (!checkpointDisabled && askQuestion && (Date.now() - lastCheckpointAt) >= checkpointIntervalMs) {
+      const elapsedStr = elapsedMinutes.toFixed(1);
+      const iterInfo = `${i - 1}/${config.max_iterations} iterations completed`;
+      const budgetInfo = budgetTracker.total().cost_usd > 0 ? ` | Budget: $${budgetTracker.total().cost_usd.toFixed(2)}` : "";
+      const stagesCompleted = Object.keys(stageResults).join(", ") || "none";
+      const checkpointMsg = `Checkpoint — ${elapsedStr} min elapsed | ${iterInfo}${budgetInfo} | Stages completed: ${stagesCompleted}. What would you like to do?`;
+
+      emitProgress(
+        emitter,
+        makeEvent("session:checkpoint", { ...eventBase, iteration: i, stage: "checkpoint" }, {
+          message: `Interactive checkpoint at ${elapsedStr} min`,
+          detail: { elapsed_minutes: Number(elapsedStr), iterations_done: i - 1, stages: stagesCompleted }
+        })
+      );
+
+      const answer = await askQuestion(
+        `${checkpointMsg}\n\nOptions:\n1. Continue 5 more minutes\n2. Continue until done (no more checkpoints)\n3. Continue for N minutes (reply with the number)\n4. Stop now`
+      );
+
+      await addCheckpoint(session, { stage: "interactive-checkpoint", elapsed_minutes: Number(elapsedStr), answer });
+
+      if (!answer || answer.trim() === "4" || answer.trim().toLowerCase().startsWith("stop")) {
+        await markSessionStatus(session, "stopped");
+        emitProgress(
+          emitter,
+          makeEvent("session:end", { ...eventBase, iteration: i, stage: "user-stop" }, {
+            status: "stopped",
+            message: "Session stopped by user at checkpoint",
+            detail: { approved: false, reason: "user_stopped", elapsed_minutes: Number(elapsedStr), budget: budgetSummary() }
+          })
+        );
+        return { approved: false, sessionId: session.id, reason: "user_stopped", elapsed_minutes: Number(elapsedStr) };
+      }
+
+      if (answer.trim() === "2" || answer.trim().toLowerCase().startsWith("continue until")) {
+        checkpointDisabled = true;
+      } else if (answer.trim() === "1" || answer.trim().toLowerCase().includes("5 m")) {
+        lastCheckpointAt = Date.now();
+      } else {
+        const customMinutes = parseInt(answer.trim().replace(/\D/g, ""), 10);
+        if (customMinutes > 0) {
+          lastCheckpointAt = Date.now();
+          config.session.checkpoint_interval_minutes = customMinutes;
+        } else {
+          lastCheckpointAt = Date.now();
+        }
+      }
+    }
+
+    // --- Hard timeout: only when no askQuestion available ---
+    if (!askQuestion && elapsedMinutes > config.session.max_total_minutes) {
       await markSessionStatus(session, "failed");
       emitProgress(
         emitter,

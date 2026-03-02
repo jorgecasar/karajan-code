@@ -86,6 +86,7 @@ export const tools = [
         autoRebase: { type: "boolean" },
         branchPrefix: { type: "string" },
         smartModels: { type: "boolean", description: "Enable/disable smart model selection based on triage complexity" },
+        checkpointInterval: { type: "number", description: "Minutes between interactive checkpoints (default: 5). Set 0 to disable." },
         noSonar: { type: "boolean" },
         kjHome: { type: "string" },
         sonarToken: { type: "string" },
