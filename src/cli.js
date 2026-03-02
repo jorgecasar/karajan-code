@@ -81,6 +81,7 @@ program
   .option("--methodology <name>")
   .option("--no-auto-rebase")
   .option("--no-sonar")
+  .option("--checkpoint-interval <n>", "Minutes between interactive checkpoints (default: 5)")
   .option("--pg-task <cardId>", "Planning Game card ID (e.g., KJC-TSK-0042)")
   .option("--pg-project <projectId>", "Planning Game project ID")
   .option("--smart-models", "Enable smart model selection based on triage complexity")
