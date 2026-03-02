@@ -33,33 +33,32 @@ async function runWizard(config, logger) {
   }
   logger.info("");
 
-  if (available.length === 1) {
-    const only = available[0].name;
-    logger.info(`Only one agent available: ${only}. Using it for all roles.\n`);
-    config.coder = only;
-    config.reviewer = only;
-    config.roles.coder.provider = only;
-    config.roles.reviewer.provider = only;
-    return config;
-  }
-
   const wizard = createWizard();
   try {
-    const agentOptions = available.map((a) => ({
-      label: `${a.name} (${a.version})`,
-      value: a.name,
-      available: true
-    }));
+    if (available.length === 1) {
+      const only = available[0].name;
+      logger.info(`Only one agent available: ${only}. Using it for all roles.\n`);
+      config.coder = only;
+      config.reviewer = only;
+      config.roles.coder.provider = only;
+      config.roles.reviewer.provider = only;
+    } else {
+      const agentOptions = available.map((a) => ({
+        label: `${a.name} (${a.version})`,
+        value: a.name,
+        available: true
+      }));
 
-    const coder = await wizard.select("Select default CODER agent:", agentOptions);
-    config.coder = coder;
-    config.roles.coder.provider = coder;
-    logger.info(`  -> Coder: ${coder}`);
+      const coder = await wizard.select("Select default CODER agent:", agentOptions);
+      config.coder = coder;
+      config.roles.coder.provider = coder;
+      logger.info(`  -> Coder: ${coder}`);
 
-    const reviewer = await wizard.select("Select default REVIEWER agent:", agentOptions);
-    config.reviewer = reviewer;
-    config.roles.reviewer.provider = reviewer;
-    logger.info(`  -> Reviewer: ${reviewer}`);
+      const reviewer = await wizard.select("Select default REVIEWER agent:", agentOptions);
+      config.reviewer = reviewer;
+      config.roles.reviewer.provider = reviewer;
+      logger.info(`  -> Reviewer: ${reviewer}`);
+    }
 
     const enableTriage = await wizard.confirm("Enable triage (auto-classify task complexity)?", false);
     config.pipeline.triage = config.pipeline.triage || {};
