@@ -4,6 +4,7 @@
  */
 
 import { EventEmitter } from "node:events";
+import fs from "node:fs/promises";
 import { runKjCommand } from "./run-kj.js";
 import { normalizePlanArgs } from "./tool-arg-normalizers.js";
 import { buildProgressHandler, buildProgressNotifier } from "./progress.js";
@@ -11,6 +12,13 @@ import { runFlow, resumeFlow } from "../orchestrator.js";
 import { loadConfig, applyRunOverrides, validateConfig, resolveRole } from "../config.js";
 import { createLogger } from "../utils/logger.js";
 import { assertAgentsAvailable } from "../agents/availability.js";
+import { createAgent } from "../agents/index.js";
+import { buildPlannerPrompt } from "../prompts/planner.js";
+import { buildCoderPrompt } from "../prompts/coder.js";
+import { buildReviewerPrompt } from "../prompts/reviewer.js";
+import { parseMaybeJsonString } from "../review/parser.js";
+import { computeBaseRef, generateDiff } from "../review/diff-generator.js";
+import { resolveReviewProfile } from "../review/profiles.js";
 
 export function asObject(value) {
   if (value && typeof value === "object") return value;
@@ -93,10 +101,10 @@ export function enrichedFailPayload(error, toolName) {
   return payload;
 }
 
-export async function buildConfig(options) {
+export async function buildConfig(options, commandName = "run") {
   const { config } = await loadConfig();
   const merged = applyRunOverrides(config, options || {});
-  validateConfig(merged, "run");
+  validateConfig(merged, commandName);
   return merged;
 }
 
@@ -173,6 +181,73 @@ export async function handleResumeDirect(a, server, extra) {
   return { ok: true, ...result };
 }
 
+export async function handlePlanDirect(a, server, extra) {
+  const options = normalizePlanArgs(a);
+  const config = await buildConfig(options, "plan");
+  const logger = createLogger(config.output.log_level, "mcp");
+
+  const plannerRole = resolveRole(config, "planner");
+  await assertAgentsAvailable([plannerRole.provider]);
+
+  const planner = createAgent(plannerRole.provider, config, logger);
+  const prompt = buildPlannerPrompt({ task: a.task, context: a.context });
+  const result = await planner.runTask({ prompt, role: "planner" });
+
+  if (!result.ok) {
+    throw new Error(result.error || result.output || "Planner failed");
+  }
+
+  const parsed = parseMaybeJsonString(result.output);
+  return { ok: true, plan: parsed || result.output, raw: result.output };
+}
+
+export async function handleCodeDirect(a, server, extra) {
+  const config = await buildConfig(a, "code");
+  const logger = createLogger(config.output.log_level, "mcp");
+
+  const coderRole = resolveRole(config, "coder");
+  await assertAgentsAvailable([coderRole.provider]);
+
+  const coder = createAgent(coderRole.provider, config, logger);
+  let coderRules = null;
+  if (config.coder_rules) {
+    try {
+      coderRules = await fs.readFile(config.coder_rules, "utf8");
+    } catch { /* no coder rules file */ }
+  }
+  const prompt = buildCoderPrompt({ task: a.task, coderRules, methodology: config.development?.methodology || "tdd" });
+  const result = await coder.runTask({ prompt, role: "coder" });
+
+  if (!result.ok) {
+    throw new Error(result.error || result.output || `Coder failed (exit ${result.exitCode})`);
+  }
+
+  return { ok: true, output: result.output, exitCode: result.exitCode };
+}
+
+export async function handleReviewDirect(a, server, extra) {
+  const config = await buildConfig(a, "review");
+  const logger = createLogger(config.output.log_level, "mcp");
+
+  const reviewerRole = resolveRole(config, "reviewer");
+  await assertAgentsAvailable([reviewerRole.provider, config.reviewer_options?.fallback_reviewer]);
+
+  const reviewer = createAgent(reviewerRole.provider, config, logger);
+  const resolvedBase = await computeBaseRef({ baseBranch: config.base_branch, baseRef: a.baseRef });
+  const diff = await generateDiff({ baseRef: resolvedBase });
+  const { rules } = await resolveReviewProfile({ mode: config.review_mode, projectDir: process.cwd() });
+
+  const prompt = buildReviewerPrompt({ task: a.task, diff, reviewRules: rules, mode: config.review_mode });
+  const result = await reviewer.reviewTask({ prompt, role: "reviewer" });
+
+  if (!result.ok) {
+    throw new Error(result.error || result.output || `Reviewer failed (exit ${result.exitCode})`);
+  }
+
+  const parsed = parseMaybeJsonString(result.output);
+  return { ok: true, review: parsed || result.output, raw: result.output };
+}
+
 export async function handleToolCall(name, args, server, extra) {
   const a = asObject(args);
 
@@ -240,22 +315,21 @@ export async function handleToolCall(name, args, server, extra) {
     if (!a.task) {
       return failPayload("Missing required field: task");
     }
-    return runKjCommand({ command: "code", commandArgs: [a.task], options: a });
+    return handleCodeDirect(a, server, extra);
   }
 
   if (name === "kj_review") {
     if (!a.task) {
       return failPayload("Missing required field: task");
     }
-    return runKjCommand({ command: "review", commandArgs: [a.task], options: a });
+    return handleReviewDirect(a, server, extra);
   }
 
   if (name === "kj_plan") {
     if (!a.task) {
       return failPayload("Missing required field: task");
     }
-    const options = normalizePlanArgs(a);
-    return runKjCommand({ command: "plan", commandArgs: [a.task], options });
+    return handlePlanDirect(a, server, extra);
   }
 
   return failPayload(`Unknown tool: ${name}`);

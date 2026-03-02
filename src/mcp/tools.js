@@ -146,8 +146,7 @@ export const tools = [
         task: { type: "string" },
         coder: { type: "string" },
         coderModel: { type: "string" },
-        kjHome: { type: "string" },
-        timeoutMs: { type: "number" }
+        kjHome: { type: "string" }
       }
     }
   },
@@ -162,8 +161,7 @@ export const tools = [
         reviewer: { type: "string" },
         reviewerModel: { type: "string" },
         baseRef: { type: "string" },
-        kjHome: { type: "string" },
-        timeoutMs: { type: "number" }
+        kjHome: { type: "string" }
       }
     }
   },
@@ -179,8 +177,7 @@ export const tools = [
         plannerModel: { type: "string" },
         coder: { type: "string", description: "Legacy alias for planner" },
         coderModel: { type: "string", description: "Legacy alias for plannerModel" },
-        kjHome: { type: "string" },
-        timeoutMs: { type: "number" }
+        kjHome: { type: "string" }
       }
     }
   }

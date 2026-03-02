@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+import path from "node:path";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { applyRunOverrides, loadConfig, validateConfig } from "./config.js";
 import { createLogger } from "./utils/logger.js";
@@ -15,6 +18,9 @@ import { resumeCommand } from "./commands/resume.js";
 import { sonarCommand, sonarOpenCommand } from "./commands/sonar.js";
 import { rolesCommand } from "./commands/roles.js";
 
+const PKG_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../package.json");
+const PKG_VERSION = JSON.parse(readFileSync(PKG_PATH, "utf8")).version;
+
 async function withConfig(commandName, flags, fn) {
   const { config } = await loadConfig();
   const merged = applyRunOverrides(config, flags || {});
@@ -24,7 +30,7 @@ async function withConfig(commandName, flags, fn) {
 }
 
 const program = new Command();
-program.name("kj").description("Karajan Code CLI").version("1.6.2");
+program.name("kj").description("Karajan Code CLI").version(PKG_VERSION);
 
 program
   .command("init")
