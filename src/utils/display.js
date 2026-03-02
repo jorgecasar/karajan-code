@@ -1,3 +1,10 @@
+import path from "node:path";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+const DISPLAY_PKG_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../package.json");
+const DISPLAY_VERSION = JSON.parse(readFileSync(DISPLAY_PKG_PATH, "utf8")).version;
+
 const ANSI = {
   reset: "\x1b[0m",
   bold: "\x1b[1m",
@@ -57,7 +64,7 @@ export function formatElapsed(ms) {
 const BAR = `${ANSI.dim}\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500${ANSI.reset}`;
 
 export function printHeader({ task, config }) {
-  const version = "0.1.0";
+  const version = DISPLAY_VERSION;
   console.log(BAR);
   console.log(`${ANSI.bold}${ANSI.cyan}\u25b6 Karajan Code v${version}${ANSI.reset}`);
   console.log(BAR);

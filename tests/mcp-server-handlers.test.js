@@ -59,6 +59,44 @@ vi.mock("../src/mcp/tool-arg-normalizers.js", () => ({
   normalizePlanArgs: vi.fn((a) => a)
 }));
 
+vi.mock("../src/agents/index.js", () => ({
+  createAgent: vi.fn(() => ({
+    runTask: vi.fn().mockResolvedValue({ ok: true, output: "done", exitCode: 0 }),
+    reviewTask: vi.fn().mockResolvedValue({ ok: true, output: '{"approved":true}', exitCode: 0 })
+  }))
+}));
+
+vi.mock("../src/prompts/planner.js", () => ({
+  buildPlannerPrompt: vi.fn(() => "planner prompt")
+}));
+
+vi.mock("../src/prompts/coder.js", () => ({
+  buildCoderPrompt: vi.fn(() => "coder prompt")
+}));
+
+vi.mock("../src/prompts/reviewer.js", () => ({
+  buildReviewerPrompt: vi.fn(() => "reviewer prompt")
+}));
+
+vi.mock("../src/review/parser.js", () => ({
+  parseMaybeJsonString: vi.fn((s) => {
+    try { return JSON.parse(s); } catch { return null; }
+  })
+}));
+
+vi.mock("../src/review/diff-generator.js", () => ({
+  computeBaseRef: vi.fn().mockResolvedValue("abc123"),
+  generateDiff: vi.fn().mockResolvedValue("diff content")
+}));
+
+vi.mock("../src/review/profiles.js", () => ({
+  resolveReviewProfile: vi.fn().mockResolvedValue({ rules: "review rules" })
+}));
+
+vi.mock("node:fs/promises", () => ({
+  default: { readFile: vi.fn().mockResolvedValue("coder rules content") }
+}));
+
 const {
   asObject,
   responseText,
@@ -66,12 +104,16 @@ const {
   classifyError,
   enrichedFailPayload,
   buildAskQuestion,
-  handleToolCall
+  handleToolCall,
+  handlePlanDirect,
+  handleCodeDirect,
+  handleReviewDirect
 } = await import("../src/mcp/server-handlers.js");
 
 const { runKjCommand } = await import("../src/mcp/run-kj.js");
 const { runFlow, resumeFlow } = await import("../src/orchestrator.js");
 const { assertAgentsAvailable } = await import("../src/agents/availability.js");
+const { createAgent } = await import("../src/agents/index.js");
 
 const mockServer = {
   sendLoggingMessage: vi.fn(),
@@ -298,31 +340,34 @@ describe("mcp/server-handlers", () => {
       });
     });
 
-    it("routes kj_code with task arg", async () => {
-      await handleToolCall("kj_code", { task: "Fix bug" }, mockServer, {});
-      expect(runKjCommand).toHaveBeenCalledWith({
-        command: "code",
-        commandArgs: ["Fix bug"],
-        options: { task: "Fix bug" }
-      });
+    it("routes kj_code in-process (not via subprocess)", async () => {
+      const result = await handleToolCall("kj_code", { task: "Fix bug" }, mockServer, {});
+      expect(result.ok).toBe(true);
+      expect(result.output).toBe("done");
+      expect(createAgent).toHaveBeenCalled();
+      expect(runKjCommand).not.toHaveBeenCalledWith(
+        expect.objectContaining({ command: "code" })
+      );
     });
 
-    it("routes kj_review with task arg", async () => {
-      await handleToolCall("kj_review", { task: "Review auth" }, mockServer, {});
-      expect(runKjCommand).toHaveBeenCalledWith({
-        command: "review",
-        commandArgs: ["Review auth"],
-        options: { task: "Review auth" }
-      });
+    it("routes kj_review in-process (not via subprocess)", async () => {
+      const result = await handleToolCall("kj_review", { task: "Review auth" }, mockServer, {});
+      expect(result.ok).toBe(true);
+      expect(result.review).toBeDefined();
+      expect(createAgent).toHaveBeenCalled();
+      expect(runKjCommand).not.toHaveBeenCalledWith(
+        expect.objectContaining({ command: "review" })
+      );
     });
 
-    it("routes kj_plan with task and normalizes args", async () => {
-      await handleToolCall("kj_plan", { task: "Plan feature" }, mockServer, {});
-      expect(runKjCommand).toHaveBeenCalledWith({
-        command: "plan",
-        commandArgs: ["Plan feature"],
-        options: expect.objectContaining({ task: "Plan feature" })
-      });
+    it("routes kj_plan in-process (not via subprocess)", async () => {
+      const result = await handleToolCall("kj_plan", { task: "Plan feature" }, mockServer, {});
+      expect(result.ok).toBe(true);
+      expect(result.plan).toBeDefined();
+      expect(createAgent).toHaveBeenCalled();
+      expect(runKjCommand).not.toHaveBeenCalledWith(
+        expect.objectContaining({ command: "plan" })
+      );
     });
 
     // --- Required field validation ---
