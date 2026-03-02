@@ -39,6 +39,8 @@ Instead of running one AI agent and manually reviewing its output, `kj` chains a
 - **Session management** — pause/resume with fail-fast detection and automatic cleanup of expired sessions
 - **Plugin system** — extend with custom agents via `.karajan/plugins/`
 - **Smart model selection** — auto-selects optimal model per role based on triage complexity (lighter models for trivial tasks, powerful models for complex ones)
+- **Interactive checkpoints** — instead of killing long-running tasks, pauses every 5 minutes with a progress report and lets you decide: continue, stop, or adjust the time
+- **Task decomposition** — triage detects when tasks should be split and recommends subtasks; with Planning Game integration, creates linked cards with sequential blocking
 - **Retry with backoff** — automatic recovery from transient API errors (429, 5xx) with exponential backoff and jitter
 - **Planning Game integration** — optionally pair with [Planning Game](https://github.com/AgenteIA-Geniova/planning-game) for agile project management (tasks, sprints, estimation) — like Jira, but open-source and XP-native
 
@@ -199,6 +201,7 @@ kj run "Fix the login bug" [options]
 | `--smart-models` | Enable smart model selection based on triage complexity |
 | `--no-smart-models` | Disable smart model selection |
 | `--no-sonar` | Skip SonarQube analysis |
+| `--checkpoint-interval <n>` | Minutes between interactive checkpoints (default: 5) |
 | `--pg-task <cardId>` | Planning Game card ID for task context |
 | `--pg-project <projectId>` | Planning Game project ID |
 | `--dry-run` | Show what would run without executing |
@@ -349,6 +352,7 @@ git:
 session:
   max_iteration_minutes: 15
   max_total_minutes: 120
+  checkpoint_interval_minutes: 5  # Interactive checkpoint every N minutes
   max_budget_usd: null         # null = unlimited
   fail_fast_repeats: 2
 
@@ -443,7 +447,7 @@ Use `kj roles show <role>` to inspect any template. Create a project override to
 git clone https://github.com/manufosela/karajan-code.git
 cd karajan-code
 npm install
-npm test              # Run 964+ tests with Vitest
+npm test              # Run 1025+ tests with Vitest
 npm run test:watch    # Watch mode
 npm run validate      # Lint + test
 ```

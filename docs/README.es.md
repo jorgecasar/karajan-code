@@ -38,6 +38,8 @@ En lugar de ejecutar un agente de IA y revisar manualmente su output, `kj` encad
 - **Automatizacion Git** — auto-commit, auto-push, auto-PR tras aprobacion
 - **Gestion de sesiones** — pausa/reanudacion con deteccion fail-fast y limpieza automatica de sesiones expiradas
 - **Sistema de plugins** — extiende con agentes custom via `.karajan/plugins/`
+- **Checkpoints interactivos** — en lugar de matar tareas largas, pausa cada 5 minutos con un informe de progreso y te deja decidir: continuar, parar o ajustar el tiempo
+- **Descomposicion de tareas** — triage detecta cuando una tarea debe dividirse y recomienda subtareas; con integracion Planning Game, crea cards vinculadas con bloqueo secuencial
 - **Retry con backoff** — recuperacion automatica ante errores transitorios de API (429, 5xx) con backoff exponencial y jitter
 - **Integracion con Planning Game** — combina opcionalmente con [Planning Game](https://github.com/AgenteIA-Geniova/planning-game) para gestion agil de proyectos (tareas, sprints, estimacion) — como Jira, pero open-source y nativo XP
 
