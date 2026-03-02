@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-03-02
+
+### Fixed
+- **kj_plan/kj_code/kj_review SIGKILL timeout**: these three MCP tools were spawned as subprocesses via execa. When the caller passed `timeoutMs`, execa killed the subprocess with SIGKILL. They now execute in-process (like `kj_run`), with no timeout — the agent runs until done
+- **MCP server stale after update**: after `npm link`/`npm install`, the MCP process kept running old ESM-cached code. Added `setupVersionWatcher` that detects `package.json` version changes and exits cleanly so Claude Code restarts the server with fresh code. Also added per-call version check as fallback
+- **Hardcoded versions**: replaced hardcoded version strings in `cli.js` (`"1.6.2"`), `display.js` (`"0.1.0"`), and `server.js` (`"1.0.0"`) with dynamic reads from `package.json`
+
+### Changed
+- `timeoutMs` parameter removed from `kj_code`, `kj_review`, `kj_plan` MCP tool schemas
+- MCP server now reports its actual package version in the `Server` constructor
+- 5 new tests (1030 total)
+
 ## [1.6.2] - 2026-03-02
 
 ### Fixed
@@ -148,7 +160,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI/CD**: GitHub Actions workflow with validation and PR annotations
 - **716+ unit tests** with Vitest
 
-[Unreleased]: https://github.com/manufosela/karajan-code/compare/v1.6.2...HEAD
+[Unreleased]: https://github.com/manufosela/karajan-code/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/manufosela/karajan-code/compare/v1.6.2...v1.7.0
 [1.6.2]: https://github.com/manufosela/karajan-code/compare/v1.6.1...v1.6.2
 [1.6.1]: https://github.com/manufosela/karajan-code/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/manufosela/karajan-code/compare/v1.5.0...v1.6.0
