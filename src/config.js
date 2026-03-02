@@ -114,6 +114,7 @@ const DEFAULTS = {
   session: {
     max_iteration_minutes: 30,
     max_total_minutes: 120,
+    checkpoint_interval_minutes: 5,
     fail_fast_repeats: 2,
     repeat_detection_threshold: 2,
     max_sonar_retries: 3,
@@ -244,6 +245,7 @@ export function applyRunOverrides(config, flags) {
   if (flags.maxIterations) out.max_iterations = Number(flags.maxIterations);
   if (flags.maxIterationMinutes) out.session.max_iteration_minutes = Number(flags.maxIterationMinutes);
   if (flags.maxTotalMinutes) out.session.max_total_minutes = Number(flags.maxTotalMinutes);
+  if (flags.checkpointInterval) out.session.checkpoint_interval_minutes = Number(flags.checkpointInterval);
   if (flags.baseBranch) out.base_branch = flags.baseBranch;
   if (flags.coderFallback) out.coder_options.fallback_coder = flags.coderFallback;
   if (flags.reviewerFallback) out.reviewer_options.fallback_reviewer = flags.reviewerFallback;

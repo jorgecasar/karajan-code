@@ -5,8 +5,6 @@ import { execa } from "execa";
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const CLI_PATH = path.resolve(MODULE_DIR, "..", "cli.js");
 
-const TIMEOUT_BUFFER_MS = 30_000;
-
 function normalizeBoolFlag(value, flagName, args) {
   if (value === true) args.push(flagName);
 }
@@ -15,18 +13,6 @@ function addOptionalValue(args, flag, value) {
   if (value !== undefined && value !== null && value !== "") {
     args.push(flag, String(value));
   }
-}
-
-function resolveTimeout(options) {
-  const iterMinutes = options.maxIterationMinutes ? Number(options.maxIterationMinutes) : 30;
-  const agentTimeoutMs = iterMinutes * 60 * 1000;
-  const callerTimeoutMs = options.timeoutMs ? Number(options.timeoutMs) : 0;
-
-  if (callerTimeoutMs > 0) {
-    return Math.max(callerTimeoutMs, agentTimeoutMs + TIMEOUT_BUFFER_MS);
-  }
-
-  return agentTimeoutMs + TIMEOUT_BUFFER_MS;
 }
 
 export async function runKjCommand({ command, commandArgs = [], options = {}, env = {} }) {
@@ -65,6 +51,7 @@ export async function runKjCommand({ command, commandArgs = [], options = {}, en
   normalizeBoolFlag(options.noSonar, "--no-sonar", args);
   if (options.smartModels === true) args.push("--smart-models");
   if (options.smartModels === false) args.push("--no-smart-models");
+  addOptionalValue(args, "--checkpoint-interval", options.checkpointInterval);
   addOptionalValue(args, "--pg-task", options.pgTask);
   addOptionalValue(args, "--pg-project", options.pgProject);
 
@@ -81,7 +68,7 @@ export async function runKjCommand({ command, commandArgs = [], options = {}, en
     runEnv.KJ_SONAR_TOKEN = options.sonarToken;
   }
 
-  const timeout = resolveTimeout(options);
+  const timeout = options.timeoutMs ? Number(options.timeoutMs) : undefined;
 
   const result = await execa("node", args, {
     env: runEnv,
@@ -100,8 +87,7 @@ export async function runKjCommand({ command, commandArgs = [], options = {}, en
   if (result.timedOut) {
     payload.ok = false;
     payload.timedOut = true;
-    const iterMin = options.maxIterationMinutes || 30;
-    payload.stderr = `Process timed out after ${Math.round(timeout / 1000)}s (safety limit: ${iterMin} min). The agent CLI may be stuck. Consider: (1) splitting the task into smaller pieces, (2) enabling triage (--enable-triage) to detect complex tasks before execution, or (3) increasing --max-iteration-minutes if the task genuinely needs more time.`;
+    payload.stderr = `Process timed out after ${Math.round((timeout || 0) / 1000)}s (explicit timeout). Consider using kj_run for interactive checkpoint support instead of subprocess commands.`;
   }
 
   if (result.killed && !payload.timedOut) {
