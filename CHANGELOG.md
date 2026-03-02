@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-03-02
+
+### Added
+- **Interactive timeout checkpoints**: replaces the hard timeout that killed running processes. Every 5 minutes (configurable with `--checkpoint-interval`), pauses execution with a progress report and asks the user to continue (5 more min / until done / custom time / stop). Only applies when `askQuestion` is available (MCP `kj_run`); subprocess commands (`kj_code`, `kj_review`) run without timeout by default
+- **PG subtask creation from triage decomposition**: when triage recommends decomposing a task and a Planning Game card is linked, offers to create subtask cards in PG with `blocks/blockedBy` chain relationships for sequential execution
+- **Triage task decomposition**: triage now analyzes whether tasks should be split, returning `shouldDecompose` and `subtasks[]` fields with up to 5 actionable subtask descriptions
+- **Planner receives triage decomposition**: planner prompt includes triage decomposition context, focusing the plan on the first subtask with remaining subtasks documented as `pending_subtasks`
+- **PR body enrichment**: auto-generated PR body includes approach, implementation steps, and pending subtasks as checkboxes from triage decomposition
+- **Planning Game card traceability**: session reports now include `pg_task_id`/`pg_project_id`, with `--pg-task` filtering support in `kj report` and MCP `kj_report`
+- **Provider and model in checkpoints**: all session checkpoints now record which provider and model were used for each stage
+- PG HTTP client methods: `createCard()` and `relateCards()` for card creation and relationship management
+- CLI flag: `--checkpoint-interval <n>` to control minutes between interactive checkpoints
+- MCP parameter: `checkpointInterval` for `kj_run`
+- 61 new tests (1025 total)
+
+### Fixed
+- **Timeout regression**: removed the forced timeout in `run-kj.js` that prevented tasks from completing. Subprocess timeout now only applies when explicitly set via `timeoutMs`
+- Timeout race condition between MCP host and agent subprocess resolved
+
+### Changed
+- `session.checkpoint_interval_minutes` default: 5 (previously hard timeout at 30 min)
+- Subprocess timeout behavior: no timeout by default (was always imposed via `resolveTimeout()`)
+
 ## [1.5.0] - 2026-03-01
 
 ### Added
@@ -115,7 +138,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI/CD**: GitHub Actions workflow with validation and PR annotations
 - **716+ unit tests** with Vitest
 
-[Unreleased]: https://github.com/manufosela/karajan-code/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/manufosela/karajan-code/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/manufosela/karajan-code/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/manufosela/karajan-code/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/manufosela/karajan-code/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/manufosela/karajan-code/compare/v1.2.0...v1.3.0

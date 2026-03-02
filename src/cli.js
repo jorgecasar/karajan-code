@@ -24,7 +24,7 @@ async function withConfig(commandName, flags, fn) {
 }
 
 const program = new Command();
-program.name("kj").description("Karajan Code CLI").version("1.5.0");
+program.name("kj").description("Karajan Code CLI").version("1.6.0");
 
 program
   .command("init")
