@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.2] - 2026-03-02
+
+### Fixed
+- **Init wizard skipped config questions with single agent**: when only one AI agent was installed, `kj init` auto-assigned it to all roles and exited without asking about triage, SonarQube, or methodology. Now all config questions are always asked regardless of agent count
+
 ## [1.6.1] - 2026-03-02
 
 ### Fixed
@@ -143,7 +148,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI/CD**: GitHub Actions workflow with validation and PR annotations
 - **716+ unit tests** with Vitest
 
-[Unreleased]: https://github.com/manufosela/karajan-code/compare/v1.6.1...HEAD
+[Unreleased]: https://github.com/manufosela/karajan-code/compare/v1.6.2...HEAD
+[1.6.2]: https://github.com/manufosela/karajan-code/compare/v1.6.1...v1.6.2
 [1.6.1]: https://github.com/manufosela/karajan-code/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/manufosela/karajan-code/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/manufosela/karajan-code/compare/v1.4.0...v1.5.0
