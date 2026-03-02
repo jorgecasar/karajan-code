@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-03-02
+
+### Added
+- **Pipeline stage tracker**: new `pipeline:tracker` event emitted after every stage transition during `kj_run`, carrying full cumulative state (done/running/pending/failed) for all pipeline stages
+- **Single-agent progress logging**: `kj_code`, `kj_review`, and `kj_plan` now emit tracker start/end logs so MCP hosts can show which agent is running
+- **CLI pipeline rendering**: `kj run` displays a cumulative pipeline box with status icons per stage
+- New exported helpers: `buildPipelineTracker(config, emitter)` and `sendTrackerLog(server, stageName, status, summary)`
+- 12 new tests (1044 total)
+
 ## [1.7.0] - 2026-03-02
 
 ### Fixed
@@ -160,7 +169,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI/CD**: GitHub Actions workflow with validation and PR annotations
 - **716+ unit tests** with Vitest
 
-[Unreleased]: https://github.com/manufosela/karajan-code/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/manufosela/karajan-code/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/manufosela/karajan-code/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/manufosela/karajan-code/compare/v1.6.2...v1.7.0
 [1.6.2]: https://github.com/manufosela/karajan-code/compare/v1.6.1...v1.6.2
 [1.6.1]: https://github.com/manufosela/karajan-code/compare/v1.6.0...v1.6.1

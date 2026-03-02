@@ -343,6 +343,26 @@ export function printEvent(event) {
       console.log(`${ANSI.dim}Resume with: kj resume ${event.sessionId} --answer "<response>"${ANSI.reset}`);
       break;
 
+    case "pipeline:tracker": {
+      const trackerStages = event.detail?.stages || [];
+      console.log(`  ${ANSI.dim}\u250c Pipeline${ANSI.reset}`);
+      for (const stage of trackerStages) {
+        let stIcon, stColor;
+        switch (stage.status) {
+          case "done": stIcon = "\u2713"; stColor = ANSI.green; break;
+          case "running": stIcon = "\u25b6"; stColor = ANSI.cyan; break;
+          case "failed": stIcon = "\u2717"; stColor = ANSI.red; break;
+          default: stIcon = "\u00b7"; stColor = ANSI.dim; break;
+        }
+        const suffix = stage.summary
+          ? stage.status === "running" ? ` (${stage.summary})` : ` \u2192 ${stage.summary}`
+          : "";
+        console.log(`  ${ANSI.dim}\u2502${ANSI.reset} ${stColor}${stIcon} ${stage.name}${suffix}${ANSI.reset}`);
+      }
+      console.log(`  ${ANSI.dim}\u2514${ANSI.reset}`);
+      break;
+    }
+
     case "agent:output":
       console.log(`  \u2502 ${ANSI.dim}${event.message}${ANSI.reset}`);
       break;
