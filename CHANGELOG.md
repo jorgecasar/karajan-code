@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-03-03
+
+### Added
+- **`kj update` CLI command**: checks npm for the latest version and runs `npm install -g karajan-code@latest` to self-update
+
 ## [1.9.0] - 2026-03-03
 
 ### Added
