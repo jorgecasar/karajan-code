@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-03-03
+
+### Added
+- **Real-time feedback for all pipeline stages**: planner, triage, researcher, and refactorer now propagate `onOutput` callbacks, providing live progress during execution
+- **Stall detector** (`src/utils/stall-detector.js`): monitors agent activity with heartbeat (30s), warning (2min), and critical (5min) thresholds to detect hung agents
+- **File-based run log** (`src/utils/run-log.js`): writes real-time progress to `<projectDir>/.kj/run.log`, monitorable with `tail -f` or `kj_status`
+- **`kj_status` MCP tool**: reads the current run log so Claude can show what Karajan is doing in real-time
+- **Stream-JSON for Claude CLI**: when `onOutput` is provided, uses `--output-format stream-json` to get real-time NDJSON streaming instead of buffered text output
+- **MCP roots-based project directory detection**: uses `server.listRoots()` to resolve the user's project directory instead of `process.cwd()`, fixing run.log placement when MCP runs from a different directory
+- New progress event types: `agent:heartbeat`, `agent:stall`, `triage:start/end`, `researcher:start/end`
+- 9 new tests for stall detector (1053 total)
+
 ## [1.8.0] - 2026-03-02
 
 ### Added
