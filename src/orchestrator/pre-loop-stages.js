@@ -6,6 +6,7 @@ import { addCheckpoint, markSessionStatus } from "../session-store.js";
 import { emitProgress, makeEvent } from "../utils/events.js";
 import { parsePlannerOutput } from "../prompts/planner.js";
 import { selectModelsForRoles } from "../utils/model-selector.js";
+import { createStallDetector } from "../utils/stall-detector.js";
 
 export async function runTriageStage({ config, logger, emitter, eventBase, session, coderRole, trackBudget }) {
   logger.setContext({ iteration: 0, stage: "triage" });
@@ -16,10 +17,26 @@ export async function runTriageStage({ config, logger, emitter, eventBase, sessi
     })
   );
 
+  const triageProvider = config?.roles?.triage?.provider || coderRole.provider;
+  const triageOnOutput = ({ stream, line }) => {
+    emitProgress(emitter, makeEvent("agent:output", { ...eventBase, stage: "triage" }, {
+      message: line,
+      detail: { stream, agent: triageProvider }
+    }));
+  };
+  const triageStall = createStallDetector({
+    onOutput: triageOnOutput, emitter, eventBase, stage: "triage", provider: triageProvider
+  });
+
   const triage = new TriageRole({ config, logger, emitter });
   await triage.init({ task: session.task, sessionId: session.id, iteration: 0 });
   const triageStart = Date.now();
-  const triageOutput = await triage.run({ task: session.task });
+  let triageOutput;
+  try {
+    triageOutput = await triage.run({ task: session.task, onOutput: triageStall.onOutput });
+  } finally {
+    triageStall.stop();
+  }
   trackBudget({
     role: "triage",
     provider: config?.roles?.triage?.provider || coderRole.provider,
@@ -115,10 +132,26 @@ export async function runResearcherStage({ config, logger, emitter, eventBase, s
     })
   );
 
+  const researcherProvider = config?.roles?.researcher?.provider || coderRole.provider;
+  const researcherOnOutput = ({ stream, line }) => {
+    emitProgress(emitter, makeEvent("agent:output", { ...eventBase, stage: "researcher" }, {
+      message: line,
+      detail: { stream, agent: researcherProvider }
+    }));
+  };
+  const researcherStall = createStallDetector({
+    onOutput: researcherOnOutput, emitter, eventBase, stage: "researcher", provider: researcherProvider
+  });
+
   const researcher = new ResearcherRole({ config, logger, emitter });
   await researcher.init({ task: session.task });
   const researchStart = Date.now();
-  const researchOutput = await researcher.run({ task: session.task });
+  let researchOutput;
+  try {
+    researchOutput = await researcher.run({ task: session.task, onOutput: researcherStall.onOutput });
+  } finally {
+    researcherStall.stop();
+  }
   trackBudget({
     role: "researcher",
     provider: config?.roles?.researcher?.provider || coderRole.provider,
@@ -160,11 +193,26 @@ export async function runPlannerStage({ config, logger, emitter, eventBase, sess
     })
   );
 
+  const plannerOnOutput = ({ stream, line }) => {
+    emitProgress(emitter, makeEvent("agent:output", { ...eventBase, stage: "planner" }, {
+      message: line,
+      detail: { stream, agent: plannerRole.provider }
+    }));
+  };
+  const plannerStall = createStallDetector({
+    onOutput: plannerOnOutput, emitter, eventBase, stage: "planner", provider: plannerRole.provider
+  });
+
   const planRole = new PlannerRole({ config, logger, emitter, createAgentFn: createAgent });
   planRole.context = { task, research: researchContext, triageDecomposition };
   await planRole.init();
   const plannerStart = Date.now();
-  const planResult = await planRole.execute(task);
+  let planResult;
+  try {
+    planResult = await planRole.execute({ task, onOutput: plannerStall.onOutput });
+  } finally {
+    plannerStall.stop();
+  }
   trackBudget({ role: "planner", provider: plannerRole.provider, model: plannerRole.model, result: planResult.result, duration_ms: Date.now() - plannerStart });
   await addCheckpoint(session, {
     stage: "planner",

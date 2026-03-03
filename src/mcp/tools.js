@@ -166,6 +166,16 @@ export const tools = [
     }
   },
   {
+    name: "kj_status",
+    description: "Show real-time log of the current or last Karajan run. Use this to monitor progress while kj_run/kj_plan/kj_code is executing. Reads from .kj/run.log in the project directory.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        lines: { type: "number", description: "Number of log lines to show (default 50)" }
+      }
+    }
+  },
+  {
     name: "kj_plan",
     description: "Generate implementation plan for a task",
     inputSchema: {
