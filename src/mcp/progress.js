@@ -6,6 +6,10 @@
 export const PROGRESS_STAGES = [
   "session:start",
   "iteration:start",
+  "triage:start",
+  "triage:end",
+  "researcher:start",
+  "researcher:end",
   "planner:start",
   "planner:end",
   "coder:start",
@@ -22,7 +26,9 @@ export const PROGRESS_STAGES = [
   "question",
   "session:end",
   "dry-run:summary",
-  "pipeline:tracker"
+  "pipeline:tracker",
+  "agent:heartbeat",
+  "agent:stall"
 ];
 
 const PIPELINE_ORDER = [
@@ -89,11 +95,19 @@ export function sendTrackerLog(server, stageName, status, summary) {
   }
 }
 
+function resolveLogLevel(event) {
+  if (event.type === "agent:output") return "debug";
+  if (event.type === "agent:heartbeat") return "debug";
+  if (event.type === "agent:stall") return "warning";
+  if (event.status === "fail") return "error";
+  return "info";
+}
+
 export function buildProgressHandler(server) {
   return (event) => {
     try {
       server.sendLoggingMessage({
-        level: event.type === "agent:output" ? "debug" : event.status === "fail" ? "error" : "info",
+        level: resolveLogLevel(event),
         logger: "karajan",
         data: event
       });

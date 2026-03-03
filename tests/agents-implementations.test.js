@@ -28,15 +28,14 @@ describe("Agent implementations", () => {
   });
 
   describe("ClaudeAgent", () => {
-    it("runs task with claude -p and prompt", async () => {
+    it("runs task with claude -p and prompt (no streaming without onOutput)", async () => {
       const { ClaudeAgent } = await import("../src/agents/claude-agent.js");
       const agent = new ClaudeAgent("claude", baseConfig, logger);
       await agent.runTask({ prompt: "fix bug", role: "coder" });
 
       expect(runCommand).toHaveBeenCalledWith(
         "/usr/local/bin/claude",
-        ["-p", "fix bug"],
-        { onOutput: undefined }
+        ["-p", "fix bug"]
       );
     });
 
@@ -72,17 +71,18 @@ describe("Agent implementations", () => {
       expect(result.error).toBe("error");
     });
 
-    it("passes onOutput callback to runCommand", async () => {
+    it("uses stream-json and wraps onOutput when callback is provided", async () => {
       const { ClaudeAgent } = await import("../src/agents/claude-agent.js");
       const agent = new ClaudeAgent("claude", baseConfig, logger);
       const onOutput = vi.fn();
       await agent.runTask({ prompt: "work", role: "coder", onOutput });
 
-      expect(runCommand).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.any(Array),
-        expect.objectContaining({ onOutput })
-      );
+      const args = runCommand.mock.calls[0][1];
+      expect(args).toContain("--output-format");
+      expect(args).toContain("stream-json");
+      // The onOutput is wrapped in a stream-json filter, not passed directly
+      expect(runCommand.mock.calls[0][2]).toHaveProperty("onOutput");
+      expect(runCommand.mock.calls[0][2].onOutput).not.toBe(onOutput);
     });
   });
 

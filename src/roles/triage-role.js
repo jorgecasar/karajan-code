@@ -67,12 +67,15 @@ export class TriageRole extends BaseRole {
     const task = typeof input === "string"
       ? input
       : input?.task || this.context?.task || "";
+    const onOutput = typeof input === "string" ? null : input?.onOutput || null;
 
     const provider = resolveProvider(this.config);
     const agent = this._createAgent(provider, this.config, this.logger);
 
     const prompt = buildPrompt({ task, instructions: this.instructions });
-    const result = await agent.runTask({ prompt, role: "triage" });
+    const runArgs = { prompt, role: "triage" };
+    if (onOutput) runArgs.onOutput = onOutput;
+    const result = await agent.runTask(runArgs);
 
     if (!result.ok) {
       return {
