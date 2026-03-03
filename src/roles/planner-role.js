@@ -65,15 +65,20 @@ export class PlannerRole extends BaseRole {
   }
 
   async execute(input) {
-    const task = input || this.context?.task || "";
+    const { task, onOutput } = typeof input === "string"
+      ? { task: input, onOutput: null }
+      : { task: input?.task || input || "", onOutput: input?.onOutput || null };
+    const taskStr = task || this.context?.task || "";
     const research = this.context?.research || null;
     const triageDecomposition = this.context?.triageDecomposition || null;
     const provider = resolveProvider(this.config);
 
     const agent = this._createAgent(provider, this.config, this.logger);
-    const prompt = buildPrompt({ task, instructions: this.instructions, research, triageDecomposition });
+    const prompt = buildPrompt({ task: taskStr, instructions: this.instructions, research, triageDecomposition });
 
-    const result = await agent.runTask({ prompt, role: "planner" });
+    const runArgs = { prompt, role: "planner" };
+    if (onOutput) runArgs.onOutput = onOutput;
+    const result = await agent.runTask(runArgs);
 
     if (!result.ok) {
       return {

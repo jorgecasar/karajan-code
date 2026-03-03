@@ -11,6 +11,7 @@ import { runReviewerWithFallback } from "./reviewer-fallback.js";
 import { runCoderWithFallback } from "./agent-fallback.js";
 import { invokeSolomon } from "./solomon-escalation.js";
 import { detectRateLimit } from "../utils/rate-limit-detector.js";
+import { createStallDetector } from "../utils/stall-detector.js";
 
 export async function runCoderStage({ coderRoleInstance, coderRole, config, logger, emitter, eventBase, session, plannedTask, trackBudget, iteration }) {
   logger.setContext({ iteration, stage: "coder" });
@@ -28,13 +29,21 @@ export async function runCoderStage({ coderRoleInstance, coderRole, config, logg
       detail: { stream, agent: coderRole.provider }
     }));
   };
-  const coderStart = Date.now();
-  const coderExecResult = await coderRoleInstance.execute({
-    task: plannedTask,
-    reviewerFeedback: session.last_reviewer_feedback,
-    sonarSummary: session.last_sonar_summary,
-    onOutput: coderOnOutput
+  const coderStall = createStallDetector({
+    onOutput: coderOnOutput, emitter, eventBase, stage: "coder", provider: coderRole.provider
   });
+  const coderStart = Date.now();
+  let coderExecResult;
+  try {
+    coderExecResult = await coderRoleInstance.execute({
+      task: plannedTask,
+      reviewerFeedback: session.last_reviewer_feedback,
+      sonarSummary: session.last_sonar_summary,
+      onOutput: coderStall.onOutput
+    });
+  } finally {
+    coderStall.stop();
+  }
   trackBudget({ role: "coder", provider: coderRole.provider, model: coderRole.model, result: coderExecResult.result, duration_ms: Date.now() - coderStart });
 
   if (!coderExecResult.ok) {
@@ -130,10 +139,25 @@ export async function runRefactorerStage({ refactorerRole, config, logger, emitt
       detail: { refactorer: refactorerRole.provider }
     })
   );
+  const refactorerOnOutput = ({ stream, line }) => {
+    emitProgress(emitter, makeEvent("agent:output", { ...eventBase, stage: "refactorer" }, {
+      message: line,
+      detail: { stream, agent: refactorerRole.provider }
+    }));
+  };
+  const refactorerStall = createStallDetector({
+    onOutput: refactorerOnOutput, emitter, eventBase, stage: "refactorer", provider: refactorerRole.provider
+  });
+
   const refRole = new RefactorerRole({ config, logger, emitter, createAgentFn: createAgent });
   await refRole.init();
   const refactorerStart = Date.now();
-  const refResult = await refRole.execute(plannedTask);
+  let refResult;
+  try {
+    refResult = await refRole.execute({ task: plannedTask, onOutput: refactorerStall.onOutput });
+  } finally {
+    refactorerStall.stop();
+  }
   trackBudget({ role: "refactorer", provider: refactorerRole.provider, model: refactorerRole.model, result: refResult.result, duration_ms: Date.now() - refactorerStart });
   if (!refResult.ok) {
     const details = refResult.result?.error || refResult.summary || "unknown error";
@@ -392,19 +416,27 @@ export async function runReviewerStage({ reviewerRole, config, logger, emitter, 
       detail: { stream, agent: reviewerRole.provider }
     }));
   };
-  const reviewerStart = Date.now();
-  const reviewerExec = await runReviewerWithFallback({
-    reviewerName: reviewerRole.provider,
-    config,
-    logger,
-    emitter,
-    reviewInput: { task, diff, reviewRules, onOutput: reviewerOnOutput },
-    session,
-    iteration,
-    onAttemptResult: ({ reviewer, result }) => {
-      trackBudget({ role: "reviewer", provider: reviewer, model: reviewerRole.model, result, duration_ms: Date.now() - reviewerStart });
-    }
+  const reviewerStall = createStallDetector({
+    onOutput: reviewerOnOutput, emitter, eventBase, stage: "reviewer", provider: reviewerRole.provider
   });
+  const reviewerStart = Date.now();
+  let reviewerExec;
+  try {
+    reviewerExec = await runReviewerWithFallback({
+      reviewerName: reviewerRole.provider,
+      config,
+      logger,
+      emitter,
+      reviewInput: { task, diff, reviewRules, onOutput: reviewerStall.onOutput },
+      session,
+      iteration,
+      onAttemptResult: ({ reviewer, result }) => {
+        trackBudget({ role: "reviewer", provider: reviewer, model: reviewerRole.model, result, duration_ms: Date.now() - reviewerStart });
+      }
+    });
+  } finally {
+    reviewerStall.stop();
+  }
 
   if (!reviewerExec.execResult || !reviewerExec.execResult.ok) {
     const lastAttempt = reviewerExec.attempts.at(-1);

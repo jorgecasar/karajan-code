@@ -8,6 +8,7 @@ import fs from "node:fs/promises";
 import { runKjCommand } from "./run-kj.js";
 import { normalizePlanArgs } from "./tool-arg-normalizers.js";
 import { buildProgressHandler, buildProgressNotifier, buildPipelineTracker, sendTrackerLog } from "./progress.js";
+import { createStallDetector } from "../utils/stall-detector.js";
 import { runFlow, resumeFlow } from "../orchestrator.js";
 import { loadConfig, applyRunOverrides, validateConfig, resolveRole } from "../config.js";
 import { createLogger } from "../utils/logger.js";
@@ -19,6 +20,24 @@ import { buildReviewerPrompt } from "../prompts/reviewer.js";
 import { parseMaybeJsonString } from "../review/parser.js";
 import { computeBaseRef, generateDiff } from "../review/diff-generator.js";
 import { resolveReviewProfile } from "../review/profiles.js";
+import { createRunLog, readRunLog } from "../utils/run-log.js";
+
+/**
+ * Resolve the user's project directory via MCP roots.
+ * Falls back to process.cwd() if roots are not available.
+ */
+async function resolveProjectDir(server) {
+  try {
+    const { roots } = await server.listRoots();
+    if (roots?.length > 0) {
+      const uri = roots[0].uri;
+      // MCP roots use file:// URIs
+      if (uri.startsWith("file://")) return new URL(uri).pathname;
+      return uri;
+    }
+  } catch { /* client may not support roots */ }
+  return process.cwd();
+}
 
 export function asObject(value) {
   if (value && typeof value === "object") return value;
@@ -147,8 +166,13 @@ export async function handleRunDirect(a, server, extra) {
   if (config.pipeline?.security?.enabled) requiredProviders.push(resolveRole(config, "security").provider);
   await assertAgentsAvailable(requiredProviders);
 
+  const projectDir = await resolveProjectDir(server);
+  const runLog = createRunLog(projectDir);
+  runLog.logText(`[kj_run] started — task="${a.task.slice(0, 80)}..."`);
+
   const emitter = new EventEmitter();
   emitter.on("progress", buildProgressHandler(server));
+  emitter.on("progress", (event) => runLog.logEvent(event));
   const progressNotifier = buildProgressNotifier(extra);
   if (progressNotifier) emitter.on("progress", progressNotifier);
   buildPipelineTracker(config, emitter);
@@ -156,8 +180,13 @@ export async function handleRunDirect(a, server, extra) {
   const askQuestion = buildAskQuestion(server);
   const pgTaskId = a.pgTask || null;
   const pgProject = a.pgProject || config.planning_game?.project_id || null;
-  const result = await runFlow({ task: a.task, config, logger, flags: a, emitter, askQuestion, pgTaskId, pgProject });
-  return { ok: !result.paused && (result.approved !== false), ...result };
+  try {
+    const result = await runFlow({ task: a.task, config, logger, flags: a, emitter, askQuestion, pgTaskId, pgProject });
+    runLog.logText(`[kj_run] finished — ok=${!result.paused && (result.approved !== false)}`);
+    return { ok: !result.paused && (result.approved !== false), ...result };
+  } finally {
+    runLog.close();
+  }
 }
 
 export async function handleResumeDirect(a, server, extra) {
@@ -182,6 +211,20 @@ export async function handleResumeDirect(a, server, extra) {
   return { ok: true, ...result };
 }
 
+function buildDirectEmitter(server, runLog) {
+  const emitter = new EventEmitter();
+  emitter.on("progress", (event) => {
+    try {
+      const level = event.type === "agent:stall" ? "warning"
+        : event.type === "agent:heartbeat" ? "info"
+        : "debug";
+      server.sendLoggingMessage({ level, logger: "karajan", data: event });
+    } catch { /* best-effort */ }
+    if (runLog) runLog.logEvent(event);
+  });
+  return emitter;
+}
+
 export async function handlePlanDirect(a, server, extra) {
   const options = normalizePlanArgs(a);
   const config = await buildConfig(options, "plan");
@@ -190,10 +233,31 @@ export async function handlePlanDirect(a, server, extra) {
   const plannerRole = resolveRole(config, "planner");
   await assertAgentsAvailable([plannerRole.provider]);
 
+  const projectDir = await resolveProjectDir(server);
+  const runLog = createRunLog(projectDir);
+  runLog.logText(`[kj_plan] started — provider=${plannerRole.provider}`);
+  const emitter = buildDirectEmitter(server, runLog);
+  const eventBase = { sessionId: null, iteration: 0, startedAt: Date.now() };
+  const onOutput = ({ stream, line }) => {
+    emitter.emit("progress", { type: "agent:output", stage: "planner", message: line, detail: { stream, agent: plannerRole.provider } });
+  };
+  const stallDetector = createStallDetector({
+    onOutput, emitter, eventBase, stage: "planner", provider: plannerRole.provider
+  });
+
   const planner = createAgent(plannerRole.provider, config, logger);
   const prompt = buildPlannerPrompt({ task: a.task, context: a.context });
   sendTrackerLog(server, "planner", "running", plannerRole.provider);
-  const result = await planner.runTask({ prompt, role: "planner" });
+  runLog.logText(`[planner] agent launched, waiting for response...`);
+  let result;
+  try {
+    result = await planner.runTask({ prompt, role: "planner", onOutput: stallDetector.onOutput });
+  } finally {
+    stallDetector.stop();
+    const stats = stallDetector.stats();
+    runLog.logText(`[planner] finished — lines=${stats.lineCount}, bytes=${stats.bytesReceived}, elapsed=${Math.round(stats.elapsedMs / 1000)}s`);
+    runLog.close();
+  }
 
   if (!result.ok) {
     sendTrackerLog(server, "planner", "failed");
@@ -212,6 +276,18 @@ export async function handleCodeDirect(a, server, extra) {
   const coderRole = resolveRole(config, "coder");
   await assertAgentsAvailable([coderRole.provider]);
 
+  const projectDir = await resolveProjectDir(server);
+  const runLog = createRunLog(projectDir);
+  runLog.logText(`[kj_code] started — provider=${coderRole.provider}`);
+  const emitter = buildDirectEmitter(server, runLog);
+  const eventBase = { sessionId: null, iteration: 0, startedAt: Date.now() };
+  const onOutput = ({ stream, line }) => {
+    emitter.emit("progress", { type: "agent:output", stage: "coder", message: line, detail: { stream, agent: coderRole.provider } });
+  };
+  const stallDetector = createStallDetector({
+    onOutput, emitter, eventBase, stage: "coder", provider: coderRole.provider
+  });
+
   const coder = createAgent(coderRole.provider, config, logger);
   let coderRules = null;
   if (config.coder_rules) {
@@ -221,7 +297,16 @@ export async function handleCodeDirect(a, server, extra) {
   }
   const prompt = buildCoderPrompt({ task: a.task, coderRules, methodology: config.development?.methodology || "tdd" });
   sendTrackerLog(server, "coder", "running", coderRole.provider);
-  const result = await coder.runTask({ prompt, role: "coder" });
+  runLog.logText(`[coder] agent launched, waiting for response...`);
+  let result;
+  try {
+    result = await coder.runTask({ prompt, role: "coder", onOutput: stallDetector.onOutput });
+  } finally {
+    stallDetector.stop();
+    const stats = stallDetector.stats();
+    runLog.logText(`[coder] finished — lines=${stats.lineCount}, bytes=${stats.bytesReceived}, elapsed=${Math.round(stats.elapsedMs / 1000)}s`);
+    runLog.close();
+  }
 
   if (!result.ok) {
     sendTrackerLog(server, "coder", "failed");
@@ -239,6 +324,18 @@ export async function handleReviewDirect(a, server, extra) {
   const reviewerRole = resolveRole(config, "reviewer");
   await assertAgentsAvailable([reviewerRole.provider, config.reviewer_options?.fallback_reviewer]);
 
+  const projectDir = await resolveProjectDir(server);
+  const runLog = createRunLog(projectDir);
+  runLog.logText(`[kj_review] started — provider=${reviewerRole.provider}`);
+  const emitter = buildDirectEmitter(server, runLog);
+  const eventBase = { sessionId: null, iteration: 0, startedAt: Date.now() };
+  const onOutput = ({ stream, line }) => {
+    emitter.emit("progress", { type: "agent:output", stage: "reviewer", message: line, detail: { stream, agent: reviewerRole.provider } });
+  };
+  const stallDetector = createStallDetector({
+    onOutput, emitter, eventBase, stage: "reviewer", provider: reviewerRole.provider
+  });
+
   const reviewer = createAgent(reviewerRole.provider, config, logger);
   const resolvedBase = await computeBaseRef({ baseBranch: config.base_branch, baseRef: a.baseRef });
   const diff = await generateDiff({ baseRef: resolvedBase });
@@ -246,7 +343,16 @@ export async function handleReviewDirect(a, server, extra) {
 
   const prompt = buildReviewerPrompt({ task: a.task, diff, reviewRules: rules, mode: config.review_mode });
   sendTrackerLog(server, "reviewer", "running", reviewerRole.provider);
-  const result = await reviewer.reviewTask({ prompt, role: "reviewer" });
+  runLog.logText(`[reviewer] agent launched, waiting for response...`);
+  let result;
+  try {
+    result = await reviewer.reviewTask({ prompt, role: "reviewer", onOutput: stallDetector.onOutput });
+  } finally {
+    stallDetector.stop();
+    const stats = stallDetector.stats();
+    runLog.logText(`[reviewer] finished — lines=${stats.lineCount}, bytes=${stats.bytesReceived}, elapsed=${Math.round(stats.elapsedMs / 1000)}s`);
+    runLog.close();
+  }
 
   if (!result.ok) {
     sendTrackerLog(server, "reviewer", "failed");
@@ -260,6 +366,12 @@ export async function handleReviewDirect(a, server, extra) {
 
 export async function handleToolCall(name, args, server, extra) {
   const a = asObject(args);
+
+  if (name === "kj_status") {
+    const maxLines = a.lines || 50;
+    const projectDir = await resolveProjectDir(server);
+    return readRunLog(maxLines, projectDir);
+  }
 
   if (name === "kj_init") {
     return runKjCommand({ command: "init", options: a });
