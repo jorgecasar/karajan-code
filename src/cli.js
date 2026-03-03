@@ -187,6 +187,29 @@ program
     });
   });
 
+program
+  .command("update")
+  .description("Update karajan-code to the latest version from npm")
+  .action(async () => {
+    const { execaCommand } = await import("execa");
+    console.log(`Current version: ${PKG_VERSION}`);
+    console.log("Checking for updates...");
+    try {
+      const { stdout } = await execaCommand("npm view karajan-code version");
+      const latest = stdout.trim();
+      if (latest === PKG_VERSION) {
+        console.log(`Already on the latest version (${PKG_VERSION}).`);
+        return;
+      }
+      console.log(`Updating ${PKG_VERSION} → ${latest}...`);
+      await execaCommand("npm install -g karajan-code@latest", { stdio: "inherit" });
+      console.log(`Updated to ${latest}. Restart Claude to pick up the new MCP server.`);
+    } catch (err) {
+      console.error(`Update failed: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
 const sonar = program.command("sonar").description("Manage SonarQube container");
 sonar.command("status").action(async () => sonarCommand({ action: "status" }));
 sonar.command("start").action(async () => sonarCommand({ action: "start" }));
