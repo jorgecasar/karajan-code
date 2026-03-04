@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.3] - 2026-03-04
+
+### Added
+- **Planner hard runtime cap**: new `session.max_planner_minutes` (default 60) to stop noisy-but-stuck planner runs that still emit output (e.g. reconnect loops)
+
+### Changed
+- **Codex prompt transport hardening**: `CodexAgent` now sends prompts through stdin (`codex exec -`) instead of argv to handle very large planner prompts more reliably
+- **Planner timeout wiring in all entrypoints**: `kj_plan` (MCP), `PlannerRole`, and CLI `kj plan` now pass both silence and runtime timeouts to agent execution
+- **Docs updated**: README + troubleshooting (EN/ES) now document `max_planner_minutes` behavior and tuning guidance
+
 ## [1.9.2] - 2026-03-04
 
 ### Added
@@ -198,7 +208,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI/CD**: GitHub Actions workflow with validation and PR annotations
 - **716+ unit tests** with Vitest
 
-[Unreleased]: https://github.com/manufosela/karajan-code/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/manufosela/karajan-code/compare/v1.9.3...HEAD
+[1.9.3]: https://github.com/manufosela/karajan-code/compare/v1.9.2...v1.9.3
+[1.9.2]: https://github.com/manufosela/karajan-code/compare/v1.9.1...v1.9.2
 [1.8.0]: https://github.com/manufosela/karajan-code/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/manufosela/karajan-code/compare/v1.6.2...v1.7.0
 [1.6.2]: https://github.com/manufosela/karajan-code/compare/v1.6.1...v1.6.2
