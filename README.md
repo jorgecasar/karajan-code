@@ -43,7 +43,7 @@ Instead of running one AI agent and manually reviewing its output, `kj` chains a
 - **Task decomposition** — triage detects when tasks should be split and recommends subtasks; with Planning Game integration, creates linked cards with sequential blocking
 - **Retry with backoff** — automatic recovery from transient API errors (429, 5xx) with exponential backoff and jitter
 - **Pipeline stage tracker** — cumulative progress view during `kj_run` showing which stages are done, running, or pending — both in CLI and via MCP events for real-time host rendering
-- **Planner observability guardrails** — continuous heartbeat/stall telemetry plus configurable max-silence protection (`session.max_agent_silence_minutes`) to avoid silent hangs in long `kj_plan`/planner executions
+- **Planner observability guardrails** — continuous heartbeat/stall telemetry, configurable max-silence protection (`session.max_agent_silence_minutes`), and hard runtime cap (`session.max_planner_minutes`) to avoid long stuck planner runs
 - **Planning Game integration** — optionally pair with [Planning Game](https://github.com/AgenteIA-Geniova/planning-game) for agile project management (tasks, sprints, estimation) — like Jira, but open-source and XP-native
 
 > **Best with MCP** — Karajan Code is designed to be used as an MCP server inside your AI agent (Claude, Codex, etc.). The agent sends tasks to `kj_run`, gets real-time progress notifications, and receives structured results — no copy-pasting needed.

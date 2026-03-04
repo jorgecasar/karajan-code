@@ -20,7 +20,7 @@ vi.mock("../src/config.js", () => ({
       max_iterations: 5,
       reviewer_options: { fallback_reviewer: "codex", retries: 1 },
       coder_options: {},
-      session: { max_iteration_minutes: 10, max_total_minutes: 120 },
+      session: { max_iteration_minutes: 10, max_total_minutes: 120, max_planner_minutes: 60 },
       output: { log_level: "info" },
       pipeline: {},
       sonarqube: { enabled: false },
@@ -486,6 +486,15 @@ describe("mcp/server-handlers", () => {
 
       expect(sendTrackerLog).toHaveBeenCalledWith(mockServer, "planner", "running", expect.any(String));
       expect(sendTrackerLog).toHaveBeenCalledWith(mockServer, "planner", "done");
+    });
+
+    it("kj_plan passes planner runtime timeout to agent", async () => {
+      await handlePlanDirect({ task: "Plan feature" }, mockServer, {});
+
+      const planner = createAgent.mock.results[0].value;
+      expect(planner.runTask).toHaveBeenCalledWith(expect.objectContaining({
+        timeoutMs: 3600000
+      }));
     });
 
     it("kj_plan failure includes runtime stats in the error message", async () => {
