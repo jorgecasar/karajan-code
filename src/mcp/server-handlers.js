@@ -247,11 +247,19 @@ export async function handlePlanDirect(a, server, extra) {
 
   const planner = createAgent(plannerRole.provider, config, logger);
   const prompt = buildPlannerPrompt({ task: a.task, context: a.context });
+  const silenceTimeoutMs = Number(config?.session?.max_agent_silence_minutes) > 0
+    ? Math.round(Number(config.session.max_agent_silence_minutes) * 60 * 1000)
+    : undefined;
   sendTrackerLog(server, "planner", "running", plannerRole.provider);
   runLog.logText(`[planner] agent launched, waiting for response...`);
   let result;
   try {
-    result = await planner.runTask({ prompt, role: "planner", onOutput: stallDetector.onOutput });
+    result = await planner.runTask({
+      prompt,
+      role: "planner",
+      onOutput: stallDetector.onOutput,
+      silenceTimeoutMs
+    });
   } finally {
     stallDetector.stop();
     const stats = stallDetector.stats();

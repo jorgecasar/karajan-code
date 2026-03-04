@@ -54,4 +54,14 @@ describe("runCommand onOutput streaming", () => {
       expect(l.line).not.toBe("");
     }
   });
+
+  it("kills command when silence timeout is exceeded", async () => {
+    const result = await runCommand("bash", ["-c", "sleep 1; echo late"], {
+      silenceTimeoutMs: 50
+    });
+
+    expect(result.exitCode).toBe(143);
+    expect(result.timedOut).toBe(true);
+    expect(result.stderr).toContain("without output");
+  });
 });

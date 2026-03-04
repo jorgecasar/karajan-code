@@ -15,6 +15,7 @@ import { emitProgress, makeEvent } from "./events.js";
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 30_000;   // heartbeat every 30s
 const DEFAULT_STALL_TIMEOUT_MS      = 120_000;  // warn after 2min silence
 const DEFAULT_CRITICAL_TIMEOUT_MS   = 300_000;  // critical after 5min silence
+const DEFAULT_STALL_REPEAT_MS       = 60_000;   // repeat stall notices every 60s
 
 export function createStallDetector({
   onOutput,
@@ -24,23 +25,30 @@ export function createStallDetector({
   provider,
   heartbeatIntervalMs = DEFAULT_HEARTBEAT_INTERVAL_MS,
   stallTimeoutMs      = DEFAULT_STALL_TIMEOUT_MS,
-  criticalTimeoutMs   = DEFAULT_CRITICAL_TIMEOUT_MS
+  criticalTimeoutMs   = DEFAULT_CRITICAL_TIMEOUT_MS,
+  stallRepeatMs       = DEFAULT_STALL_REPEAT_MS,
+  maxSilenceMs        = null,
+  onMaxSilence        = null
 }) {
   let lastActivityAt = Date.now();
   let lineCount = 0;
   let bytesReceived = 0;
-  let stallWarned = false;
-  let criticalWarned = false;
   let heartbeatTimer = null;
   const startedAt = Date.now();
+  let lastStallWarnAt = 0;
+  let lastCriticalWarnAt = 0;
+  let maxSilenceTriggered = false;
 
   function emitHeartbeat() {
     const now = Date.now();
     const silenceMs = now - lastActivityAt;
     const elapsedMs = now - startedAt;
+    const shouldWarn = silenceMs >= stallTimeoutMs;
+    const shouldCritical = silenceMs >= criticalTimeoutMs;
+    const repeatWindow = Math.max(1000, Number(stallRepeatMs) || DEFAULT_STALL_REPEAT_MS);
 
-    if (silenceMs >= criticalTimeoutMs && !criticalWarned) {
-      criticalWarned = true;
+    if (shouldCritical && (now - lastCriticalWarnAt >= repeatWindow)) {
+      lastCriticalWarnAt = now;
       emitProgress(emitter, makeEvent("agent:stall", { ...eventBase, stage }, {
         status: "critical",
         message: `Agent ${provider} unresponsive for ${Math.round(silenceMs / 1000)}s — may be hung`,
@@ -53,8 +61,8 @@ export function createStallDetector({
           severity: "critical"
         }
       }));
-    } else if (silenceMs >= stallTimeoutMs && !stallWarned) {
-      stallWarned = true;
+    } else if (shouldWarn && (now - lastStallWarnAt >= repeatWindow)) {
+      lastStallWarnAt = now;
       emitProgress(emitter, makeEvent("agent:stall", { ...eventBase, stage }, {
         status: "warning",
         message: `Agent ${provider} silent for ${Math.round(silenceMs / 1000)}s — still waiting`,
@@ -67,20 +75,49 @@ export function createStallDetector({
           severity: "warning"
         }
       }));
-    } else if (silenceMs < stallTimeoutMs) {
-      // Reset warning flags when activity resumes
-      stallWarned = false;
-      criticalWarned = false;
+    }
 
-      emitProgress(emitter, makeEvent("agent:heartbeat", { ...eventBase, stage }, {
-        message: `Agent ${provider} active — ${lineCount} lines, ${Math.round(elapsedMs / 1000)}s elapsed`,
+    emitProgress(emitter, makeEvent("agent:heartbeat", { ...eventBase, stage }, {
+      message: silenceMs < stallTimeoutMs
+        ? `Agent ${provider} active — ${lineCount} lines, ${Math.round(elapsedMs / 1000)}s elapsed`
+        : `Agent ${provider} waiting — silent ${Math.round(silenceMs / 1000)}s, ${Math.round(elapsedMs / 1000)}s elapsed`,
+      detail: {
+        provider,
+        elapsedMs,
+        silenceMs,
+        lineCount,
+        bytesReceived,
+        status: silenceMs < stallTimeoutMs ? "active" : "waiting"
+      }
+    }));
+
+    const hardLimit = Number(maxSilenceMs);
+    if (!maxSilenceTriggered && Number.isFinite(hardLimit) && hardLimit > 0 && silenceMs >= hardLimit) {
+      maxSilenceTriggered = true;
+      emitProgress(emitter, makeEvent("agent:stall", { ...eventBase, stage }, {
+        status: "fail",
+        message: `Agent ${provider} exceeded max silence (${Math.round(hardLimit / 1000)}s)`,
         detail: {
           provider,
+          silenceMs,
           elapsedMs,
           lineCount,
-          bytesReceived
+          bytesReceived,
+          severity: "fatal",
+          maxSilenceMs: hardLimit
         }
       }));
+      if (typeof onMaxSilence === "function") {
+        onMaxSilence({
+          provider,
+          stage,
+          silenceMs,
+          elapsedMs,
+          lineCount,
+          bytesReceived,
+          maxSilenceMs: hardLimit
+        });
+      }
     }
   }
 
@@ -91,10 +128,6 @@ export function createStallDetector({
     lastActivityAt = Date.now();
     lineCount++;
     bytesReceived += data.line?.length || 0;
-
-    // Reset stall flags on new activity
-    stallWarned = false;
-    criticalWarned = false;
 
     // Forward to the original callback
     if (onOutput) {
