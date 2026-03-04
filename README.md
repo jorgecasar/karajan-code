@@ -420,6 +420,18 @@ After `npm install -g karajan-code`, the MCP server is auto-registered in Claude
 | `kj_review` | Run reviewer-only mode |
 | `kj_plan` | Generate implementation plan with heartbeat/stall telemetry and clearer diagnostics |
 
+### MCP restart after version updates
+
+If you update Karajan Code (for example `npm install -g karajan-code` to a new version) while your MCP host session is still open, the current `karajan-mcp` process may exit and the host can show `Transport closed`.
+
+This is expected behavior: the MCP server detects a version mismatch and exits so the host can spawn a fresh process with the new code.
+
+Quick recovery:
+
+1. Restart your MCP host session (Claude/Codex/new terminal session).
+2. Verify the server is listed (`codex mcp list` or your host equivalent).
+3. Run a lightweight check (`kj_config`) before continuing with larger runs.
+
 ### Recommended Companion MCPs
 
 Karajan Code works great on its own, but combining it with these MCP servers gives your AI agent a complete development environment:

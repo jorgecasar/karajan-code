@@ -163,6 +163,17 @@ If the failure persists, split the prompt into smaller planning chunks and run `
 
 ## MCP Server
 
+### `Transport closed` after upgrading Karajan Code
+
+**Symptom**: MCP calls fail immediately (including `kj_config`/`kj_plan`) and your host shows `Transport closed`.
+
+**Cause**: Your host still has an old MCP server process from a previous version. After a version bump, Karajan MCP exits stale processes so the host can restart with fresh code.
+
+**Fix**:
+1. Restart the MCP host session (Claude/Codex/new terminal session).
+2. Verify the server is registered/listed (`codex mcp list` or host equivalent).
+3. Run a quick smoke check (`kj_config`, then a short `kj_plan`) before long runs.
+
 ### Orphaned node processes after closing Claude Code
 
 **Cause**: MCP server processes not properly cleaned up when the parent session ends.
@@ -184,8 +195,9 @@ kill <pid1> <pid2> ...
 
 **Fix**:
 1. Check if the process is running: `ps aux | grep karajan-mcp`
-2. Restart Claude Code — MCP servers are spawned per session
-3. Run `kj doctor` to verify the setup is correct
+2. Restart your MCP host session — MCP servers are spawned per session
+3. If this happened after an update, follow the `Transport closed` checklist above
+4. Run `kj doctor` to verify the setup is correct
 
 ## General Tips
 
