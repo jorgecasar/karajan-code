@@ -134,6 +134,7 @@ kj resume --session <id> --answer "Skip the linting issues and focus on function
 **What happens now**:
 - Karajan emits continuous heartbeat/stall telemetry.
 - Planner runs are protected by `session.max_agent_silence_minutes` (default: 20), so completely silent executions are terminated instead of hanging indefinitely.
+- Planner runs are also capped by `session.max_planner_minutes` (default: 60), so noisy-but-stuck loops (e.g. repeated reconnect logs) are terminated.
 
 **Fix / diagnostics**:
 ```bash
@@ -143,6 +144,10 @@ kj_status
 # Increase silence limit if your planner legitimately needs more quiet time
 # session:
 #   max_agent_silence_minutes: 30
+
+# Increase hard planner runtime cap for very large planning jobs
+# session:
+#   max_planner_minutes: 90
 ```
 
 If the failure persists, split the prompt into smaller planning chunks and run `kj_plan` per chunk.

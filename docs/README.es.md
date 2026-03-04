@@ -42,7 +42,7 @@ En lugar de ejecutar un agente de IA y revisar manualmente su output, `kj` encad
 - **Descomposicion de tareas** — triage detecta cuando una tarea debe dividirse y recomienda subtareas; con integracion Planning Game, crea cards vinculadas con bloqueo secuencial
 - **Retry con backoff** — recuperacion automatica ante errores transitorios de API (429, 5xx) con backoff exponencial y jitter
 - **Pipeline stage tracker** — vista de progreso acumulativo durante `kj_run` mostrando que stages estan completadas, en ejecucion o pendientes — tanto en CLI como via eventos MCP para renderizado en tiempo real en el host
-- **Guardarrailes de observabilidad del planner** — telemetria continua de heartbeat/stall y proteccion configurable por silencio maximo (`session.max_agent_silence_minutes`) para evitar bloqueos silenciosos en ejecuciones largas de `kj_plan`/planner
+- **Guardarrailes de observabilidad del planner** — telemetria continua de heartbeat/stall, proteccion configurable por silencio maximo (`session.max_agent_silence_minutes`) y limite duro de ejecucion (`session.max_planner_minutes`) para evitar bloqueos prolongados en `kj_plan`/planner
 - **Integracion con Planning Game** — combina opcionalmente con [Planning Game](https://github.com/AgenteIA-Geniova/planning-game) para gestion agil de proyectos (tareas, sprints, estimacion) — como Jira, pero open-source y nativo XP
 
 > **Mejor con MCP** — Karajan Code esta disenado para usarse como servidor MCP dentro de tu agente de IA (Claude, Codex, etc.). El agente envia tareas a `kj_run`, recibe notificaciones de progreso en tiempo real, y obtiene resultados estructurados — sin copiar y pegar.
