@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.2] - 2026-03-04
+
+### Added
+- **Planner anti-stall guardrails**: configurable `session.max_agent_silence_minutes` (default 20) to stop planner executions that remain silent for too long
+- **Richer heartbeat telemetry**: heartbeat events are now emitted continuously, including `silenceMs` and wait/active status, so long-running calls remain observable
+- **Repeated stall notifications**: warning/critical stall events are re-emitted periodically during prolonged silence (instead of a single warning)
+- **Robust stream parsing in process runner**: `runCommand` now handles `CR`, `LF`, and `CRLF` separators and flushes partial output buffers periodically for CLIs that do not terminate lines
+
+### Changed
+- **`kj_plan` diagnostics** now include max-silence configuration at start and append runtime stats (`lines`, `bytes`, `elapsed`) on planner failure to speed up troubleshooting
+- **MCP error classification** includes `agent_stall` with actionable guidance (`kj_status`, smaller prompt, or increase silence timeout)
+
 ## [1.9.1] - 2026-03-03
 
 ### Added

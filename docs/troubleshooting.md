@@ -127,6 +127,26 @@ kj report --session <session-id>
 kj resume --session <id> --answer "Skip the linting issues and focus on functionality"
 ```
 
+### `kj_plan` runs for a long time with little/no visible output
+
+**Cause**: Some agent CLIs stream slowly or emit sparse output for large prompts.
+
+**What happens now**:
+- Karajan emits continuous heartbeat/stall telemetry.
+- Planner runs are protected by `session.max_agent_silence_minutes` (default: 20), so completely silent executions are terminated instead of hanging indefinitely.
+
+**Fix / diagnostics**:
+```bash
+# Inspect live run log during MCP execution
+kj_status
+
+# Increase silence limit if your planner legitimately needs more quiet time
+# session:
+#   max_agent_silence_minutes: 30
+```
+
+If the failure persists, split the prompt into smaller planning chunks and run `kj_plan` per chunk.
+
 ### TDD policy fails repeatedly
 
 **Cause**: The coder is not generating tests alongside source code.
