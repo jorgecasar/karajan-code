@@ -1,7 +1,7 @@
 import { execa } from "execa";
 
 export async function runCommand(command, args = [], options = {}) {
-  const { timeout, onOutput, silenceTimeoutMs, ...rest } = options;
+  const { timeout, onOutput, silenceTimeoutMs, partialOutputFlushMs, ...rest } = options;
   const subprocess = execa(command, args, {
     reject: false,
     ...rest
@@ -46,20 +46,45 @@ export async function runCommand(command, args = [], options = {}) {
     });
   }
 
+  let flushInterval = null;
   if (onOutput) {
-    const handler = (stream) => {
-      let partial = "";
+    const flushMs = Number(partialOutputFlushMs) > 0 ? Number(partialOutputFlushMs) : 2000;
+    const streams = {};
+    const makeHandler = (stream) => {
+      const state = { partial: "", dirty: false };
+      streams[stream] = state;
       return (chunk) => {
-        partial += chunk.toString();
-        const lines = partial.split("\n");
-        partial = lines.pop();
+        state.partial += chunk.toString();
+        const lines = state.partial.split(/\r\n|\n|\r/);
+        state.partial = lines.pop() ?? "";
+        state.dirty = state.partial.length > 0;
         for (const line of lines) {
           if (line) onOutput({ stream, line });
         }
       };
     };
-    if (subprocess.stdout) subprocess.stdout.on("data", handler("stdout"));
-    if (subprocess.stderr) subprocess.stderr.on("data", handler("stderr"));
+
+    const flushPartials = () => {
+      for (const [stream, state] of Object.entries(streams)) {
+        if (!state.dirty || !state.partial) continue;
+        onOutput({ stream, line: state.partial });
+        state.partial = "";
+        state.dirty = false;
+      }
+    };
+
+    if (subprocess.stdout) subprocess.stdout.on("data", makeHandler("stdout"));
+    if (subprocess.stderr) subprocess.stderr.on("data", makeHandler("stderr"));
+    flushInterval = setInterval(flushPartials, flushMs);
+    flushInterval.unref?.();
+
+    subprocess.finally(() => {
+      flushPartials();
+      if (flushInterval) {
+        clearInterval(flushInterval);
+        flushInterval = null;
+      }
+    });
   }
   armSilenceTimer();
 
