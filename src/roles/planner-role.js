@@ -15,6 +15,12 @@ function resolvePlannerSilenceTimeoutMs(config) {
   return Math.round(minutes * 60 * 1000);
 }
 
+function resolvePlannerRuntimeTimeoutMs(config) {
+  const minutes = Number(config?.session?.max_planner_minutes);
+  if (!Number.isFinite(minutes) || minutes <= 0) return null;
+  return Math.round(minutes * 60 * 1000);
+}
+
 function buildPrompt({ task, instructions, research, triageDecomposition }) {
   const sections = [];
 
@@ -86,6 +92,8 @@ export class PlannerRole extends BaseRole {
     if (onOutput) runArgs.onOutput = onOutput;
     const silenceTimeoutMs = resolvePlannerSilenceTimeoutMs(this.config);
     if (silenceTimeoutMs) runArgs.silenceTimeoutMs = silenceTimeoutMs;
+    const timeoutMs = resolvePlannerRuntimeTimeoutMs(this.config);
+    if (timeoutMs) runArgs.timeoutMs = timeoutMs;
     const result = await agent.runTask(runArgs);
 
     if (!result.ok) {

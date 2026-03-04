@@ -94,6 +94,23 @@ describe("commands/plan", () => {
     }));
   });
 
+  it("passes planner runtime and silence timeouts when configured", async () => {
+    const { planCommand } = await import("../src/commands/plan.js");
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    await planCommand({
+      task: "Add auth",
+      config: makeConfig({ session: { max_planner_minutes: 2, max_agent_silence_minutes: 1 } }),
+      logger: noopLogger
+    });
+    consoleSpy.mockRestore();
+
+    const agent = createAgent.mock.results[0].value;
+    expect(agent.runTask).toHaveBeenCalledWith(expect.objectContaining({
+      timeoutMs: 120000,
+      silenceTimeoutMs: 60000
+    }));
+  });
+
   it("prints formatted plan on success", async () => {
     const { planCommand } = await import("../src/commands/plan.js");
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
