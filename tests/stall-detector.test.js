@@ -64,6 +64,21 @@ describe("createStallDetector", () => {
     detector.stop();
   });
 
+  it("emits heartbeat events while waiting in silence", () => {
+    const detector = createStallDetector({
+      onOutput: null, emitter, eventBase: makeEventBase(), stage: "planner", provider: "claude",
+      heartbeatIntervalMs: 1000, stallTimeoutMs: 2000, criticalTimeoutMs: 5000
+    });
+
+    vi.advanceTimersByTime(3000);
+
+    const heartbeats = events.filter(e => e.type === "agent:heartbeat");
+    expect(heartbeats.length).toBeGreaterThanOrEqual(2);
+    expect(heartbeats[heartbeats.length - 1].detail.status).toBe("waiting");
+
+    detector.stop();
+  });
+
   it("emits stall warning after stallTimeoutMs of silence", () => {
     const detector = createStallDetector({
       onOutput: null, emitter, eventBase: makeEventBase(), stage: "planner", provider: "gemini",
@@ -94,6 +109,20 @@ describe("createStallDetector", () => {
     const critical = stalls.filter(e => e.detail.severity === "critical");
     expect(critical.length).toBeGreaterThanOrEqual(1);
     expect(critical[0].message).toContain("unresponsive");
+
+    detector.stop();
+  });
+
+  it("repeats stall warnings during prolonged silence", () => {
+    const detector = createStallDetector({
+      onOutput: null, emitter, eventBase: makeEventBase(), stage: "planner", provider: "gemini",
+      heartbeatIntervalMs: 1000, stallTimeoutMs: 2000, criticalTimeoutMs: 10000, stallRepeatMs: 1000
+    });
+
+    vi.advanceTimersByTime(6000);
+
+    const warningStalls = events.filter(e => e.type === "agent:stall" && e.detail.severity === "warning");
+    expect(warningStalls.length).toBeGreaterThanOrEqual(2);
 
     detector.stop();
   });

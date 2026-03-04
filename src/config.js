@@ -115,6 +115,7 @@ const DEFAULTS = {
     max_iteration_minutes: 30,
     max_total_minutes: 120,
     checkpoint_interval_minutes: 5,
+    max_agent_silence_minutes: 20,
     fail_fast_repeats: 2,
     repeat_detection_threshold: 2,
     max_sonar_retries: 3,

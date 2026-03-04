@@ -81,7 +81,10 @@ export class ClaudeAgent extends BaseAgent {
     if (task.onOutput) {
       args.push("--output-format", "stream-json");
       const streamFilter = createStreamJsonFilter(task.onOutput);
-      const res = await runCommand(resolveBin("claude"), args, { onOutput: streamFilter });
+      const res = await runCommand(resolveBin("claude"), args, {
+        onOutput: streamFilter,
+        silenceTimeoutMs: task.silenceTimeoutMs
+      });
       const output = extractTextFromStreamJson(res.stdout);
       return { ok: res.exitCode === 0, output, error: res.stderr, exitCode: res.exitCode };
     }
@@ -94,7 +97,10 @@ export class ClaudeAgent extends BaseAgent {
     const args = ["-p", task.prompt, "--output-format", "json"];
     const model = this.getRoleModel(task.role || "reviewer");
     if (model) args.push("--model", model);
-    const res = await runCommand(resolveBin("claude"), args, { onOutput: task.onOutput });
+    const res = await runCommand(resolveBin("claude"), args, {
+      onOutput: task.onOutput,
+      silenceTimeoutMs: task.silenceTimeoutMs
+    });
     return { ok: res.exitCode === 0, output: res.stdout, error: res.stderr, exitCode: res.exitCode };
   }
 }
