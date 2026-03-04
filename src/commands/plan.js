@@ -46,7 +46,13 @@ export async function planCommand({ task, config, logger, json, context }) {
 
   const planner = createAgent(plannerRole.provider, config, logger);
   const prompt = buildPlannerPrompt({ task, context });
-  const result = await planner.runTask({ prompt, role: "planner" });
+  const silenceTimeoutMs = Number(config?.session?.max_agent_silence_minutes) > 0
+    ? Math.round(Number(config.session.max_agent_silence_minutes) * 60 * 1000)
+    : undefined;
+  const timeoutMs = Number(config?.session?.max_planner_minutes) > 0
+    ? Math.round(Number(config.session.max_planner_minutes) * 60 * 1000)
+    : undefined;
+  const result = await planner.runTask({ prompt, role: "planner", silenceTimeoutMs, timeoutMs });
 
   if (!result.ok) {
     throw new Error(result.error || result.output || "Planner failed");

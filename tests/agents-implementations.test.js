@@ -87,14 +87,15 @@ describe("Agent implementations", () => {
   });
 
   describe("CodexAgent", () => {
-    it("runs task with codex exec and prompt as last arg", async () => {
+    it("runs task with codex exec reading prompt from stdin", async () => {
       const { CodexAgent } = await import("../src/agents/codex-agent.js");
       const agent = new CodexAgent("codex", baseConfig, logger);
       await agent.runTask({ prompt: "add tests", role: "coder" });
 
       const args = runCommand.mock.calls[0][1];
       expect(args[0]).toBe("exec");
-      expect(args[args.length - 1]).toBe("add tests");
+      expect(args[args.length - 1]).toBe("-");
+      expect(runCommand.mock.calls[0][2]).toMatchObject({ input: "add tests" });
     });
 
     it("adds --full-auto when auto_approve is enabled", async () => {
@@ -144,11 +145,9 @@ describe("Agent implementations", () => {
       const agent = new GeminiAgent("gemini", baseConfig, logger);
       await agent.runTask({ prompt: "refactor", role: "coder" });
 
-      expect(runCommand).toHaveBeenCalledWith(
-        "/usr/local/bin/gemini",
-        ["-p", "refactor"],
-        { onOutput: undefined }
-      );
+      expect(runCommand).toHaveBeenCalledWith("/usr/local/bin/gemini", ["-p", "refactor"], expect.objectContaining({
+        onOutput: undefined
+      }));
     });
 
     it("reviews with --output-format json", async () => {

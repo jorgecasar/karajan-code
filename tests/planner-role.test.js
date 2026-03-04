@@ -209,4 +209,22 @@ describe("PlannerRole", () => {
 
     expect(createAgent).toHaveBeenCalledWith("claude", config, logger);
   });
+
+  it("passes planner runtime timeout to agent when configured", async () => {
+    const fakeAgent = {
+      runTask: vi.fn().mockResolvedValue({ ok: true, output: "Done" })
+    };
+    const createAgent = vi.fn().mockReturnValue(fakeAgent);
+
+    const config = {
+      roles: { planner: { provider: "codex" } },
+      session: { max_planner_minutes: 2 }
+    };
+    const role = new PlannerRole({ config, logger, createAgentFn: createAgent });
+    await role.init({ task: "Plan with runtime cap" });
+    await role.run("Plan with runtime cap");
+
+    const runArgs = fakeAgent.runTask.mock.calls[0][0];
+    expect(runArgs.timeoutMs).toBe(120000);
+  });
 });

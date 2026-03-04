@@ -250,8 +250,11 @@ export async function handlePlanDirect(a, server, extra) {
   const silenceTimeoutMs = Number(config?.session?.max_agent_silence_minutes) > 0
     ? Math.round(Number(config.session.max_agent_silence_minutes) * 60 * 1000)
     : undefined;
+  const plannerTimeoutMs = Number(config?.session?.max_planner_minutes) > 0
+    ? Math.round(Number(config.session.max_planner_minutes) * 60 * 1000)
+    : undefined;
   runLog.logText(
-    `[kj_plan] started — provider=${plannerRole.provider}, max_silence=${silenceTimeoutMs ? `${Math.round(silenceTimeoutMs / 1000)}s` : "disabled"}`
+    `[kj_plan] started — provider=${plannerRole.provider}, max_silence=${silenceTimeoutMs ? `${Math.round(silenceTimeoutMs / 1000)}s` : "disabled"}, max_runtime=${plannerTimeoutMs ? `${Math.round(plannerTimeoutMs / 1000)}s` : "disabled"}`
   );
   const emitter = buildDirectEmitter(server, runLog);
   const eventBase = { sessionId: null, iteration: 0, startedAt: Date.now() };
@@ -273,7 +276,8 @@ export async function handlePlanDirect(a, server, extra) {
       prompt,
       role: "planner",
       onOutput: stallDetector.onOutput,
-      silenceTimeoutMs
+      silenceTimeoutMs,
+      timeoutMs: plannerTimeoutMs
     });
   } finally {
     stallDetector.stop();

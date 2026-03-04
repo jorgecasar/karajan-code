@@ -114,6 +114,7 @@ const DEFAULTS = {
   session: {
     max_iteration_minutes: 30,
     max_total_minutes: 120,
+    max_planner_minutes: 60,
     checkpoint_interval_minutes: 5,
     max_agent_silence_minutes: 20,
     fail_fast_repeats: 2,
