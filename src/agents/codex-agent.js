@@ -10,7 +10,10 @@ export class CodexAgent extends BaseAgent {
     if (model) args.push("--model", model);
     if (this.isAutoApproveEnabled(role)) args.push("--full-auto");
     args.push(task.prompt);
-    const res = await runCommand(resolveBin("codex"), args, { onOutput: task.onOutput });
+    const res = await runCommand(resolveBin("codex"), args, {
+      onOutput: task.onOutput,
+      silenceTimeoutMs: task.silenceTimeoutMs
+    });
     return { ok: res.exitCode === 0, output: res.stdout, error: res.stderr, exitCode: res.exitCode };
   }
 
@@ -19,7 +22,10 @@ export class CodexAgent extends BaseAgent {
     const model = this.getRoleModel(task.role || "reviewer");
     if (model) args.push("--model", model);
     args.push(task.prompt);
-    const res = await runCommand(resolveBin("codex"), args, { onOutput: task.onOutput });
+    const res = await runCommand(resolveBin("codex"), args, {
+      onOutput: task.onOutput,
+      silenceTimeoutMs: task.silenceTimeoutMs
+    });
     return { ok: res.exitCode === 0, output: res.stdout, error: res.stderr, exitCode: res.exitCode };
   }
 }

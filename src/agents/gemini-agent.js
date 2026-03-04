@@ -8,7 +8,10 @@ export class GeminiAgent extends BaseAgent {
     const args = ["-p", task.prompt];
     const model = this.getRoleModel(role);
     if (model) args.push("--model", model);
-    const res = await runCommand(resolveBin("gemini"), args, { onOutput: task.onOutput });
+    const res = await runCommand(resolveBin("gemini"), args, {
+      onOutput: task.onOutput,
+      silenceTimeoutMs: task.silenceTimeoutMs
+    });
     return { ok: res.exitCode === 0, output: res.stdout, error: res.stderr, exitCode: res.exitCode };
   }
 
@@ -17,7 +20,10 @@ export class GeminiAgent extends BaseAgent {
     const args = ["-p", task.prompt, "--output-format", "json"];
     const model = this.getRoleModel(role);
     if (model) args.push("--model", model);
-    const res = await runCommand(resolveBin("gemini"), args, { onOutput: task.onOutput });
+    const res = await runCommand(resolveBin("gemini"), args, {
+      onOutput: task.onOutput,
+      silenceTimeoutMs: task.silenceTimeoutMs
+    });
     return { ok: res.exitCode === 0, output: res.stdout, error: res.stderr, exitCode: res.exitCode };
   }
 }
