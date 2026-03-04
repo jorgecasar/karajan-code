@@ -64,4 +64,30 @@ describe("runCommand onOutput streaming", () => {
     expect(result.timedOut).toBe(true);
     expect(result.stderr).toContain("without output");
   });
+
+  it("streams carriage-return output as line events", async () => {
+    const lines = [];
+    const result = await runCommand("bash", ["-c", "printf 'step1\\rstep2\\rstep3\\n'"], {
+      onOutput: ({ stream, line }) => lines.push({ stream, line })
+    });
+
+    expect(result.exitCode).toBe(0);
+    const stdoutLines = lines.filter((l) => l.stream === "stdout").map((l) => l.line);
+    expect(stdoutLines.some((l) => l.includes("step1"))).toBe(true);
+    expect(stdoutLines.some((l) => l.includes("step2"))).toBe(true);
+    expect(stdoutLines.some((l) => l.includes("step3"))).toBe(true);
+  });
+
+  it("flushes partial output when no newline arrives", async () => {
+    const lines = [];
+    const result = await runCommand("bash", ["-c", "printf 'partial'; sleep 0.2; printf ' done\\n'"], {
+      onOutput: ({ stream, line }) => lines.push({ stream, line }),
+      partialOutputFlushMs: 50
+    });
+
+    expect(result.exitCode).toBe(0);
+    const stdoutLines = lines.filter((l) => l.stream === "stdout").map((l) => l.line);
+    expect(stdoutLines.some((l) => l.includes("partial"))).toBe(true);
+    expect(result.stdout).toContain("partial done");
+  });
 });
