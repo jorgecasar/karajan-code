@@ -1,7 +1,7 @@
 import { execa } from "execa";
 
 export async function runCommand(command, args = [], options = {}) {
-  const { timeout, onOutput, ...rest } = options;
+  const { timeout, onOutput, silenceTimeoutMs, ...rest } = options;
   const subprocess = execa(command, args, {
     reject: false,
     ...rest
@@ -9,15 +9,40 @@ export async function runCommand(command, args = [], options = {}) {
 
   let stdoutAccum = "";
   let stderrAccum = "";
+  let outputSilenceTimer = null;
+  let silenceTimedOut = false;
+
+  function clearSilenceTimer() {
+    if (outputSilenceTimer) {
+      clearTimeout(outputSilenceTimer);
+      outputSilenceTimer = null;
+    }
+  }
+
+  function armSilenceTimer() {
+    const ms = Number(silenceTimeoutMs);
+    if (!Number.isFinite(ms) || ms <= 0 || silenceTimedOut) return;
+    clearSilenceTimer();
+    outputSilenceTimer = setTimeout(() => {
+      silenceTimedOut = true;
+      try {
+        subprocess.kill("SIGKILL", { forceKillAfterDelay: 1000 });
+      } catch {
+        // no-op
+      }
+    }, ms);
+  }
 
   if (subprocess.stdout) {
     subprocess.stdout.on("data", (chunk) => {
       stdoutAccum += chunk.toString();
+      armSilenceTimer();
     });
   }
   if (subprocess.stderr) {
     subprocess.stderr.on("data", (chunk) => {
       stderrAccum += chunk.toString();
+      armSilenceTimer();
     });
   }
 
@@ -36,10 +61,21 @@ export async function runCommand(command, args = [], options = {}) {
     if (subprocess.stdout) subprocess.stdout.on("data", handler("stdout"));
     if (subprocess.stderr) subprocess.stderr.on("data", handler("stderr"));
   }
+  armSilenceTimer();
 
   try {
     if (!timeout) {
       const result = await subprocess;
+      clearSilenceTimer();
+      if (silenceTimedOut) {
+        return {
+          exitCode: 143,
+          stdout: stdoutAccum,
+          stderr: `Command killed after ${Number(silenceTimeoutMs)}ms without output`,
+          timedOut: true,
+          signal: "SIGKILL"
+        };
+      }
       return enrichResult(result, stdoutAccum, stderrAccum);
     }
 
@@ -63,8 +99,28 @@ export async function runCommand(command, args = [], options = {}) {
 
     const result = await Promise.race([subprocess, timeoutResult]);
     if (timer) clearTimeout(timer);
+    clearSilenceTimer();
+    if (silenceTimedOut) {
+      return {
+        exitCode: 143,
+        stdout: stdoutAccum,
+        stderr: `Command killed after ${Number(silenceTimeoutMs)}ms without output`,
+        timedOut: true,
+        signal: "SIGKILL"
+      };
+    }
     return enrichResult(result, stdoutAccum, stderrAccum);
   } catch (error) {
+    clearSilenceTimer();
+    if (silenceTimedOut) {
+      return {
+        exitCode: 143,
+        stdout: error?.stdout || stdoutAccum,
+        stderr: `Command killed after ${Number(silenceTimeoutMs)}ms without output`,
+        timedOut: true,
+        signal: error?.signal || "SIGKILL"
+      };
+    }
     const details = [
       error?.shortMessage,
       error?.originalMessage,
