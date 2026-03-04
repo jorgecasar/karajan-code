@@ -62,6 +62,18 @@ export function classifyError(error) {
   const msg = error?.message || String(error);
   const lower = msg.toLowerCase();
 
+  if (
+    lower.includes("without output")
+    || lower.includes("silent for")
+    || lower.includes("unresponsive")
+    || lower.includes("exceeded max silence")
+  ) {
+    return {
+      category: "agent_stall",
+      suggestion: "Agent output stalled. Check live details with kj_status, then retry with a smaller prompt or increase session.max_agent_silence_minutes if needed."
+    };
+  }
+
   if (lower.includes("sonar") && (lower.includes("connect") || lower.includes("econnrefused") || lower.includes("not available") || lower.includes("not running"))) {
     return {
       category: "sonar_unavailable",
@@ -235,7 +247,12 @@ export async function handlePlanDirect(a, server, extra) {
 
   const projectDir = await resolveProjectDir(server);
   const runLog = createRunLog(projectDir);
-  runLog.logText(`[kj_plan] started — provider=${plannerRole.provider}`);
+  const silenceTimeoutMs = Number(config?.session?.max_agent_silence_minutes) > 0
+    ? Math.round(Number(config.session.max_agent_silence_minutes) * 60 * 1000)
+    : undefined;
+  runLog.logText(
+    `[kj_plan] started — provider=${plannerRole.provider}, max_silence=${silenceTimeoutMs ? `${Math.round(silenceTimeoutMs / 1000)}s` : "disabled"}`
+  );
   const emitter = buildDirectEmitter(server, runLog);
   const eventBase = { sessionId: null, iteration: 0, startedAt: Date.now() };
   const onOutput = ({ stream, line }) => {
@@ -247,12 +264,10 @@ export async function handlePlanDirect(a, server, extra) {
 
   const planner = createAgent(plannerRole.provider, config, logger);
   const prompt = buildPlannerPrompt({ task: a.task, context: a.context });
-  const silenceTimeoutMs = Number(config?.session?.max_agent_silence_minutes) > 0
-    ? Math.round(Number(config.session.max_agent_silence_minutes) * 60 * 1000)
-    : undefined;
   sendTrackerLog(server, "planner", "running", plannerRole.provider);
   runLog.logText(`[planner] agent launched, waiting for response...`);
   let result;
+  let plannerStats = null;
   try {
     result = await planner.runTask({
       prompt,
@@ -262,14 +277,20 @@ export async function handlePlanDirect(a, server, extra) {
     });
   } finally {
     stallDetector.stop();
-    const stats = stallDetector.stats();
-    runLog.logText(`[planner] finished — lines=${stats.lineCount}, bytes=${stats.bytesReceived}, elapsed=${Math.round(stats.elapsedMs / 1000)}s`);
+    plannerStats = stallDetector.stats();
+    runLog.logText(
+      `[planner] finished — lines=${plannerStats.lineCount}, bytes=${plannerStats.bytesReceived}, elapsed=${Math.round(plannerStats.elapsedMs / 1000)}s`
+    );
     runLog.close();
   }
 
   if (!result.ok) {
     sendTrackerLog(server, "planner", "failed");
-    throw new Error(result.error || result.output || "Planner failed");
+    const baseError = result.error || result.output || "Planner failed";
+    const statsSuffix = plannerStats
+      ? ` [lines=${plannerStats.lineCount}, bytes=${plannerStats.bytesReceived}, elapsed=${Math.round(plannerStats.elapsedMs / 1000)}s]`
+      : "";
+    throw new Error(`${baseError}${statsSuffix}`);
   }
 
   sendTrackerLog(server, "planner", "done");
