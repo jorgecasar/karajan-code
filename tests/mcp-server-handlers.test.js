@@ -207,6 +207,12 @@ describe("mcp/server-handlers", () => {
       expect(result.category).toBe("timeout");
     });
 
+    it("classifies stalled agent errors", () => {
+      const result = classifyError(new Error("Command killed after 1200000ms without output"));
+      expect(result.category).toBe("agent_stall");
+      expect(result.suggestion).toContain("kj_status");
+    });
+
     it("classifies git errors", () => {
       const result = classifyError(new Error("not a git repository"));
       expect(result.category).toBe("git_error");
@@ -480,6 +486,16 @@ describe("mcp/server-handlers", () => {
 
       expect(sendTrackerLog).toHaveBeenCalledWith(mockServer, "planner", "running", expect.any(String));
       expect(sendTrackerLog).toHaveBeenCalledWith(mockServer, "planner", "done");
+    });
+
+    it("kj_plan failure includes runtime stats in the error message", async () => {
+      createAgent.mockReturnValueOnce({
+        runTask: vi.fn().mockResolvedValue({ ok: false, error: "Command killed after 1200000ms without output" })
+      });
+
+      await expect(handlePlanDirect({ task: "Plan feature" }, mockServer, {}))
+        .rejects.toThrow(/without output.*lines=/i);
+      expect(sendTrackerLog).toHaveBeenCalledWith(mockServer, "planner", "failed");
     });
   });
 });
