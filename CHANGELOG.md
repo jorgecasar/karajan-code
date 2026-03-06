@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.5] - 2026-03-06
+
+### Fixed
+- **Claude nesting guard bypass**: `ClaudeAgent` now strips the `CLAUDECODE` environment variable before spawning `claude -p` subprocesses. Claude Code 2.x sets this variable to prevent nested sessions, which blocked all `kj_run`/`kj_code`/`kj_review` calls using claude as coder or reviewer when invoked via the MCP server. Codex and Gemini were unaffected.
+- **Config default test**: fixed flaky `max_iteration_minutes` test that read the local `kj.config.yml` instead of testing the hardcoded default
+
 ## [1.9.4] - 2026-03-06
 
 ### Fixed

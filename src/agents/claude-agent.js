@@ -70,6 +70,19 @@ function createStreamJsonFilter(onOutput) {
   };
 }
 
+/**
+ * Build a clean environment for Claude subprocess.
+ * Claude Code 2.x sets CLAUDECODE=1 to detect nesting. When Karajan's MCP
+ * server runs inside Claude Code and spawns `claude -p`, the child inherits
+ * this variable and refuses to start. Stripping it allows the subprocess to
+ * run normally — it is a separate, non-interactive invocation, not a true
+ * nested session.
+ */
+function cleanEnv() {
+  const { CLAUDECODE, ...rest } = process.env;
+  return rest;
+}
+
 export class ClaudeAgent extends BaseAgent {
   async runTask(task) {
     const role = task.role || "coder";
@@ -77,11 +90,14 @@ export class ClaudeAgent extends BaseAgent {
     const model = this.getRoleModel(role);
     if (model) args.push("--model", model);
 
+    const env = cleanEnv();
+
     // Use stream-json when onOutput is provided to get real-time feedback
     if (task.onOutput) {
       args.push("--output-format", "stream-json");
       const streamFilter = createStreamJsonFilter(task.onOutput);
       const res = await runCommand(resolveBin("claude"), args, {
+        env,
         onOutput: streamFilter,
         silenceTimeoutMs: task.silenceTimeoutMs,
         timeout: task.timeoutMs
@@ -90,7 +106,7 @@ export class ClaudeAgent extends BaseAgent {
       return { ok: res.exitCode === 0, output, error: res.stderr, exitCode: res.exitCode };
     }
 
-    const res = await runCommand(resolveBin("claude"), args);
+    const res = await runCommand(resolveBin("claude"), args, { env });
     return { ok: res.exitCode === 0, output: res.stdout, error: res.stderr, exitCode: res.exitCode };
   }
 
@@ -99,6 +115,7 @@ export class ClaudeAgent extends BaseAgent {
     const model = this.getRoleModel(task.role || "reviewer");
     if (model) args.push("--model", model);
     const res = await runCommand(resolveBin("claude"), args, {
+      env: cleanEnv(),
       onOutput: task.onOutput,
       silenceTimeoutMs: task.silenceTimeoutMs,
       timeout: task.timeoutMs
