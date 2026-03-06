@@ -17,6 +17,7 @@ import { runCommandHandler } from "./commands/run.js";
 import { resumeCommand } from "./commands/resume.js";
 import { sonarCommand, sonarOpenCommand } from "./commands/sonar.js";
 import { rolesCommand } from "./commands/roles.js";
+import { agentsCommand } from "./commands/agents.js";
 
 const PKG_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../package.json");
 const PKG_VERSION = JSON.parse(readFileSync(PKG_PATH, "utf8")).version;
@@ -158,6 +159,15 @@ program
   .action(async (subcommand, role) => {
     await withConfig("roles", {}, async ({ config }) => {
       await rolesCommand({ config, subcommand: subcommand || "list", roleName: role });
+    });
+  });
+
+program
+  .command("agents [subcommand] [role] [provider]")
+  .description("List or change AI agent assignments per role (e.g. kj agents set coder gemini)")
+  .action(async (subcommand, role, provider) => {
+    await withConfig("agents", {}, async ({ config }) => {
+      await agentsCommand({ config, subcommand: subcommand || "list", role, provider });
     });
   });
 

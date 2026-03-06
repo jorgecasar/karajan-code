@@ -117,4 +117,12 @@ describe("buildCoderPrompt", () => {
     expect(result).not.toContain("Serena MCP");
     expect(result).toContain("Do NOT use any MCP tools");
   });
+
+  it("includes subprocess constraints about non-interactive execution", () => {
+    const result = buildCoderPrompt({ task: "Init project" });
+
+    expect(result).toContain("non-interactive subprocess");
+    expect(result).toContain("--yes");
+    expect(result).toContain("will hang forever");
+  });
 });

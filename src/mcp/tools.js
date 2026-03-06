@@ -97,7 +97,7 @@ export const tools = [
   {
     name: "kj_resume",
     description:
-      "Resume a paused session by ID. Provide an answer to the question that caused the pause. Sends real-time progress notifications via MCP logging.",
+      "Resume a paused, stopped, or failed session by ID. For paused sessions, provide an answer. For stopped/failed sessions, re-runs the flow from scratch. Sends real-time progress notifications via MCP logging.",
     inputSchema: {
       type: "object",
       required: ["sessionId"],
@@ -132,6 +132,19 @@ export const tools = [
       properties: {
         action: { type: "string", enum: ["list", "show"], description: "Action: list all roles or show a specific role template" },
         roleName: { type: "string", description: "Role name to show (e.g. coder, reviewer, triage, reviewer-paranoid)" },
+        kjHome: { type: "string" }
+      }
+    }
+  },
+  {
+    name: "kj_agents",
+    description: "List or change which AI agent (provider) is assigned to each pipeline role. Use action='list' to see current assignments. Use action='set' with role and provider to change it persistently (writes to kj.config.yml, no restart needed).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["list", "set"], description: "Action: list current agents or set a role's provider" },
+        role: { type: "string", description: "Role to change (e.g. coder, reviewer, planner, triage)" },
+        provider: { type: "string", description: "New provider to assign (e.g. claude, codex, gemini, aider)" },
         kjHome: { type: "string" }
       }
     }

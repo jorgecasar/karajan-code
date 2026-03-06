@@ -10,6 +10,14 @@ const SUBAGENT_PREAMBLE_SERENA = [
   "Execute the task directly. Focus only on coding."
 ].join(" ");
 
+const SUBPROCESS_CONSTRAINTS = [
+  "## Environment constraints",
+  "You run as a non-interactive subprocess (no stdin, no TTY).",
+  "- If the task requires a CLI wizard or interactive init (e.g. `create-react-app`, `pnpm create astro`, `npm init`), ALWAYS use non-interactive flags: `--yes`, `--no-input`, `--template <name>`, `--defaults`, etc.",
+  "- Never run a command that waits for user input — it will hang forever.",
+  "- If a task absolutely cannot be done non-interactively, say so explicitly instead of hanging."
+].join("\n");
+
 const SERENA_INSTRUCTIONS = [
   "## Serena MCP — symbol-level code navigation",
   "You have access to Serena MCP tools for efficient code navigation.",
@@ -26,7 +34,8 @@ export function buildCoderPrompt({ task, reviewerFeedback = null, sonarSummary =
     serenaEnabled ? SUBAGENT_PREAMBLE_SERENA : SUBAGENT_PREAMBLE,
     `Task:\n${task}`,
     "Implement directly in the repository.",
-    "Keep changes minimal and production-ready."
+    "Keep changes minimal and production-ready.",
+    SUBPROCESS_CONSTRAINTS
   ];
 
   if (serenaEnabled) {
