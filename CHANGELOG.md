@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.4] - 2026-03-06
+
+### Fixed
+- **Branch guard for MCP tools**: `kj_run`, `kj_code`, and `kj_review` now reject execution when on the base branch (main). The diff against `origin/main` is empty on the same branch, making the reviewer stage useless. A clear error message instructs AI agents to create a feature branch first.
+
+### Added
+- New `branch_error` category in MCP error classification with actionable suggestion
+
 ## [1.9.3] - 2026-03-04
 
 ### Added
