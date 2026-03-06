@@ -442,6 +442,21 @@ export async function handleToolCall(name, args, server, extra) {
     return runKjCommand({ command: "doctor", options: a });
   }
 
+  if (name === "kj_agents") {
+    const action = a.action || "list";
+    if (action === "set") {
+      if (!a.role || !a.provider) {
+        return failPayload("Missing required fields: role and provider");
+      }
+      const { setAgent } = await import("../commands/agents.js");
+      const result = await setAgent(a.role, a.provider);
+      return { ok: true, ...result, message: `${result.role} now uses ${result.provider}` };
+    }
+    const config = await buildConfig(a);
+    const { listAgents } = await import("../commands/agents.js");
+    return { ok: true, agents: listAgents(config) };
+  }
+
   if (name === "kj_config") {
     return runKjCommand({
       command: "config",
