@@ -35,7 +35,8 @@ describe("Agent implementations", () => {
 
       expect(runCommand).toHaveBeenCalledWith(
         "/usr/local/bin/claude",
-        ["-p", "fix bug"]
+        ["-p", "fix bug"],
+        expect.objectContaining({ env: expect.any(Object) })
       );
     });
 
@@ -83,6 +84,18 @@ describe("Agent implementations", () => {
       // The onOutput is wrapped in a stream-json filter, not passed directly
       expect(runCommand.mock.calls[0][2]).toHaveProperty("onOutput");
       expect(runCommand.mock.calls[0][2].onOutput).not.toBe(onOutput);
+    });
+
+    it("strips CLAUDECODE from env to avoid nesting rejection", async () => {
+      process.env.CLAUDECODE = "1";
+      const { ClaudeAgent } = await import("../src/agents/claude-agent.js");
+      const agent = new ClaudeAgent("claude", baseConfig, logger);
+      await agent.runTask({ prompt: "test", role: "coder" });
+
+      const opts = runCommand.mock.calls[0][2];
+      expect(opts.env).toBeDefined();
+      expect(opts.env).not.toHaveProperty("CLAUDECODE");
+      delete process.env.CLAUDECODE;
     });
   });
 
