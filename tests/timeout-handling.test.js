@@ -65,9 +65,14 @@ describe("run-kj resolveTimeout", () => {
 });
 
 describe("config default max_iteration_minutes", () => {
-  it("defaults to 5 minutes", async () => {
-    const configMod = await import("../src/config.js");
-    const { config } = await configMod.loadConfig();
+  it("defaults to 30 minutes when no yml override exists", async () => {
+    vi.resetModules();
+    vi.doMock("../src/utils/fs.js", () => ({
+      exists: vi.fn().mockResolvedValue(false),
+      ensureDir: vi.fn().mockResolvedValue(undefined),
+    }));
+    const { loadConfig } = await import("../src/config.js");
+    const { config } = await loadConfig();
     expect(config.session.max_iteration_minutes).toBe(30);
   });
 });
