@@ -4,7 +4,7 @@ import { assertAgentsAvailable } from "../agents/availability.js";
 import { createActivityLog } from "../activity-log.js";
 import { printHeader, printEvent } from "../utils/display.js";
 import { resolveRole } from "../config.js";
-import { parseCardId, buildTaskFromCard, buildCompletionUpdates } from "../planning-game/adapter.js";
+import { parseCardId } from "../planning-game/adapter.js";
 
 export async function runCommandHandler({ task, config, logger, flags }) {
   const requiredProviders = [
@@ -22,24 +22,10 @@ export async function runCommandHandler({ task, config, logger, flags }) {
   if (config.pipeline?.security?.enabled) requiredProviders.push(resolveRole(config, "security").provider);
   await assertAgentsAvailable(requiredProviders);
 
-  // --- Planning Game: resolve card context ---
+  // --- Planning Game: resolve card ID ---
   const pgCardId = flags?.pgTask || parseCardId(task);
   const pgProject = flags?.pgProject || config.planning_game?.project_id || null;
-  let pgCard = null;
-  let enrichedTask = task;
-
-  if (pgCardId && pgProject && config.planning_game?.enabled !== false) {
-    try {
-      const { fetchCard, updateCard } = await import("../planning-game/client.js");
-      pgCard = await fetchCard({ projectId: pgProject, cardId: pgCardId });
-      if (pgCard) {
-        enrichedTask = buildTaskFromCard(pgCard);
-        logger.info(`Planning Game: loaded card ${pgCardId} from project ${pgProject}`);
-      }
-    } catch (err) {
-      logger.warn(`Planning Game: could not load card ${pgCardId}: ${err.message}`);
-    }
-  }
+  const enrichedTask = task;
 
   const jsonMode = flags?.json;
 
@@ -65,25 +51,7 @@ export async function runCommandHandler({ task, config, logger, flags }) {
     printHeader({ task: enrichedTask, config });
   }
 
-  const startDate = new Date().toISOString();
   const result = await runFlow({ task: enrichedTask, config, logger, flags, emitter, pgTaskId: pgCardId || null, pgProject: pgProject || null });
-
-  // --- Planning Game: update card on completion ---
-  if (pgCard && pgProject && result?.approved) {
-    try {
-      const { updateCard } = await import("../planning-game/client.js");
-      const updates = buildCompletionUpdates({
-        approved: true,
-        commits: result.git?.commits || [],
-        startDate,
-        codeveloper: config.planning_game?.codeveloper || null
-      });
-      await updateCard({ projectId: pgProject, cardId: pgCardId, firebaseId: pgCard.firebaseId, updates });
-      logger.info(`Planning Game: updated ${pgCardId} to "${updates.status}"`);
-    } catch (err) {
-      logger.warn(`Planning Game: could not update card ${pgCardId}: ${err.message}`);
-    }
-  }
 
   if (jsonMode) {
     console.log(JSON.stringify(result, null, 2));

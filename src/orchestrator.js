@@ -157,6 +157,32 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
 
   eventBase.sessionId = session.id;
 
+  // --- Planning Game: mark card as In Progress ---
+  let pgCard = null;
+  if (pgTaskId && pgProject && config.planning_game?.enabled !== false) {
+    try {
+      const { fetchCard, updateCard } = await import("./planning-game/client.js");
+      pgCard = await fetchCard({ projectId: pgProject, cardId: pgTaskId });
+      if (pgCard && pgCard.status !== "In Progress") {
+        await updateCard({
+          projectId: pgProject,
+          cardId: pgTaskId,
+          firebaseId: pgCard.firebaseId,
+          updates: {
+            status: "In Progress",
+            startDate: new Date().toISOString(),
+            developer: "dev_016",
+            codeveloper: config.planning_game?.codeveloper || null
+          }
+        });
+        logger.info(`Planning Game: ${pgTaskId} → In Progress`);
+      }
+    } catch (err) {
+      logger.warn(`Planning Game: could not update ${pgTaskId}: ${err.message}`);
+    }
+  }
+  session.pg_card = pgCard || null;
+
   emitProgress(
     emitter,
     makeEvent("session:start", eventBase, {
@@ -493,6 +519,30 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
       }
       session.budget = budgetSummary();
       await markSessionStatus(session, "approved");
+
+      // --- Planning Game: mark card as To Validate ---
+      if (pgCard && pgProject) {
+        try {
+          const { updateCard } = await import("./planning-game/client.js");
+          const { buildCompletionUpdates } = await import("./planning-game/adapter.js");
+          const pgUpdates = buildCompletionUpdates({
+            approved: true,
+            commits: gitResult?.commits || [],
+            startDate: session.pg_card?.startDate || session.created_at,
+            codeveloper: config.planning_game?.codeveloper || null
+          });
+          await updateCard({
+            projectId: pgProject,
+            cardId: session.pg_task_id,
+            firebaseId: pgCard.firebaseId,
+            updates: pgUpdates
+          });
+          logger.info(`Planning Game: ${session.pg_task_id} → To Validate`);
+        } catch (err) {
+          logger.warn(`Planning Game: could not update ${session.pg_task_id} on completion: ${err.message}`);
+        }
+      }
+
       emitProgress(
         emitter,
         makeEvent("session:end", { ...eventBase, stage: "done" }, {
