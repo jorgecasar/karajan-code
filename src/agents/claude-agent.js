@@ -71,16 +71,34 @@ function createStreamJsonFilter(onOutput) {
 }
 
 /**
- * Build a clean environment for Claude subprocess.
- * Claude Code 2.x sets CLAUDECODE=1 to detect nesting. When Karajan's MCP
- * server runs inside Claude Code and spawns `claude -p`, the child inherits
- * this variable and refuses to start. Stripping it allows the subprocess to
- * run normally — it is a separate, non-interactive invocation, not a true
- * nested session.
+ * Build clean execa options for Claude subprocess.
+ *
+ * Three critical fixes for running `claude -p` from Node.js:
+ *
+ * 1. Strip CLAUDECODE env var — Claude Code 2.x sets this to block nested
+ *    sessions.  The spawned `claude -p` is a separate non-interactive
+ *    invocation, not a true nested session.
+ *
+ * 2. Detach stdin (stdin: "ignore") — When launched from Node.js (which is
+ *    how Claude Code / Karajan MCP runs), the child inherits the parent's
+ *    stdin.  `claude -p` then blocks waiting to read from a stdin that the
+ *    parent is already consuming.  Ignoring stdin prevents the hang.
+ *
+ * 3. Claude Code 2.x writes all structured output (stream-json, json) to
+ *    stderr, NOT stdout.  The agent must read from stderr for the actual
+ *    response data.
  */
-function cleanEnv() {
-  const { CLAUDECODE, ...rest } = process.env;
-  return rest;
+function cleanExecaOpts(extra = {}) {
+  const { CLAUDECODE, ...env } = process.env;
+  return { env, stdin: "ignore", ...extra };
+}
+
+/**
+ * Pick the best raw output from a claude subprocess result.
+ * Claude 2.x sends structured output to stderr; stdout is often empty.
+ */
+function pickOutput(res) {
+  return res.stdout || res.stderr || "";
 }
 
 export class ClaudeAgent extends BaseAgent {
@@ -90,36 +108,38 @@ export class ClaudeAgent extends BaseAgent {
     const model = this.getRoleModel(role);
     if (model) args.push("--model", model);
 
-    const env = cleanEnv();
-
     // Use stream-json when onOutput is provided to get real-time feedback
     if (task.onOutput) {
       args.push("--output-format", "stream-json");
       const streamFilter = createStreamJsonFilter(task.onOutput);
-      const res = await runCommand(resolveBin("claude"), args, {
-        env,
+      const res = await runCommand(resolveBin("claude"), args, cleanExecaOpts({
         onOutput: streamFilter,
         silenceTimeoutMs: task.silenceTimeoutMs,
         timeout: task.timeoutMs
-      });
-      const output = extractTextFromStreamJson(res.stdout);
-      return { ok: res.exitCode === 0, output, error: res.stderr, exitCode: res.exitCode };
+      }));
+      const raw = pickOutput(res);
+      const output = extractTextFromStreamJson(raw);
+      return { ok: res.exitCode === 0, output, error: res.exitCode !== 0 ? raw : "", exitCode: res.exitCode };
     }
 
-    const res = await runCommand(resolveBin("claude"), args, { env });
-    return { ok: res.exitCode === 0, output: res.stdout, error: res.stderr, exitCode: res.exitCode };
+    // Without streaming, use json output to get structured response via stderr
+    args.push("--output-format", "json");
+    const res = await runCommand(resolveBin("claude"), args, cleanExecaOpts());
+    const raw = pickOutput(res);
+    const output = extractTextFromStreamJson(raw);
+    return { ok: res.exitCode === 0, output, error: res.exitCode !== 0 ? raw : "", exitCode: res.exitCode };
   }
 
   async reviewTask(task) {
-    const args = ["-p", task.prompt, "--output-format", "json"];
+    const args = ["-p", task.prompt, "--output-format", "stream-json"];
     const model = this.getRoleModel(task.role || "reviewer");
     if (model) args.push("--model", model);
-    const res = await runCommand(resolveBin("claude"), args, {
-      env: cleanEnv(),
+    const res = await runCommand(resolveBin("claude"), args, cleanExecaOpts({
       onOutput: task.onOutput,
       silenceTimeoutMs: task.silenceTimeoutMs,
       timeout: task.timeoutMs
-    });
-    return { ok: res.exitCode === 0, output: res.stdout, error: res.stderr, exitCode: res.exitCode };
+    }));
+    const raw = pickOutput(res);
+    return { ok: res.exitCode === 0, output: raw, error: res.exitCode !== 0 ? raw : "", exitCode: res.exitCode };
   }
 }

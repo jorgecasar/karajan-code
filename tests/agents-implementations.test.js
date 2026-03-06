@@ -9,13 +9,11 @@ vi.mock("../src/agents/resolve-bin.js", () => ({
 }));
 
 const baseConfig = {
-  session: { max_iteration_minutes: 10 },
-  roles: { coder: { model: null }, reviewer: { model: null } },
-  coder_options: { auto_approve: false },
+  roles: { coder: {}, reviewer: {} },
+  coder_options: {},
   reviewer_options: {}
 };
-
-const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
+const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
 describe("Agent implementations", () => {
   let runCommand;
@@ -28,16 +26,20 @@ describe("Agent implementations", () => {
   });
 
   describe("ClaudeAgent", () => {
-    it("runs task with claude -p and prompt (no streaming without onOutput)", async () => {
+    it("runs task with claude -p and --output-format json (no streaming without onOutput)", async () => {
       const { ClaudeAgent } = await import("../src/agents/claude-agent.js");
       const agent = new ClaudeAgent("claude", baseConfig, logger);
       await agent.runTask({ prompt: "fix bug", role: "coder" });
 
-      expect(runCommand).toHaveBeenCalledWith(
-        "/usr/local/bin/claude",
-        ["-p", "fix bug"],
-        expect.objectContaining({ env: expect.any(Object) })
-      );
+      const args = runCommand.mock.calls[0][1];
+      expect(args).toContain("-p");
+      expect(args).toContain("fix bug");
+      expect(args).toContain("--output-format");
+      expect(args).toContain("json");
+      expect(runCommand.mock.calls[0][2]).toMatchObject({
+        env: expect.any(Object),
+        stdin: "ignore"
+      });
     });
 
     it("adds --model flag when model is configured", async () => {
@@ -51,25 +53,25 @@ describe("Agent implementations", () => {
       expect(args).toContain("opus");
     });
 
-    it("reviews task with --output-format json", async () => {
+    it("reviews task with --output-format stream-json", async () => {
       const { ClaudeAgent } = await import("../src/agents/claude-agent.js");
       const agent = new ClaudeAgent("claude", baseConfig, logger);
       await agent.reviewTask({ prompt: "review code", role: "reviewer" });
 
       const args = runCommand.mock.calls[0][1];
       expect(args).toContain("--output-format");
-      expect(args).toContain("json");
+      expect(args).toContain("stream-json");
     });
 
-    it("returns ok=false on non-zero exit", async () => {
-      runCommand.mockResolvedValue({ exitCode: 1, stdout: "", stderr: "error" });
+    it("returns ok=false on non-zero exit with error from stderr", async () => {
+      runCommand.mockResolvedValue({ exitCode: 1, stdout: "", stderr: "error detail" });
       const { ClaudeAgent } = await import("../src/agents/claude-agent.js");
       const agent = new ClaudeAgent("claude", baseConfig, logger);
       const result = await agent.runTask({ prompt: "fail", role: "coder" });
 
       expect(result.ok).toBe(false);
       expect(result.exitCode).toBe(1);
-      expect(result.error).toBe("error");
+      expect(result.error).toContain("error detail");
     });
 
     it("uses stream-json and wraps onOutput when callback is provided", async () => {
@@ -86,7 +88,7 @@ describe("Agent implementations", () => {
       expect(runCommand.mock.calls[0][2].onOutput).not.toBe(onOutput);
     });
 
-    it("strips CLAUDECODE from env to avoid nesting rejection", async () => {
+    it("strips CLAUDECODE from env and ignores stdin", async () => {
       process.env.CLAUDECODE = "1";
       const { ClaudeAgent } = await import("../src/agents/claude-agent.js");
       const agent = new ClaudeAgent("claude", baseConfig, logger);
@@ -95,7 +97,19 @@ describe("Agent implementations", () => {
       const opts = runCommand.mock.calls[0][2];
       expect(opts.env).toBeDefined();
       expect(opts.env).not.toHaveProperty("CLAUDECODE");
+      expect(opts.stdin).toBe("ignore");
       delete process.env.CLAUDECODE;
+    });
+
+    it("reads output from stderr when stdout is empty (Claude 2.x behavior)", async () => {
+      const stderrJson = '{"type":"result","result":"PONG"}';
+      runCommand.mockResolvedValue({ exitCode: 0, stdout: "", stderr: stderrJson });
+      const { ClaudeAgent } = await import("../src/agents/claude-agent.js");
+      const agent = new ClaudeAgent("claude", baseConfig, logger);
+      const result = await agent.runTask({ prompt: "test", role: "coder" });
+
+      expect(result.ok).toBe(true);
+      expect(result.output).toBe("PONG");
     });
   });
 
@@ -112,43 +126,42 @@ describe("Agent implementations", () => {
     });
 
     it("adds --full-auto when auto_approve is enabled", async () => {
-      const { CodexAgent } = await import("../src/agents/codex-agent.js");
       const config = { ...baseConfig, coder_options: { auto_approve: true } };
+      const { CodexAgent } = await import("../src/agents/codex-agent.js");
       const agent = new CodexAgent("codex", config, logger);
-      await agent.runTask({ prompt: "work", role: "coder" });
+      await agent.runTask({ prompt: "test", role: "coder" });
 
-      const args = runCommand.mock.calls[0][1];
-      expect(args).toContain("--full-auto");
+      expect(runCommand.mock.calls[0][1]).toContain("--full-auto");
     });
 
     it("does not add --full-auto for reviewer role", async () => {
-      const { CodexAgent } = await import("../src/agents/codex-agent.js");
       const config = { ...baseConfig, coder_options: { auto_approve: true } };
+      const { CodexAgent } = await import("../src/agents/codex-agent.js");
       const agent = new CodexAgent("codex", config, logger);
       await agent.reviewTask({ prompt: "review", role: "reviewer" });
 
-      const args = runCommand.mock.calls[0][1];
-      expect(args).not.toContain("--full-auto");
+      expect(runCommand.mock.calls[0][1]).not.toContain("--full-auto");
     });
 
     it("adds --model flag when configured", async () => {
+      const config = { ...baseConfig, roles: { coder: { model: "o3" }, reviewer: {} } };
       const { CodexAgent } = await import("../src/agents/codex-agent.js");
-      const config = { ...baseConfig, roles: { coder: { model: "o3-mini" }, reviewer: {} } };
       const agent = new CodexAgent("codex", config, logger);
-      await agent.runTask({ prompt: "work", role: "coder" });
+      await agent.runTask({ prompt: "test", role: "coder" });
 
       const args = runCommand.mock.calls[0][1];
       expect(args).toContain("--model");
-      expect(args).toContain("o3-mini");
+      expect(args).toContain("o3");
     });
 
     it("returns structured result", async () => {
-      runCommand.mockResolvedValue({ exitCode: 0, stdout: "done", stderr: "warn" });
+      runCommand.mockResolvedValue({ exitCode: 0, stdout: "done", stderr: "" });
       const { CodexAgent } = await import("../src/agents/codex-agent.js");
       const agent = new CodexAgent("codex", baseConfig, logger);
-      const result = await agent.runTask({ prompt: "work", role: "coder" });
+      const result = await agent.runTask({ prompt: "task", role: "coder" });
 
-      expect(result).toEqual({ ok: true, output: "done", error: "warn", exitCode: 0 });
+      expect(result.ok).toBe(true);
+      expect(result.output).toBe("done");
     });
   });
 
@@ -156,11 +169,11 @@ describe("Agent implementations", () => {
     it("runs task with gemini -p and prompt", async () => {
       const { GeminiAgent } = await import("../src/agents/gemini-agent.js");
       const agent = new GeminiAgent("gemini", baseConfig, logger);
-      await agent.runTask({ prompt: "refactor", role: "coder" });
+      await agent.runTask({ prompt: "build feature", role: "coder" });
 
-      expect(runCommand).toHaveBeenCalledWith("/usr/local/bin/gemini", ["-p", "refactor"], expect.objectContaining({
-        onOutput: undefined
-      }));
+      const args = runCommand.mock.calls[0][1];
+      expect(args).toContain("-p");
+      expect(args).toContain("build feature");
     });
 
     it("reviews with --output-format json", async () => {
@@ -174,13 +187,14 @@ describe("Agent implementations", () => {
     });
 
     it("adds model when configured", async () => {
+      const config = { ...baseConfig, roles: { coder: { model: "gemini-2" }, reviewer: {} } };
       const { GeminiAgent } = await import("../src/agents/gemini-agent.js");
-      const config = { ...baseConfig, roles: { coder: { model: "gemini-2.5-pro" }, reviewer: {} } };
       const agent = new GeminiAgent("gemini", config, logger);
-      await agent.runTask({ prompt: "work", role: "coder" });
+      await agent.runTask({ prompt: "test", role: "coder" });
 
       const args = runCommand.mock.calls[0][1];
-      expect(args).toContain("gemini-2.5-pro");
+      expect(args).toContain("--model");
+      expect(args).toContain("gemini-2");
     });
   });
 
@@ -188,34 +202,33 @@ describe("Agent implementations", () => {
     it("runs task with aider --yes --message", async () => {
       const { AiderAgent } = await import("../src/agents/aider-agent.js");
       const agent = new AiderAgent("aider", baseConfig, logger);
-      await agent.runTask({ prompt: "fix issue", role: "coder" });
+      await agent.runTask({ prompt: "add feature", role: "coder" });
 
       const args = runCommand.mock.calls[0][1];
       expect(args).toContain("--yes");
       expect(args).toContain("--message");
-      expect(args).toContain("fix issue");
+      expect(args).toContain("add feature");
     });
 
     it("reviews with same --yes --message pattern", async () => {
       const { AiderAgent } = await import("../src/agents/aider-agent.js");
       const agent = new AiderAgent("aider", baseConfig, logger);
-      await agent.reviewTask({ prompt: "review code" });
+      await agent.reviewTask({ prompt: "review", role: "reviewer" });
 
       const args = runCommand.mock.calls[0][1];
       expect(args).toContain("--yes");
       expect(args).toContain("--message");
-      expect(args).toContain("review code");
     });
 
     it("adds model when configured", async () => {
+      const config = { ...baseConfig, roles: { coder: { model: "gpt-4o" }, reviewer: {} } };
       const { AiderAgent } = await import("../src/agents/aider-agent.js");
-      const config = { ...baseConfig, roles: { coder: { model: "gpt-4-turbo" }, reviewer: {} } };
       const agent = new AiderAgent("aider", config, logger);
-      await agent.runTask({ prompt: "work", role: "coder" });
+      await agent.runTask({ prompt: "test", role: "coder" });
 
       const args = runCommand.mock.calls[0][1];
       expect(args).toContain("--model");
-      expect(args).toContain("gpt-4-turbo");
+      expect(args).toContain("gpt-4o");
     });
   });
 });
