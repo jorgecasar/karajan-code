@@ -62,8 +62,8 @@ vi.mock("../src/orchestrator/post-loop-stages.js", () => ({
   runSecurityStage: vi.fn()
 }));
 
-const { runFlow } = await import("../src/orchestrator.js");
-const { addCheckpoint, markSessionStatus } = await import("../src/session-store.js");
+const { runFlow, resumeFlow } = await import("../src/orchestrator.js");
+const { addCheckpoint, markSessionStatus, loadSession, saveSession } = await import("../src/session-store.js");
 const { runCoderStage, runTddCheckStage, runReviewerStage } = await import("../src/orchestrator/iteration-stages.js");
 const { emitProgress } = await import("../src/utils/events.js");
 
@@ -202,13 +202,14 @@ describe("interactive checkpoint system", () => {
     expect(result.reason).toBe("user_stopped");
   });
 
-  it("stops when askQuestion returns null (e.g., declined elicit)", async () => {
+  it("continues when askQuestion returns null (default to 5 more minutes)", async () => {
     const askQuestion = vi.fn().mockResolvedValue(null);
-    const config = makeConfig();
+    const config = makeConfig({ max_iterations: 1 });
 
     const result = await runFlow({ task: "Fix bug", config, logger, askQuestion });
 
-    expect(result.reason).toBe("user_stopped");
+    // null response defaults to "continue 5 more minutes" instead of stopping
+    expect(result.approved).toBe(true);
   });
 
   it("emits session:checkpoint event", async () => {
@@ -288,5 +289,77 @@ describe("interactive checkpoint system", () => {
     // Should NOT throw — hard timeout is disabled when askQuestion is available
     const result = await runFlow({ task: "Fix bug", config, logger, askQuestion });
     expect(result.approved).toBe(true);
+  });
+});
+
+describe("resumeFlow from stopped/failed sessions", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    runCoderStage.mockResolvedValue({ action: "ok" });
+    runTddCheckStage.mockResolvedValue({ action: "ok" });
+    runReviewerStage.mockResolvedValue({ action: "ok", review: { approved: true, blocking_issues: [], summary: "ok", confidence: 1 } });
+  });
+
+  it("resumes a stopped session by re-running the flow", async () => {
+    const stoppedSession = {
+      id: "sess-stopped",
+      status: "stopped",
+      task: "Fix bug",
+      config_snapshot: makeConfig({ max_iterations: 1 }),
+      checkpoints: []
+    };
+    loadSession.mockResolvedValue(stoppedSession);
+    saveSession.mockResolvedValue(undefined);
+
+    const result = await resumeFlow({
+      sessionId: "sess-stopped",
+      config: makeConfig({ max_iterations: 1 }),
+      logger
+    });
+
+    // Session should be marked running before re-running
+    expect(saveSession).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "running" })
+    );
+    expect(result.approved).toBe(true);
+  });
+
+  it("resumes a failed session by re-running the flow", async () => {
+    const failedSession = {
+      id: "sess-failed",
+      status: "failed",
+      task: "Fix bug",
+      config_snapshot: makeConfig({ max_iterations: 1 }),
+      checkpoints: []
+    };
+    loadSession.mockResolvedValue(failedSession);
+    saveSession.mockResolvedValue(undefined);
+
+    const result = await resumeFlow({
+      sessionId: "sess-failed",
+      config: makeConfig({ max_iterations: 1 }),
+      logger
+    });
+
+    expect(result.approved).toBe(true);
+  });
+
+  it("rejects resuming an approved (completed) session", async () => {
+    const approvedSession = {
+      id: "sess-approved",
+      status: "approved",
+      task: "Fix bug",
+      checkpoints: []
+    };
+    loadSession.mockResolvedValue(approvedSession);
+
+    const result = await resumeFlow({
+      sessionId: "sess-approved",
+      config: makeConfig(),
+      logger
+    });
+
+    // Should return the session as-is, not re-run
+    expect(result.status).toBe("approved");
   });
 });

@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 import { runCommand } from "../utils/process.js";
 import { exists } from "../utils/fs.js";
 import { getConfigPath } from "../config.js";
@@ -6,8 +9,23 @@ import { resolveRoleMdPath, loadFirstExisting } from "../roles/base-role.js";
 import { ensureGitRepo } from "../utils/git.js";
 import { checkBinary, KNOWN_AGENTS } from "../utils/agent-detect.js";
 
+function getPackageVersion() {
+  const pkgPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../package.json");
+  return JSON.parse(readFileSync(pkgPath, "utf8")).version;
+}
+
 export async function runChecks({ config }) {
   const checks = [];
+
+  // 0. Karajan version
+  const version = getPackageVersion();
+  checks.push({
+    name: "karajan",
+    label: "Karajan Code",
+    ok: true,
+    detail: `v${version}`,
+    fix: null
+  });
 
   // 1. Config file
   const configPath = getConfigPath();
