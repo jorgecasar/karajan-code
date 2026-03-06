@@ -21,6 +21,7 @@ import { parseMaybeJsonString } from "../review/parser.js";
 import { computeBaseRef, generateDiff } from "../review/diff-generator.js";
 import { resolveReviewProfile } from "../review/profiles.js";
 import { createRunLog, readRunLog } from "../utils/run-log.js";
+import { currentBranch } from "../utils/git.js";
 
 /**
  * Resolve the user's project directory via MCP roots.
@@ -109,6 +110,13 @@ export function classifyError(error) {
     };
   }
 
+  if (lower.includes("you are on the base branch")) {
+    return {
+      category: "branch_error",
+      suggestion: "Create a feature branch before running Karajan. Use 'git checkout -b feat/<task-description>' and then retry. Do NOT run kj_code directly on the base branch."
+    };
+  }
+
   if (lower.includes("not a git repository")) {
     return {
       category: "git_error",
@@ -117,6 +125,23 @@ export function classifyError(error) {
   }
 
   return { category: "unknown", suggestion: null };
+}
+
+export async function assertNotOnBaseBranch(config) {
+  const baseBranch = config?.base_branch || "main";
+  let branch;
+  try {
+    branch = await currentBranch();
+  } catch {
+    return; // not a git repo or detached HEAD — let downstream handle it
+  }
+  if (branch === baseBranch) {
+    throw new Error(
+      `You are on the base branch '${baseBranch}'. Karajan needs a feature branch to compute the diff for review. ` +
+      `Create a new branch first (e.g. 'git checkout -b feat/<task-description>') and then run this command again. ` +
+      `Do NOT run kj_code directly — create the branch first so the full pipeline (code + review) works correctly.`
+    );
+  }
 }
 
 export function enrichedFailPayload(error, toolName) {
@@ -161,6 +186,7 @@ export function buildAskQuestion(server) {
 
 export async function handleRunDirect(a, server, extra) {
   const config = await buildConfig(a);
+  await assertNotOnBaseBranch(config);
   const logger = createLogger(config.output.log_level, "mcp");
 
   const requiredProviders = [
@@ -304,6 +330,7 @@ export async function handlePlanDirect(a, server, extra) {
 
 export async function handleCodeDirect(a, server, extra) {
   const config = await buildConfig(a, "code");
+  await assertNotOnBaseBranch(config);
   const logger = createLogger(config.output.log_level, "mcp");
 
   const coderRole = resolveRole(config, "coder");
@@ -352,6 +379,7 @@ export async function handleCodeDirect(a, server, extra) {
 
 export async function handleReviewDirect(a, server, extra) {
   const config = await buildConfig(a, "review");
+  await assertNotOnBaseBranch(config);
   const logger = createLogger(config.output.log_level, "mcp");
 
   const reviewerRole = resolveRole(config, "reviewer");
