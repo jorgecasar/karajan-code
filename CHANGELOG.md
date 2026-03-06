@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-03-07
+
+### Added
+- **`kj_agents` MCP tool and CLI command**: list or change AI agent assignments per role on the fly. `kj_agents set coder gemini` persists to `kj.config.yml` — no restart needed, next `kj_run`/`kj_code` picks it up immediately
+- **`kj doctor` version display**: first line now shows Karajan Code version (`OK   Karajan Code: v1.10.0`)
+- **Subprocess constraints in coder prompt**: tells the coder it runs non-interactively (no stdin/TTY), must use `--yes`/`--no-input` flags for CLI wizards, and report clearly if a task cannot be done non-interactively
+- 10 new tests (1084 total)
+
+### Fixed
+- **Checkpoint null response no longer kills sessions**: when `elicitInput` fails or the AI agent returns null/empty, the session now continues for 5 more minutes instead of stopping. Only an explicit "4" or "stop" triggers a session stop
+- **`kj_resume` accepts stopped and failed sessions**: previously only "paused" sessions could be resumed. Now stopped (checkpoint) and failed (timeout/max-iterations) sessions can be re-run with `kj_resume`
+
 ## [1.9.6] - 2026-03-06
 
 ### Fixed
@@ -222,7 +234,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI/CD**: GitHub Actions workflow with validation and PR annotations
 - **716+ unit tests** with Vitest
 
-[Unreleased]: https://github.com/manufosela/karajan-code/compare/v1.9.3...HEAD
+[Unreleased]: https://github.com/manufosela/karajan-code/compare/v1.10.0...HEAD
+[1.10.0]: https://github.com/manufosela/karajan-code/compare/v1.9.6...v1.10.0
+[1.9.6]: https://github.com/manufosela/karajan-code/compare/v1.9.4...v1.9.6
 [1.9.3]: https://github.com/manufosela/karajan-code/compare/v1.9.2...v1.9.3
 [1.9.2]: https://github.com/manufosela/karajan-code/compare/v1.9.1...v1.9.2
 [1.8.0]: https://github.com/manufosela/karajan-code/compare/v1.7.0...v1.8.0

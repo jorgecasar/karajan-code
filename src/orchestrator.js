@@ -295,7 +295,13 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
 
       await addCheckpoint(session, { stage: "interactive-checkpoint", elapsed_minutes: Number(elapsedStr), answer });
 
-      if (!answer || answer.trim() === "4" || answer.trim().toLowerCase().startsWith("stop")) {
+      // Explicit stop: only when the user clearly chose option 4 or typed "stop".
+      // A null/empty answer (e.g. elicitInput failure, AI timeout) defaults to
+      // "continue 5 more minutes" so the session is not killed accidentally.
+      const trimmedAnswer = (answer || "").trim();
+      const isExplicitStop = trimmedAnswer === "4" || trimmedAnswer.toLowerCase().startsWith("stop");
+
+      if (isExplicitStop) {
         await markSessionStatus(session, "stopped");
         emitProgress(
           emitter,
@@ -308,12 +314,15 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
         return { approved: false, sessionId: session.id, reason: "user_stopped", elapsed_minutes: Number(elapsedStr) };
       }
 
-      if (answer.trim() === "2" || answer.trim().toLowerCase().startsWith("continue until")) {
+      // No answer or unrecognized → default to continue 5 more minutes
+      if (!trimmedAnswer) {
+        lastCheckpointAt = Date.now();
+      } else if (trimmedAnswer === "2" || trimmedAnswer.toLowerCase().startsWith("continue until")) {
         checkpointDisabled = true;
-      } else if (answer.trim() === "1" || answer.trim().toLowerCase().includes("5 m")) {
+      } else if (trimmedAnswer === "1" || trimmedAnswer.toLowerCase().includes("5 m")) {
         lastCheckpointAt = Date.now();
       } else {
-        const customMinutes = parseInt(answer.trim().replace(/\D/g, ""), 10);
+        const customMinutes = parseInt(trimmedAnswer.replace(/\D/g, ""), 10);
         if (customMinutes > 0) {
           lastCheckpointAt = Date.now();
           config.session.checkpoint_interval_minutes = customMinutes;
@@ -561,9 +570,18 @@ export async function resumeFlow({ sessionId, answer, config, logger, flags = {}
     return session;
   }
 
-  if (session.status !== "running") {
-    logger.info(`Session ${sessionId} has status ${session.status}`);
+  // Allow resuming "stopped" sessions (checkpoint stop) and "failed" sessions
+  const resumableStatuses = ["running", "stopped", "failed"];
+  if (!resumableStatuses.includes(session.status)) {
+    logger.info(`Session ${sessionId} has status ${session.status} — not resumable`);
     return session;
+  }
+
+  // Mark as running again for stopped/failed sessions
+  if (session.status !== "running") {
+    logger.info(`Resuming ${session.status} session ${sessionId}`);
+    session.status = "running";
+    await saveSession(session);
   }
 
   // Session was paused and now resumed with answer - re-run the flow
