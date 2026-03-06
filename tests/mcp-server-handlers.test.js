@@ -99,12 +99,17 @@ vi.mock("node:fs/promises", () => ({
   default: { readFile: vi.fn().mockResolvedValue("coder rules content") }
 }));
 
+vi.mock("../src/utils/git.js", () => ({
+  currentBranch: vi.fn().mockResolvedValue("feat/my-feature")
+}));
+
 const {
   asObject,
   responseText,
   failPayload,
   classifyError,
   enrichedFailPayload,
+  assertNotOnBaseBranch,
   buildAskQuestion,
   handleToolCall,
   handlePlanDirect,
@@ -117,6 +122,7 @@ const { runFlow, resumeFlow } = await import("../src/orchestrator.js");
 const { assertAgentsAvailable } = await import("../src/agents/availability.js");
 const { createAgent } = await import("../src/agents/index.js");
 const { sendTrackerLog } = await import("../src/mcp/progress.js");
+const { currentBranch } = await import("../src/utils/git.js");
 
 const mockServer = {
   sendLoggingMessage: vi.fn(),
@@ -227,6 +233,48 @@ describe("mcp/server-handlers", () => {
     it("handles string errors", () => {
       const result = classifyError("Sonar not running");
       expect(result.category).toBe("sonar_unavailable");
+    });
+  });
+
+  // --- assertNotOnBaseBranch ---
+
+  describe("assertNotOnBaseBranch", () => {
+    it("throws when on the base branch (main)", async () => {
+      currentBranch.mockResolvedValueOnce("main");
+      await expect(assertNotOnBaseBranch({ base_branch: "main" }))
+        .rejects.toThrow(/You are on the base branch 'main'/);
+    });
+
+    it("throws when on a custom base branch", async () => {
+      currentBranch.mockResolvedValueOnce("develop");
+      await expect(assertNotOnBaseBranch({ base_branch: "develop" }))
+        .rejects.toThrow(/You are on the base branch 'develop'/);
+    });
+
+    it("does not throw when on a feature branch", async () => {
+      currentBranch.mockResolvedValueOnce("feat/my-feature");
+      await expect(assertNotOnBaseBranch({ base_branch: "main" })).resolves.toBeUndefined();
+    });
+
+    it("does not throw when currentBranch fails (not a git repo)", async () => {
+      currentBranch.mockRejectedValueOnce(new Error("not a git repo"));
+      await expect(assertNotOnBaseBranch({ base_branch: "main" })).resolves.toBeUndefined();
+    });
+
+    it("defaults to main when config has no base_branch", async () => {
+      currentBranch.mockResolvedValueOnce("main");
+      await expect(assertNotOnBaseBranch({}))
+        .rejects.toThrow(/You are on the base branch 'main'/);
+    });
+  });
+
+  // --- classifyError: branch_error ---
+
+  describe("classifyError branch_error", () => {
+    it("classifies base branch errors", () => {
+      const result = classifyError(new Error("You are on the base branch 'main'"));
+      expect(result.category).toBe("branch_error");
+      expect(result.suggestion).toContain("feature branch");
     });
   });
 
@@ -449,6 +497,26 @@ describe("mcp/server-handlers", () => {
       const result = await handleToolCall("kj_run", { task: "Task" }, mockServer, {});
       expect(result.ok).toBe(false);
       expect(result.reason).toBe("stalled");
+    });
+
+    // --- Branch validation ---
+
+    it("kj_run rejects when on base branch", async () => {
+      currentBranch.mockResolvedValueOnce("main");
+      await expect(handleToolCall("kj_run", { task: "Do stuff" }, mockServer, {}))
+        .rejects.toThrow(/You are on the base branch/);
+    });
+
+    it("kj_code rejects when on base branch", async () => {
+      currentBranch.mockResolvedValueOnce("main");
+      await expect(handleToolCall("kj_code", { task: "Do stuff" }, mockServer, {}))
+        .rejects.toThrow(/You are on the base branch/);
+    });
+
+    it("kj_review rejects when on base branch", async () => {
+      currentBranch.mockResolvedValueOnce("main");
+      await expect(handleToolCall("kj_review", { task: "Do stuff" }, mockServer, {}))
+        .rejects.toThrow(/You are on the base branch/);
     });
 
     // --- Handles null/undefined args gracefully ---
