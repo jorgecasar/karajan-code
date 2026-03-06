@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.10.1] - 2026-03-07
+
+### Added
+- **Planning Game auto-status in `runFlow`**: when `pgTaskId` is provided, Karajan now automatically marks the PG card as "In Progress" (with `startDate`, `developer: BecarIA`) at session start, and "To Validate" (with `endDate`, `commits`) on approved completion. Works from both CLI and MCP — no duplicate logic needed
+- 6 new tests for PG integration (1090 total)
+
+### Changed
+- **CLI `run.js` simplified**: PG card fetch and completion update logic moved to `runFlow` (was duplicated in CLI handler)
+
 ## [1.10.0] - 2026-03-07
 
 ### Added
@@ -234,7 +243,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI/CD**: GitHub Actions workflow with validation and PR annotations
 - **716+ unit tests** with Vitest
 
-[Unreleased]: https://github.com/manufosela/karajan-code/compare/v1.10.0...HEAD
+[Unreleased]: https://github.com/manufosela/karajan-code/compare/v1.10.1...HEAD
+[1.10.1]: https://github.com/manufosela/karajan-code/compare/v1.10.0...v1.10.1
 [1.10.0]: https://github.com/manufosela/karajan-code/compare/v1.9.6...v1.10.0
 [1.9.6]: https://github.com/manufosela/karajan-code/compare/v1.9.4...v1.9.6
 [1.9.3]: https://github.com/manufosela/karajan-code/compare/v1.9.2...v1.9.3
