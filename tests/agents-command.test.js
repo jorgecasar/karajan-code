@@ -23,8 +23,17 @@ vi.mock("../src/utils/agent-detect.js", () => ({
   ]
 }));
 
+vi.mock("../src/mcp/preflight.js", () => ({
+  setSessionOverride: vi.fn(),
+  getSessionOverrides: vi.fn(() => ({})),
+  isPreflightAcked: vi.fn(() => false),
+  ackPreflight: vi.fn(),
+  resetPreflight: vi.fn()
+}));
+
 const { listAgents, setAgent } = await import("../src/commands/agents.js");
 const { loadConfig, writeConfig, getConfigPath } = await import("../src/config.js");
+const { setSessionOverride } = await import("../src/mcp/preflight.js");
 
 describe("agents command", () => {
   beforeEach(() => {
@@ -55,16 +64,17 @@ describe("agents command", () => {
   });
 
   describe("setAgent", () => {
-    it("updates role provider in config and writes to disk", async () => {
+    it("updates role provider in config and writes to disk with global=true", async () => {
       loadConfig.mockResolvedValue({
         config: { roles: { coder: { provider: "claude" } } }
       });
       writeConfig.mockResolvedValue(undefined);
 
-      const result = await setAgent("coder", "gemini");
+      const result = await setAgent("coder", "gemini", { global: true });
 
       expect(result.role).toBe("coder");
       expect(result.provider).toBe("gemini");
+      expect(result.scope).toBe("global");
       expect(writeConfig).toHaveBeenCalledWith(
         "/home/user/.karajan/kj.config.yml",
         expect.objectContaining({
@@ -75,6 +85,16 @@ describe("agents command", () => {
       );
     });
 
+    it("stores in session only with global=false (default)", async () => {
+      const result = await setAgent("coder", "gemini");
+
+      expect(result.role).toBe("coder");
+      expect(result.provider).toBe("gemini");
+      expect(result.scope).toBe("session");
+      expect(writeConfig).not.toHaveBeenCalled();
+      expect(setSessionOverride).toHaveBeenCalledWith("coder", "gemini");
+    });
+
     it("throws for unknown role", async () => {
       await expect(setAgent("unknown", "claude")).rejects.toThrow("Unknown role");
     });
@@ -83,15 +103,16 @@ describe("agents command", () => {
       await expect(setAgent("coder", "nonexistent")).rejects.toThrow("not found");
     });
 
-    it("creates role entry if it does not exist", async () => {
+    it("creates role entry if it does not exist with global=true", async () => {
       loadConfig.mockResolvedValue({
         config: { roles: {} }
       });
       writeConfig.mockResolvedValue(undefined);
 
-      const result = await setAgent("planner", "codex");
+      const result = await setAgent("planner", "codex", { global: true });
 
       expect(result.provider).toBe("codex");
+      expect(result.scope).toBe("global");
       expect(writeConfig).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
@@ -100,6 +121,34 @@ describe("agents command", () => {
           })
         })
       );
+    });
+  });
+
+  describe("listAgents with session overrides", () => {
+    it("shows session override with scope=session", () => {
+      const config = {
+        roles: {
+          coder: { provider: "claude", model: "opus" }
+        }
+      };
+      const agents = listAgents(config, { coder: "gemini" });
+      const coder = agents.find((a) => a.role === "coder");
+
+      expect(coder.provider).toBe("gemini");
+      expect(coder.scope).toBe("session");
+    });
+
+    it("shows scope=config when no session override exists", () => {
+      const config = {
+        roles: {
+          coder: { provider: "claude", model: "opus" }
+        }
+      };
+      const agents = listAgents(config);
+      const coder = agents.find((a) => a.role === "coder");
+
+      expect(coder.provider).toBe("claude");
+      expect(coder.scope).toBe("global");
     });
   });
 });

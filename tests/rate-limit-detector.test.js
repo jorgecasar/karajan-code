@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { detectRateLimit } from "../src/utils/rate-limit-detector.js";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { detectRateLimit, parseCooldown } from "../src/utils/rate-limit-detector.js";
 
 describe("detectRateLimit", () => {
   describe("Claude CLI rate limit patterns", () => {
@@ -167,5 +167,129 @@ describe("detectRateLimit", () => {
       expect(result.isRateLimit).toBe(false);
       expect(result.message).toBe("");
     });
+
+    it("includes cooldownUntil and cooldownMs in rate limit result", () => {
+      const result = detectRateLimit({
+        stderr: "Rate limit exceeded. Retry-After: 60",
+        stdout: ""
+      });
+      expect(result.isRateLimit).toBe(true);
+      expect(result.cooldownUntil).toBeTruthy();
+      expect(result.cooldownMs).toBe(60000);
+    });
+
+    it("includes null cooldown fields for non-rate-limit", () => {
+      const result = detectRateLimit({
+        stderr: "Some other error",
+        stdout: ""
+      });
+      expect(result.cooldownUntil).toBeNull();
+      expect(result.cooldownMs).toBeNull();
+    });
+  });
+});
+
+describe("parseCooldown", () => {
+  const FIXED_NOW = new Date("2026-03-07T12:00:00Z").getTime();
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(FIXED_NOW);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("parses ISO timestamp from Claude rate limit message", () => {
+    const result = parseCooldown(
+      "usage limit...try again after 2026-03-07T15:30:00Z"
+    );
+    expect(result.cooldownUntil).toBe("2026-03-07T15:30:00.000Z");
+    expect(result.cooldownMs).toBe(
+      new Date("2026-03-07T15:30:00Z").getTime() - FIXED_NOW
+    );
+  });
+
+  it("parses relative seconds from Codex rate limit message", () => {
+    const result = parseCooldown(
+      "exceeded your current quota. Retry-After: 120"
+    );
+    expect(result.cooldownMs).toBe(120000);
+    expect(result.cooldownUntil).toBeTruthy();
+    const parsed = new Date(result.cooldownUntil).getTime();
+    expect(parsed).toBe(FIXED_NOW + 120000);
+  });
+
+  it("parses 'retry after N seconds' format", () => {
+    const result = parseCooldown("retry after 30 seconds");
+    expect(result.cooldownMs).toBe(30000);
+  });
+
+  it("parses 'retry in Ns' format", () => {
+    const result = parseCooldown("retry in 45s");
+    expect(result.cooldownMs).toBe(45000);
+  });
+
+  it("parses relative minutes from Gemini rate limit message", () => {
+    const result = parseCooldown(
+      "resource exhausted: retry in 5 minutes"
+    );
+    expect(result.cooldownMs).toBe(5 * 60 * 1000);
+    expect(result.cooldownUntil).toBeTruthy();
+    const parsed = new Date(result.cooldownUntil).getTime();
+    expect(parsed).toBe(FIXED_NOW + 5 * 60 * 1000);
+  });
+
+  it("parses 'wait N min' format", () => {
+    const result = parseCooldown("wait 10 min before retrying");
+    expect(result.cooldownMs).toBe(10 * 60 * 1000);
+  });
+
+  it("parses Claude 'resets at YYYY-MM-DD HH:MM UTC' format", () => {
+    const result = parseCooldown(
+      "Claude Pro usage limit exceeded. Resets at 2026-03-07 15:30 UTC."
+    );
+    expect(result.cooldownUntil).toBe("2026-03-07T15:30:00.000Z");
+    expect(result.cooldownMs).toBe(
+      new Date("2026-03-07T15:30:00Z").getTime() - FIXED_NOW
+    );
+  });
+
+  it("returns null cooldown when no timestamp in message", () => {
+    const result = parseCooldown("Rate limit exceeded. Please try again later.");
+    expect(result.cooldownUntil).toBeNull();
+    expect(result.cooldownMs).toBeNull();
+  });
+
+  it("returns null cooldown for non-rate-limit messages", () => {
+    const result = parseCooldown("File not found: config.json");
+    expect(result.cooldownUntil).toBeNull();
+    expect(result.cooldownMs).toBeNull();
+  });
+
+  it("handles empty string", () => {
+    const result = parseCooldown("");
+    expect(result.cooldownUntil).toBeNull();
+    expect(result.cooldownMs).toBeNull();
+  });
+
+  it("handles null/undefined input", () => {
+    expect(parseCooldown(null)).toEqual({ cooldownUntil: null, cooldownMs: null });
+    expect(parseCooldown(undefined)).toEqual({ cooldownUntil: null, cooldownMs: null });
+  });
+
+  it("handles garbage input", () => {
+    const result = parseCooldown("asdkjh1234!@#$%^&*()zxcvbnm");
+    expect(result.cooldownUntil).toBeNull();
+    expect(result.cooldownMs).toBeNull();
+  });
+
+  it("clamps cooldownMs to 0 when timestamp is in the past", () => {
+    const result = parseCooldown(
+      "try again after 2026-03-07T11:00:00Z"
+    );
+    expect(result.cooldownMs).toBe(0);
+    expect(result.cooldownUntil).toBe("2026-03-07T11:00:00.000Z");
   });
 });

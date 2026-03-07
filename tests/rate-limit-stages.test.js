@@ -73,7 +73,7 @@ describe("rate-limit handling in iteration stages", () => {
   });
 
   describe("runCoderStage with rate limit", () => {
-    it("pauses session instead of throwing when coder hits rate limit", async () => {
+    it("returns standby action when coder hits rate limit", async () => {
       coderExecuteMock.mockResolvedValueOnce({
         ok: false,
         result: {
@@ -95,12 +95,9 @@ describe("rate-limit handling in iteration stages", () => {
       });
 
       expect(result).toBeDefined();
-      expect(result.action).toBe("pause");
-      expect(result.result.paused).toBe(true);
-      expect(result.result.context).toBe("rate_limit");
-      expect(pauseSession).toHaveBeenCalledWith(session, expect.objectContaining({
-        context: expect.objectContaining({ stage: "coder", reason: "rate_limit" })
-      }));
+      expect(result.action).toBe("standby");
+      expect(result.standbyInfo.agent).toBe("claude");
+      expect(result.standbyInfo.message).toBeTruthy();
     });
 
     it("still throws for non-rate-limit errors", async () => {
@@ -123,9 +120,7 @@ describe("rate-limit handling in iteration stages", () => {
       ).rejects.toThrow("Coder failed");
     });
 
-    it("emits rate_limit event when pausing", async () => {
-      const { emitProgress } = await import("../src/utils/events.js");
-
+    it("returns standby info with cooldown data when rate limited", async () => {
       coderExecuteMock.mockResolvedValueOnce({
         ok: false,
         result: {
@@ -138,22 +133,21 @@ describe("rate-limit handling in iteration stages", () => {
       const session = { id: "s1", task: "t", checkpoints: [], last_reviewer_feedback: null, last_sonar_summary: null };
       const coderRoleInstance = { execute: coderExecuteMock };
 
-      await runCoderStage({
+      const result = await runCoderStage({
         coderRoleInstance,
         coderRole: { provider: "claude", model: "m" },
         config: {}, logger, emitter, eventBase, session,
         plannedTask: "task", trackBudget, iteration: 1
       });
 
-      const rateLimitEvents = emitProgress.mock.calls.filter(
-        ([, evt]) => evt?.type === "coder:rate_limit"
-      );
-      expect(rateLimitEvents.length).toBeGreaterThanOrEqual(1);
+      expect(result.action).toBe("standby");
+      expect(result.standbyInfo).toHaveProperty("agent");
+      expect(result.standbyInfo).toHaveProperty("message");
     });
   });
 
   describe("runReviewerStage with rate limit", () => {
-    it("pauses session when reviewer hits rate limit", async () => {
+    it("returns standby when reviewer hits rate limit", async () => {
       const { runReviewerWithFallback } = await import("../src/orchestrator/reviewer-fallback.js");
       runReviewerWithFallback.mockResolvedValue({
         execResult: null,
@@ -175,9 +169,9 @@ describe("rate-limit handling in iteration stages", () => {
       });
 
       expect(result).toBeDefined();
-      expect(result.action).toBe("pause");
-      expect(result.result.context).toBe("rate_limit");
-      expect(pauseSession).toHaveBeenCalled();
+      expect(result.action).toBe("standby");
+      expect(result.standbyInfo.agent).toBe("codex");
+      expect(result.standbyInfo.message).toContain("exceeded");
     });
 
     it("still throws for non-rate-limit reviewer failures", async () => {
