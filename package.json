@@ -28,6 +28,7 @@
   },
   "files": [
     "src/",
+    "bin/",
     "templates/",
     "scripts/",
     "docs/karajan-code-logo-small.png",
