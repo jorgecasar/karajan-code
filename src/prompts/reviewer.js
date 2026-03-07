@@ -26,6 +26,8 @@ export function buildReviewerPrompt({ task, diff, reviewRules, mode, serenaEnabl
   const sections = [
     serenaEnabled ? SUBAGENT_PREAMBLE_SERENA : SUBAGENT_PREAMBLE,
     `You are a code reviewer in ${mode} mode.`,
+    "CRITICAL SCOPE RULE: Only review changes that are part of the diff below. Do NOT flag issues in unchanged code, missing features planned for future tasks, or improvements outside the scope of this task. If the diff is correct for what the task asks, approve it — even if the broader codebase has other issues.",
+    "Only block approval for issues IN THE DIFF that are bugs, security vulnerabilities, or clear violations of the review rules.",
     "Return only one valid JSON object and nothing else.",
     "JSON schema:",
     '{"approved":boolean,"blocking_issues":[{"id":string,"severity":"critical|high|medium|low","file":string,"line":number,"description":string,"suggested_fix":string}],"non_blocking_suggestions":[string],"summary":string,"confidence":number}'
