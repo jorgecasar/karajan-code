@@ -46,6 +46,7 @@ En lugar de ejecutar un agente de IA y revisar manualmente su output, `kj` encad
 - **Standby por rate-limit** — cuando un agente alcanza limites de uso, Karajan parsea el tiempo de espera, espera con backoff exponencial y reanuda automaticamente en vez de fallar
 - **Preflight handshake** — `kj_preflight` requiere confirmacion humana de la configuracion de agentes antes de ejecutar, previniendo que la IA cambie asignaciones silenciosamente
 - **Config de 3 niveles** — sesion > proyecto > global con scoping de `kj_agents`
+- **Mediacion inteligente del reviewer** — el scope filter difiere automaticamente issues del reviewer fuera de scope (ficheros no presentes en el diff) como deuda tecnica rastreada en vez de bloquear; Solomon media reviews estancados; el contexto diferido se inyecta en el prompt del coder
 - **Integracion con Planning Game** — combina opcionalmente con [Planning Game](https://github.com/AgenteIA-Geniova/planning-game) para gestion agil de proyectos (tareas, sprints, estimacion) — como Jira, pero open-source y nativo XP
 
 > **Mejor con MCP** — Karajan Code esta disenado para usarse como servidor MCP dentro de tu agente de IA (Claude, Codex, etc.). El agente envia tareas a `kj_run`, recibe notificaciones de progreso en tiempo real, y obtiene resultados estructurados — sin copiar y pegar.
@@ -73,7 +74,7 @@ triage? ─> researcher? ─> planner? ─> coder ─> refactorer? ─> sonar? �
 | **reviewer** | Revision de codigo con perfiles de exigencia configurables | **Siempre activo** |
 | **tester** | Quality gate de tests y verificacion de cobertura | **On** |
 | **security** | Auditoria de seguridad OWASP | **On** |
-| **solomon** | Supervisor de sesion — monitoriza salud de iteraciones con 4 reglas, escala ante anomalias | **On** |
+| **solomon** | Supervisor de sesion — monitoriza salud de iteraciones con 5 reglas (incl. reviewer overreach), media reviews estancados, escala ante anomalias | **On** |
 | **commiter** | Automatizacion de git commit, push y PR tras aprobacion | Off |
 
 Los roles marcados con `?` son opcionales y se pueden activar por ejecucion o via config.
