@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.1] - 2026-03-07
+
+### Fixed
+- **Claude subprocess blocked on permissions**: `claude -p` runs non-interactively (`stdin: "ignore"`) but without `--allowedTools`, it blocks waiting for permission approval that never arrives. Now passes `--allowedTools Read Write Edit Bash Glob Grep` to both `runTask` and `reviewTask`
+
 ## [1.11.0] - 2026-03-07
 
 ### Added
