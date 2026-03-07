@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# kj-tail — Colorized, filtered tail for Karajan run logs
+# Usage: kj-tail [project-dir] [-v|--verbose]
+
+set -euo pipefail
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+MAGENTA='\033[0;35m'
+GRAY='\033[0;90m'
+BOLD='\033[1m'
+RESET='\033[0m'
+
+VERBOSE=false
+PROJECT_DIR=""
+
+for arg in "$@"; do
+  case "$arg" in
+    -v|--verbose) VERBOSE=true ;;
+    *) PROJECT_DIR="$arg" ;;
+  esac
+done
+
+PROJECT_DIR="${PROJECT_DIR:-$(pwd)}"
+LOG_FILE="${PROJECT_DIR}/.kj/run.log"
+
+if [[ ! -f "$LOG_FILE" ]]; then
+  echo -e "${RED}No run.log found at ${LOG_FILE}${RESET}"
+  echo "Usage: kj-tail [project-dir] [-v|--verbose]"
+  exit 1
+fi
+
+echo -e "${BOLD}${CYAN}Karajan tail${RESET} ${GRAY}— ${LOG_FILE}${RESET}"
+echo -e "${GRAY}Ctrl+C to stop. Use -v to include agent output.${RESET}"
+echo ""
+
+tail -F "$LOG_FILE" 2>/dev/null | while IFS= read -r line; do
+  # Strip timestamp (HH:MM:SS.mmm)
+  clean="${line#[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9] }"
+
+  # Strip [agent:output] tag — it's the default, no need to show it
+  clean="${clean/\[agent:output\] /}"
+
+  # Colorize by content
+  if [[ "$clean" == *"[coder:start]"* ]] || [[ "$clean" == *"[coder:done]"* ]] || [[ "$clean" == *"[coder]"* ]]; then
+    echo -e "${GREEN}${clean}${RESET}"
+  elif [[ "$clean" == *"[reviewer"* ]]; then
+    echo -e "${YELLOW}${clean}${RESET}"
+  elif [[ "$clean" == *"[sonar"* ]]; then
+    echo -e "${BLUE}${clean}${RESET}"
+  elif [[ "$clean" == *"[solomon"* ]]; then
+    echo -e "${MAGENTA}${clean}${RESET}"
+  elif [[ "$clean" == *"[iteration"* ]] || [[ "$clean" == *"[session"* ]] || [[ "$clean" == *"[kj_run]"* ]] || [[ "$clean" == *"[kj_code]"* ]]; then
+    echo -e "${BOLD}${CYAN}${clean}${RESET}"
+  elif [[ "$clean" == *"fail"* ]] || [[ "$clean" == *"error"* ]] || [[ "$clean" == *"FAIL"* ]] || [[ "$clean" == *"ERROR"* ]]; then
+    echo -e "${RED}${clean}${RESET}"
+  elif [[ "$clean" == *"[agent:heartbeat]"* ]]; then
+    echo -e "${GRAY}${clean}${RESET}"
+  elif [[ "$clean" == "---"* ]]; then
+    echo -e "${BOLD}${clean}${RESET}"
+  else
+    echo "$clean"
+  fi
+done

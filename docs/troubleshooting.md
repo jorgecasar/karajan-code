@@ -254,9 +254,61 @@ kill <pid1> <pid2> ...
 3. If this happened after an update, follow the `Transport closed` checklist above
 4. Run `kj doctor` to verify the setup is correct
 
+## Monitoring runs in real time
+
+### `kj-tail` — live colorized log viewer
+
+When Karajan runs via MCP, the host (Claude Code, Codex) shows no progress until the tool call completes. To see what Karajan is doing in real time, use `kj-tail` in a separate terminal.
+
+**Compatibility**: Linux, macOS, and WSL. Requires `bash` and `tail -F` (standard on all three).
+
+**Install** (one-time):
+
+```bash
+# Copy the script to a directory in your PATH
+cp node_modules/karajan-code/bin/kj-tail ~/.local/bin/kj-tail
+chmod +x ~/.local/bin/kj-tail
+
+# Ensure ~/.local/bin is in your PATH (add to .bashrc/.zshrc if needed)
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+**Usage**:
+
+```bash
+# From any directory — pass the project path where kj_run is executing
+kj-tail ~/my-project
+
+# If you're already in the project directory
+kj-tail
+```
+
+**What it shows**:
+
+Karajan writes a `run.log` file to `<project>/.kj/run.log` during every `kj_run`, `kj_code`, and `kj_plan` execution. `kj-tail` tails this file with:
+
+- Color coding by stage: coder (green), reviewer (yellow), sonar (blue), solomon (magenta), errors (red), session/iteration (cyan)
+- Timestamps stripped for cleaner output
+- Redundant `[agent:output]` tag removed (the output itself is shown)
+
+Example output:
+
+```
+[kj_run] started — task="TSK-0010: Add CI/CD..."
+[session:start] Session started
+[iteration:start] [iteration] Iteration 1/5
+[coder:start] [coder] Coder (claude) running
+[coder] Creating .github/workflows/ci.yml...
+[coder:done] [coder] Finished (lines=82, elapsed=45s)
+[sonar:start] Scanning project...
+[sonar:fail] Quality gate FAILED — 2 issues
+[coder:start] [coder] Re-launching to fix issues...
+```
+
 ## General Tips
 
 - Always run `kj doctor` after installation to verify everything is working
 - Use `--dry-run` to preview what Karajan will do without making changes
 - Check session logs with `kj report` for detailed execution traces
+- Monitor live execution with `kj-tail <project-dir>` in a separate terminal
 - Use `--mode paranoid` for critical code and `--mode relaxed` for prototyping
