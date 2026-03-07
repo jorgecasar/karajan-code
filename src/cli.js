@@ -165,9 +165,10 @@ program
 program
   .command("agents [subcommand] [role] [provider]")
   .description("List or change AI agent assignments per role (e.g. kj agents set coder gemini)")
-  .action(async (subcommand, role, provider) => {
+  .option("--global", "Persist change to kj.config.yml (default for CLI)")
+  .action(async (subcommand, role, provider, flags) => {
     await withConfig("agents", {}, async ({ config }) => {
-      await agentsCommand({ config, subcommand: subcommand || "list", role, provider });
+      await agentsCommand({ config, subcommand: subcommand || "list", role, provider, global: flags.global });
     });
   });
 

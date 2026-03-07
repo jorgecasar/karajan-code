@@ -150,6 +150,24 @@ export const tools = [
     }
   },
   {
+    name: "kj_preflight",
+    description: "Confirm or adjust agent configuration before first kj_run/kj_code. REQUIRED before running any task via MCP. Show the config to the human, get their confirmation or adjustments, then call this tool with their response.",
+    inputSchema: {
+      type: "object",
+      required: ["humanResponse"],
+      properties: {
+        humanResponse: { type: "string", description: "The human's response: 'ok' to confirm defaults, or specific changes like 'use gemini as coder'" },
+        coder: { type: "string", description: "Override coder for this session" },
+        reviewer: { type: "string", description: "Override reviewer for this session" },
+        tester: { type: "string", description: "Override tester for this session" },
+        security: { type: "string", description: "Override security for this session" },
+        solomon: { type: "string", description: "Override solomon for this session" },
+        enableTester: { type: "boolean", description: "Enable/disable tester for this session" },
+        enableSecurity: { type: "boolean", description: "Enable/disable security for this session" }
+      }
+    }
+  },
+  {
     name: "kj_code",
     description: "Run coder-only mode",
     inputSchema: {
@@ -180,7 +198,7 @@ export const tools = [
   },
   {
     name: "kj_status",
-    description: "Show real-time log of the current or last Karajan run. Use this to monitor progress while kj_run/kj_plan/kj_code is executing. Reads from .kj/run.log in the project directory.",
+    description: "Show real-time status and log of the current or last Karajan run. Returns a parsed status (current stage, agent, iteration, errors) plus recent log lines. Use this to monitor progress while kj_run/kj_plan/kj_code is executing.",
     inputSchema: {
       type: "object",
       properties: {
