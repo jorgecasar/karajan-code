@@ -60,6 +60,8 @@ tail -F "$LOG_FILE" 2>/dev/null | while IFS= read -r line; do
     echo -e "${RED}${clean}${RESET}"
   elif [[ "$clean" == *"[agent:heartbeat]"* ]]; then
     echo -e "${GRAY}${clean}${RESET}"
+  elif [[ "$clean" == *"[standby]"* ]] || [[ "$clean" == *"standby"* ]]; then
+    echo -e "${YELLOW}${clean}${RESET}"
   elif [[ "$clean" == "---"* ]]; then
     echo -e "${BOLD}${clean}${RESET}"
   else

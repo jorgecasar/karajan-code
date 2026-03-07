@@ -1,8 +1,68 @@
 /**
  * Detects rate limit / usage cap messages from CLI agent output.
- * Returns { isRateLimit, agent, message } where agent is the best guess
- * of which CLI triggered it (or "unknown").
+ * Returns { isRateLimit, agent, message, cooldownUntil, cooldownMs }
+ * where agent is the best guess of which CLI triggered it (or "unknown").
  */
+
+/**
+ * Extracts cooldown timing from a rate limit message string.
+ * Returns { cooldownUntil, cooldownMs } where cooldownUntil is an ISO string
+ * and cooldownMs is milliseconds to wait, or both null if not found.
+ */
+export function parseCooldown(message) {
+  if (!message || typeof message !== "string") {
+    return { cooldownUntil: null, cooldownMs: null };
+  }
+
+  // 1. ISO timestamp: "try again after 2026-03-07T15:30:00Z"
+  //    Also: "resets at 2026-03-07T15:30:00Z"
+  const isoMatch = message.match(
+    /(?:after|at)\s+(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)/i
+  );
+  if (isoMatch) {
+    const target = new Date(isoMatch[1]);
+    if (!isNaN(target.getTime())) {
+      const ms = Math.max(0, target.getTime() - Date.now());
+      return { cooldownUntil: target.toISOString(), cooldownMs: ms };
+    }
+  }
+
+  // 4. Claude specific: "resets at 2026-03-07 15:30 UTC" (space-separated date/time)
+  const resetMatch = message.match(
+    /resets?\s+at\s+(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})\s*UTC/i
+  );
+  if (resetMatch) {
+    const target = new Date(`${resetMatch[1]}T${resetMatch[2]}:00Z`);
+    if (!isNaN(target.getTime())) {
+      const ms = Math.max(0, target.getTime() - Date.now());
+      return { cooldownUntil: target.toISOString(), cooldownMs: ms };
+    }
+  }
+
+  // 2. Relative seconds: "retry after 120 seconds" / "retry in 120s" / "Retry-After: 120"
+  const secMatch = message.match(
+    /(?:retry[\s-]*after|retry\s+in|wait)\s*:?\s*(\d+)\s*(?:seconds?|secs?|s\b)/i
+  ) || message.match(/Retry-After:\s*(\d+)/i);
+  if (secMatch) {
+    const seconds = parseInt(secMatch[1], 10);
+    const ms = seconds * 1000;
+    const target = new Date(Date.now() + ms);
+    return { cooldownUntil: target.toISOString(), cooldownMs: ms };
+  }
+
+  // 3. Relative minutes: "retry in 5 minutes" / "wait 5 min"
+  const minMatch = message.match(
+    /(?:retry\s+in|wait|after)\s+(\d+)\s*(?:minutes?|mins?)/i
+  );
+  if (minMatch) {
+    const minutes = parseInt(minMatch[1], 10);
+    const ms = minutes * 60 * 1000;
+    const target = new Date(Date.now() + ms);
+    return { cooldownUntil: target.toISOString(), cooldownMs: ms };
+  }
+
+  return { cooldownUntil: null, cooldownMs: null };
+}
 
 const RATE_LIMIT_PATTERNS = [
   // Claude CLI
@@ -34,10 +94,11 @@ export function detectRateLimit({ stderr = "", stdout = "" }) {
       return {
         isRateLimit: true,
         agent,
-        message: matchedLine.trim()
+        message: matchedLine.trim(),
+        ...parseCooldown(matchedLine)
       };
     }
   }
 
-  return { isRateLimit: false, agent: "", message: "" };
+  return { isRateLimit: false, agent: "", message: "", cooldownUntil: null, cooldownMs: null };
 }

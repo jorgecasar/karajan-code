@@ -93,21 +93,16 @@ export async function runCoderStage({ coderRoleInstance, coderRole, config, logg
         }
       }
 
-      // No fallback or fallback also failed — pause
-      const question = `Agent ${coderRole.provider} hit a rate limit: ${rateLimitCheck.message}. Session paused until the token window resets.`;
-      await pauseSession(session, {
-        question,
-        context: { iteration, stage: "coder", reason: "rate_limit", agent: coderRole.provider, detail: rateLimitCheck.message }
-      });
-      emitProgress(
-        emitter,
-        makeEvent("coder:rate_limit", { ...eventBase, stage: "coder" }, {
-          status: "paused",
-          message: question,
-          detail: { agent: coderRole.provider, rateLimitMessage: rateLimitCheck.message, sessionId: session.id }
-        })
-      );
-      return { action: "pause", result: { paused: true, sessionId: session.id, question, context: "rate_limit" } };
+      // No fallback or fallback also failed — enter standby
+      return {
+        action: "standby",
+        standbyInfo: {
+          agent: coderRole.provider,
+          cooldownMs: rateLimitCheck.cooldownMs,
+          cooldownUntil: rateLimitCheck.cooldownUntil,
+          message: rateLimitCheck.message
+        }
+      };
     }
 
     await markSessionStatus(session, "failed");
@@ -167,20 +162,16 @@ export async function runRefactorerStage({ refactorerRole, config, logger, emitt
     });
 
     if (rateLimitCheck.isRateLimit) {
-      const question = `Agent ${refactorerRole.provider} hit a rate limit: ${rateLimitCheck.message}. Session paused until the token window resets.`;
-      await pauseSession(session, {
-        question,
-        context: { iteration, stage: "refactorer", reason: "rate_limit", agent: refactorerRole.provider, detail: rateLimitCheck.message }
-      });
-      emitProgress(
-        emitter,
-        makeEvent("refactorer:rate_limit", { ...eventBase, stage: "refactorer" }, {
-          status: "paused",
-          message: question,
-          detail: { agent: refactorerRole.provider, rateLimitMessage: rateLimitCheck.message, sessionId: session.id }
-        })
-      );
-      return { action: "pause", result: { paused: true, sessionId: session.id, question, context: "rate_limit" } };
+      // Enter standby instead of pausing
+      return {
+        action: "standby",
+        standbyInfo: {
+          agent: refactorerRole.provider,
+          cooldownMs: rateLimitCheck.cooldownMs,
+          cooldownUntil: rateLimitCheck.cooldownUntil,
+          message: rateLimitCheck.message
+        }
+      };
     }
 
     await markSessionStatus(session, "failed");
@@ -451,20 +442,16 @@ export async function runReviewerStage({ reviewerRole, config, logger, emitter, 
     });
 
     if (rateLimitCheck.isRateLimit) {
-      const question = `Reviewer ${reviewerRole.provider} hit a rate limit: ${rateLimitCheck.message}. Session paused until the token window resets.`;
-      await pauseSession(session, {
-        question,
-        context: { iteration, stage: "reviewer", reason: "rate_limit", agent: reviewerRole.provider, detail: rateLimitCheck.message }
-      });
-      emitProgress(
-        emitter,
-        makeEvent("reviewer:rate_limit", { ...eventBase, stage: "reviewer" }, {
-          status: "paused",
-          message: question,
-          detail: { agent: reviewerRole.provider, rateLimitMessage: rateLimitCheck.message, sessionId: session.id }
-        })
-      );
-      return { action: "pause", result: { paused: true, sessionId: session.id, question, context: "rate_limit" } };
+      // Enter standby instead of pausing
+      return {
+        action: "standby",
+        standbyInfo: {
+          agent: reviewerRole.provider,
+          cooldownMs: rateLimitCheck.cooldownMs,
+          cooldownUntil: rateLimitCheck.cooldownUntil,
+          message: rateLimitCheck.message
+        }
+      };
     }
 
     await markSessionStatus(session, "failed");

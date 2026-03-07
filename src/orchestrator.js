@@ -3,6 +3,7 @@ import {
   createSession,
   loadSession,
   markSessionStatus,
+  pauseSession,
   resumeSessionWithAnswer,
   saveSession,
   addCheckpoint
@@ -25,6 +26,7 @@ import { invokeSolomon } from "./orchestrator/solomon-escalation.js";
 import { runTriageStage, runResearcherStage, runPlannerStage } from "./orchestrator/pre-loop-stages.js";
 import { runCoderStage, runRefactorerStage, runTddCheckStage, runSonarStage, runReviewerStage } from "./orchestrator/iteration-stages.js";
 import { runTesterStage, runSecurityStage } from "./orchestrator/post-loop-stages.js";
+import { waitForCooldown, MAX_STANDBY_RETRIES } from "./orchestrator/standby.js";
 
 
 
@@ -146,6 +148,7 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
     repeated_issue_count: 0,
     sonar_retry_count: 0,
     reviewer_retry_count: 0,
+    standby_retry_count: 0,
     last_sonar_issue_signature: null,
     sonar_repeat_count: 0,
     last_reviewer_issue_signature: null,
@@ -406,12 +409,52 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
     if (coderResult?.action === "pause") {
       return coderResult.result;
     }
+    if (coderResult?.action === "standby") {
+      const standbyRetries = session.standby_retry_count || 0;
+      if (standbyRetries >= MAX_STANDBY_RETRIES) {
+        await pauseSession(session, {
+          question: `Rate limit standby exhausted after ${standbyRetries} retries. Agent: ${coderResult.standbyInfo.agent}`,
+          context: { iteration: i, stage: "coder", reason: "standby_exhausted" }
+        });
+        emitProgress(emitter, makeEvent("coder:rate_limit", { ...eventBase, stage: "coder" }, {
+          status: "paused",
+          message: `Standby exhausted after ${standbyRetries} retries`,
+          detail: { agent: coderResult.standbyInfo.agent, sessionId: session.id }
+        }));
+        return { paused: true, sessionId: session.id, question: `Rate limit standby exhausted after ${standbyRetries} retries`, context: "standby_exhausted" };
+      }
+      session.standby_retry_count = standbyRetries + 1;
+      await saveSession(session);
+      await waitForCooldown({ ...coderResult.standbyInfo, retryCount: standbyRetries, emitter, eventBase, logger, session });
+      i -= 1; // Retry the same iteration
+      continue;
+    }
 
     // --- Refactorer ---
     if (refactorerEnabled) {
       const refResult = await runRefactorerStage({ refactorerRole, config, logger, emitter, eventBase, session, plannedTask, trackBudget, iteration: i });
       if (refResult?.action === "pause") {
         return refResult.result;
+      }
+      if (refResult?.action === "standby") {
+        const standbyRetries = session.standby_retry_count || 0;
+        if (standbyRetries >= MAX_STANDBY_RETRIES) {
+          await pauseSession(session, {
+            question: `Rate limit standby exhausted after ${standbyRetries} retries. Agent: ${refResult.standbyInfo.agent}`,
+            context: { iteration: i, stage: "refactorer", reason: "standby_exhausted" }
+          });
+          emitProgress(emitter, makeEvent("refactorer:rate_limit", { ...eventBase, stage: "refactorer" }, {
+            status: "paused",
+            message: `Standby exhausted after ${standbyRetries} retries`,
+            detail: { agent: refResult.standbyInfo.agent, sessionId: session.id }
+          }));
+          return { paused: true, sessionId: session.id, question: `Rate limit standby exhausted after ${standbyRetries} retries`, context: "standby_exhausted" };
+        }
+        session.standby_retry_count = standbyRetries + 1;
+        await saveSession(session);
+        await waitForCooldown({ ...refResult.standbyInfo, retryCount: standbyRetries, emitter, eventBase, logger, session });
+        i -= 1; // Retry the same iteration
+        continue;
       }
     }
 
@@ -458,6 +501,26 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
       if (reviewerResult.action === "pause") {
         return reviewerResult.result;
       }
+      if (reviewerResult.action === "standby") {
+        const standbyRetries = session.standby_retry_count || 0;
+        if (standbyRetries >= MAX_STANDBY_RETRIES) {
+          await pauseSession(session, {
+            question: `Rate limit standby exhausted after ${standbyRetries} retries. Agent: ${reviewerResult.standbyInfo.agent}`,
+            context: { iteration: i, stage: "reviewer", reason: "standby_exhausted" }
+          });
+          emitProgress(emitter, makeEvent("reviewer:rate_limit", { ...eventBase, stage: "reviewer" }, {
+            status: "paused",
+            message: `Standby exhausted after ${standbyRetries} retries`,
+            detail: { agent: reviewerResult.standbyInfo.agent, sessionId: session.id }
+          }));
+          return { paused: true, sessionId: session.id, question: `Rate limit standby exhausted after ${standbyRetries} retries`, context: "standby_exhausted" };
+        }
+        session.standby_retry_count = standbyRetries + 1;
+        await saveSession(session);
+        await waitForCooldown({ ...reviewerResult.standbyInfo, retryCount: standbyRetries, emitter, eventBase, logger, session });
+        i -= 1; // Retry the same iteration
+        continue;
+      }
       review = reviewerResult.review;
       if (reviewerResult.stalled) {
         return reviewerResult.stalledResult;
@@ -473,6 +536,49 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
         detail: { duration: iterDuration }
       })
     );
+
+    // Reset standby counter after successful iteration
+    session.standby_retry_count = 0;
+
+    // --- Solomon supervisor: anomaly detection after each iteration ---
+    if (config.pipeline?.solomon?.enabled !== false) {
+      try {
+        const { evaluateRules, buildRulesContext } = await import("./orchestrator/solomon-rules.js");
+        const rulesContext = await buildRulesContext({ session, task, iteration: i });
+        const rulesResult = evaluateRules(rulesContext, config.solomon?.rules);
+
+        if (rulesResult.alerts.length > 0) {
+          for (const alert of rulesResult.alerts) {
+            emitProgress(emitter, makeEvent("solomon:alert", { ...eventBase, stage: "solomon" }, {
+              status: alert.severity === "critical" ? "fail" : "warn",
+              message: alert.message,
+              detail: alert.detail
+            }));
+            logger.warn(`Solomon alert [${alert.rule}]: ${alert.message}`);
+          }
+
+          if (rulesResult.hasCritical && askQuestion) {
+            const alertSummary = rulesResult.alerts
+              .filter(a => a.severity === "critical")
+              .map(a => a.message)
+              .join("\n");
+            const answer = await askQuestion(
+              `Solomon detected critical issues:\n${alertSummary}\n\nShould I continue, pause, or revert?`,
+              { iteration: i, stage: "solomon" }
+            );
+            if (!answer || answer.toLowerCase().includes("pause") || answer.toLowerCase().includes("stop")) {
+              await pauseSession(session, {
+                question: `Solomon supervisor paused: ${alertSummary}`,
+                context: { iteration: i, stage: "solomon", alerts: rulesResult.alerts }
+              });
+              return { paused: true, sessionId: session.id, reason: "solomon_alert" };
+            }
+          }
+        }
+      } catch (err) {
+        logger.warn(`Solomon rules evaluation failed: ${err.message}`);
+      }
+    }
 
     if (review.approved) {
       session.reviewer_retry_count = 0;
@@ -650,6 +756,7 @@ export async function resumeFlow({ sessionId, answer, config, logger, flags = {}
   session.repeated_issue_count = 0;
   session.sonar_retry_count = 0;
   session.reviewer_retry_count = 0;
+  session.standby_retry_count = 0;
   session.tester_retry_count = 0;
   session.security_retry_count = 0;
   session.last_sonar_issue_signature = null;

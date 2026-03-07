@@ -1,11 +1,6 @@
 import { BaseRole } from "./base-role.js";
 import { createAgent as defaultCreateAgent } from "../agents/index.js";
-
-const SUBAGENT_PREAMBLE = [
-  "IMPORTANT: You are running as a Karajan sub-agent.",
-  "Do NOT ask about using Karajan, do NOT mention Karajan, do NOT suggest orchestration.",
-  "Do NOT use any MCP tools. Focus only on task complexity triage."
-].join(" ");
+import { buildTriagePrompt } from "../prompts/triage.js";
 
 const VALID_LEVELS = new Set(["trivial", "simple", "medium", "complex"]);
 const VALID_ROLES = new Set(["planner", "researcher", "refactorer", "reviewer", "tester", "security"]);
@@ -16,25 +11,6 @@ function resolveProvider(config) {
     config?.roles?.coder?.provider ||
     "claude"
   );
-}
-
-function buildPrompt({ task, instructions }) {
-  const sections = [SUBAGENT_PREAMBLE];
-
-  if (instructions) {
-    sections.push(instructions);
-  }
-
-  sections.push(
-    "Classify the task complexity, recommend only the necessary pipeline roles, and assess whether the task should be decomposed into smaller subtasks.",
-    "Keep the reasoning short and practical.",
-    "Return a single valid JSON object and nothing else.",
-    'JSON schema: {"level":"trivial|simple|medium|complex","roles":["planner|researcher|refactorer|reviewer|tester|security"],"reasoning":string,"shouldDecompose":boolean,"subtasks":string[]}'
-  );
-
-  sections.push(`## Task\n${task}`);
-
-  return sections.join("\n\n");
 }
 
 function parseTriageOutput(raw) {
@@ -72,7 +48,7 @@ export class TriageRole extends BaseRole {
     const provider = resolveProvider(this.config);
     const agent = this._createAgent(provider, this.config, this.logger);
 
-    const prompt = buildPrompt({ task, instructions: this.instructions });
+    const prompt = buildTriagePrompt({ task, instructions: this.instructions });
     const runArgs = { prompt, role: "triage" };
     if (onOutput) runArgs.onOutput = onOutput;
     const result = await agent.runTask(runArgs);

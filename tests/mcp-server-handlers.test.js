@@ -123,6 +123,7 @@ const { assertAgentsAvailable } = await import("../src/agents/availability.js");
 const { createAgent } = await import("../src/agents/index.js");
 const { sendTrackerLog } = await import("../src/mcp/progress.js");
 const { currentBranch } = await import("../src/utils/git.js");
+const { ackPreflight, resetPreflight } = await import("../src/mcp/preflight.js");
 
 const mockServer = {
   sendLoggingMessage: vi.fn(),
@@ -132,6 +133,7 @@ const mockServer = {
 describe("mcp/server-handlers", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetPreflight();
   });
 
   // --- asObject ---
@@ -398,6 +400,7 @@ describe("mcp/server-handlers", () => {
     });
 
     it("routes kj_code in-process (not via subprocess)", async () => {
+      ackPreflight();
       const result = await handleToolCall("kj_code", { task: "Fix bug" }, mockServer, {});
       expect(result.ok).toBe(true);
       expect(result.output).toBe("done");
@@ -465,9 +468,40 @@ describe("mcp/server-handlers", () => {
       expect(result.error).toContain("Unknown tool");
     });
 
+    // --- Preflight gate ---
+
+    it("kj_run returns preflightRequired when preflight not acked", async () => {
+      const result = await handleToolCall("kj_run", { task: "Do stuff" }, mockServer, {});
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.ok).toBe(false);
+      expect(parsed.preflightRequired).toBe(true);
+      expect(parsed.message).toContain("PREFLIGHT REQUIRED");
+    });
+
+    it("kj_code returns preflightRequired when preflight not acked", async () => {
+      const result = await handleToolCall("kj_code", { task: "Do stuff" }, mockServer, {});
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.ok).toBe(false);
+      expect(parsed.preflightRequired).toBe(true);
+      expect(parsed.message).toContain("PREFLIGHT REQUIRED");
+    });
+
+    it("kj_preflight acks and returns config", async () => {
+      const result = await handleToolCall("kj_preflight", { humanResponse: "ok" }, mockServer, {});
+      expect(result.ok).toBe(true);
+      expect(result.message).toContain("Preflight acknowledged");
+    });
+
+    it("kj_preflight parses natural language overrides", async () => {
+      const result = await handleToolCall("kj_preflight", { humanResponse: "use gemini as coder" }, mockServer, {});
+      expect(result.ok).toBe(true);
+      expect(result.overrides.coder).toBe("gemini");
+    });
+
     // --- Direct handlers (kj_run, kj_resume) ---
 
     it("kj_run calls runFlow and returns result", async () => {
+      ackPreflight();
       const result = await handleToolCall("kj_run", { task: "Implement feature" }, mockServer, {});
       expect(assertAgentsAvailable).toHaveBeenCalled();
       expect(runFlow).toHaveBeenCalledWith(
@@ -486,6 +520,7 @@ describe("mcp/server-handlers", () => {
     });
 
     it("kj_run returns ok=false when result is paused", async () => {
+      ackPreflight();
       runFlow.mockResolvedValueOnce({ paused: true, sessionId: "s_paused", question: "How?" });
       const result = await handleToolCall("kj_run", { task: "Task" }, mockServer, {});
       expect(result.ok).toBe(false);
@@ -493,6 +528,7 @@ describe("mcp/server-handlers", () => {
     });
 
     it("kj_run returns ok=false when not approved", async () => {
+      ackPreflight();
       runFlow.mockResolvedValueOnce({ approved: false, sessionId: "s_fail", reason: "stalled" });
       const result = await handleToolCall("kj_run", { task: "Task" }, mockServer, {});
       expect(result.ok).toBe(false);
@@ -502,12 +538,14 @@ describe("mcp/server-handlers", () => {
     // --- Branch validation ---
 
     it("kj_run rejects when on base branch", async () => {
+      ackPreflight();
       currentBranch.mockResolvedValueOnce("main");
       await expect(handleToolCall("kj_run", { task: "Do stuff" }, mockServer, {}))
         .rejects.toThrow(/You are on the base branch/);
     });
 
     it("kj_code rejects when on base branch", async () => {
+      ackPreflight();
       currentBranch.mockResolvedValueOnce("main");
       await expect(handleToolCall("kj_code", { task: "Do stuff" }, mockServer, {}))
         .rejects.toThrow(/You are on the base branch/);

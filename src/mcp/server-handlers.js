@@ -22,6 +22,7 @@ import { computeBaseRef, generateDiff } from "../review/diff-generator.js";
 import { resolveReviewProfile } from "../review/profiles.js";
 import { createRunLog, readRunLog } from "../utils/run-log.js";
 import { currentBranch } from "../utils/git.js";
+import { isPreflightAcked, ackPreflight, getSessionOverrides } from "./preflight.js";
 
 /**
  * Resolve the user's project directory via MCP roots.
@@ -249,7 +250,7 @@ export async function handleResumeDirect(a, server, extra) {
   return { ok: true, ...result };
 }
 
-function buildDirectEmitter(server, runLog) {
+function buildDirectEmitter(server, runLog, extra) {
   const emitter = new EventEmitter();
   emitter.on("progress", (event) => {
     try {
@@ -260,6 +261,8 @@ function buildDirectEmitter(server, runLog) {
     } catch { /* best-effort */ }
     if (runLog) runLog.logEvent(event);
   });
+  const progressNotifier = buildProgressNotifier(extra);
+  if (progressNotifier) emitter.on("progress", progressNotifier);
   return emitter;
 }
 
@@ -282,7 +285,7 @@ export async function handlePlanDirect(a, server, extra) {
   runLog.logText(
     `[kj_plan] started — provider=${plannerRole.provider}, max_silence=${silenceTimeoutMs ? `${Math.round(silenceTimeoutMs / 1000)}s` : "disabled"}, max_runtime=${plannerTimeoutMs ? `${Math.round(plannerTimeoutMs / 1000)}s` : "disabled"}`
   );
-  const emitter = buildDirectEmitter(server, runLog);
+  const emitter = buildDirectEmitter(server, runLog, extra);
   const eventBase = { sessionId: null, iteration: 0, startedAt: Date.now() };
   const onOutput = ({ stream, line }) => {
     emitter.emit("progress", { type: "agent:output", stage: "planner", message: line, detail: { stream, agent: plannerRole.provider } });
@@ -339,7 +342,7 @@ export async function handleCodeDirect(a, server, extra) {
   const projectDir = await resolveProjectDir(server);
   const runLog = createRunLog(projectDir);
   runLog.logText(`[kj_code] started — provider=${coderRole.provider}`);
-  const emitter = buildDirectEmitter(server, runLog);
+  const emitter = buildDirectEmitter(server, runLog, extra);
   const eventBase = { sessionId: null, iteration: 0, startedAt: Date.now() };
   const onOutput = ({ stream, line }) => {
     emitter.emit("progress", { type: "agent:output", stage: "coder", message: line, detail: { stream, agent: coderRole.provider } });
@@ -388,7 +391,7 @@ export async function handleReviewDirect(a, server, extra) {
   const projectDir = await resolveProjectDir(server);
   const runLog = createRunLog(projectDir);
   runLog.logText(`[kj_review] started — provider=${reviewerRole.provider}`);
-  const emitter = buildDirectEmitter(server, runLog);
+  const emitter = buildDirectEmitter(server, runLog, extra);
   const eventBase = { sessionId: null, iteration: 0, startedAt: Date.now() };
   const onOutput = ({ stream, line }) => {
     emitter.emit("progress", { type: "agent:output", stage: "reviewer", message: line, detail: { stream, agent: reviewerRole.provider } });
@@ -449,12 +452,68 @@ export async function handleToolCall(name, args, server, extra) {
         return failPayload("Missing required fields: role and provider");
       }
       const { setAgent } = await import("../commands/agents.js");
-      const result = await setAgent(a.role, a.provider);
-      return { ok: true, ...result, message: `${result.role} now uses ${result.provider}` };
+      const result = await setAgent(a.role, a.provider, { global: false });
+      return { ok: true, ...result, message: `${result.role} now uses ${result.provider} (scope: ${result.scope})` };
     }
     const config = await buildConfig(a);
     const { listAgents } = await import("../commands/agents.js");
-    return { ok: true, agents: listAgents(config) };
+    const sessionOvr = getSessionOverrides();
+    return { ok: true, agents: listAgents(config, sessionOvr) };
+  }
+
+  if (name === "kj_preflight") {
+    const overrides = {};
+    const AGENT_ROLES = ["coder", "reviewer", "tester", "security", "solomon"];
+
+    // Apply explicit param overrides
+    for (const role of AGENT_ROLES) {
+      if (a[role]) overrides[role] = a[role];
+    }
+    if (a.enableTester !== undefined) overrides.enableTester = a.enableTester;
+    if (a.enableSecurity !== undefined) overrides.enableSecurity = a.enableSecurity;
+
+    // Parse natural-language humanResponse for agent changes
+    const resp = (a.humanResponse || "").toLowerCase();
+    if (resp !== "ok") {
+      // Match patterns like "use gemini as coder", "coder: claude", "set reviewer to codex"
+      for (const role of AGENT_ROLES) {
+        const patterns = [
+          new RegExp(`use\\s+(\\w+)\\s+(?:as|for)\\s+${role}`, "i"),
+          new RegExp(`${role}\\s*[:=]\\s*(\\w+)`, "i"),
+          new RegExp(`set\\s+${role}\\s+(?:to|=)\\s*(\\w+)`, "i")
+        ];
+        for (const pat of patterns) {
+          const m = (a.humanResponse || "").match(pat);
+          if (m && !overrides[role]) {
+            overrides[role] = m[1];
+            break;
+          }
+        }
+      }
+    }
+
+    ackPreflight(overrides);
+
+    const config = await buildConfig(a);
+    const { listAgents } = await import("../commands/agents.js");
+    const agents = listAgents(config);
+    const lines = agents
+      .filter(ag => ag.provider !== "-")
+      .map(ag => {
+        const ovr = overrides[ag.role] ? ` -> ${overrides[ag.role]} (session override)` : "";
+        return `  ${ag.role}: ${ag.provider}${ag.model !== "-" ? ` (${ag.model})` : ""}${ovr}`;
+      });
+    const overrideLines = Object.entries(overrides)
+      .filter(([k]) => !AGENT_ROLES.includes(k))
+      .map(([k, v]) => `  ${k}: ${v}`);
+    const allLines = [...lines, ...overrideLines];
+
+    return {
+      ok: true,
+      message: `Preflight acknowledged. Agent configuration confirmed.`,
+      config: allLines.join("\n"),
+      overrides
+    };
   }
 
   if (name === "kj_config") {
@@ -506,6 +565,29 @@ export async function handleToolCall(name, args, server, extra) {
     if (!a.task) {
       return failPayload("Missing required field: task");
     }
+    if (!isPreflightAcked()) {
+      const { config } = await loadConfig();
+      const { listAgents } = await import("../commands/agents.js");
+      const agents = listAgents(config);
+      const agentSummary = agents
+        .filter(ag => ag.provider !== "-")
+        .map(ag => `  ${ag.role}: ${ag.provider}${ag.model !== "-" ? ` (${ag.model})` : ""}`)
+        .join("\n");
+      return responseText({
+        ok: false,
+        preflightRequired: true,
+        message: `PREFLIGHT REQUIRED\n\nCurrent agent configuration:\n${agentSummary}\n\nAsk the human to confirm or adjust this configuration, then call kj_preflight with their response.\n\nDo NOT pass coder/reviewer parameters to kj_run — use kj_preflight to set them.`
+      });
+    }
+    // Apply session overrides, ignoring agent params from tool call
+    const sessionOvr = getSessionOverrides();
+    if (sessionOvr.coder) { a.coder = sessionOvr.coder; }
+    if (sessionOvr.reviewer) { a.reviewer = sessionOvr.reviewer; }
+    if (sessionOvr.tester) { a.tester = sessionOvr.tester; }
+    if (sessionOvr.security) { a.security = sessionOvr.security; }
+    if (sessionOvr.solomon) { a.solomon = sessionOvr.solomon; }
+    if (sessionOvr.enableTester !== undefined) { a.enableTester = sessionOvr.enableTester; }
+    if (sessionOvr.enableSecurity !== undefined) { a.enableSecurity = sessionOvr.enableSecurity; }
     return handleRunDirect(a, server, extra);
   }
 
@@ -513,6 +595,23 @@ export async function handleToolCall(name, args, server, extra) {
     if (!a.task) {
       return failPayload("Missing required field: task");
     }
+    if (!isPreflightAcked()) {
+      const { config } = await loadConfig();
+      const { listAgents } = await import("../commands/agents.js");
+      const agents = listAgents(config);
+      const agentSummary = agents
+        .filter(ag => ag.provider !== "-")
+        .map(ag => `  ${ag.role}: ${ag.provider}${ag.model !== "-" ? ` (${ag.model})` : ""}`)
+        .join("\n");
+      return responseText({
+        ok: false,
+        preflightRequired: true,
+        message: `PREFLIGHT REQUIRED\n\nCurrent agent configuration:\n${agentSummary}\n\nAsk the human to confirm or adjust this configuration, then call kj_preflight with their response.\n\nDo NOT pass coder/reviewer parameters to kj_code — use kj_preflight to set them.`
+      });
+    }
+    // Apply session overrides, ignoring agent params from tool call
+    const sessionOvr = getSessionOverrides();
+    if (sessionOvr.coder) { a.coder = sessionOvr.coder; }
     return handleCodeDirect(a, server, extra);
   }
 

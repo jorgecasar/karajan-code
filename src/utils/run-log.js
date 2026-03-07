@@ -40,6 +40,9 @@ function formatLine(event) {
   if (event.detail?.silenceMs !== undefined) extra.push(`silence=${Math.round(event.detail.silenceMs / 1000)}s`);
   if (event.detail?.severity) extra.push(`severity=${event.detail.severity}`);
   if (event.detail?.stream) extra.push(`stream=${event.detail.stream}`);
+  if (event.detail?.cooldownUntil) extra.push(`until=${event.detail.cooldownUntil}`);
+  if (event.detail?.retryCount !== undefined) extra.push(`retry=${event.detail.retryCount}/${event.detail.maxRetries || "?"}`);
+  if (event.detail?.remainingMs !== undefined) extra.push(`remaining=${Math.round(event.detail.remainingMs / 1000)}s`);
 
   const extraStr = extra.length ? ` (${extra.join(", ")})` : "";
   return `${ts} [${type}] ${stage ? `[${stage}] ` : ""}${msg}${extraStr}`;
@@ -97,8 +100,77 @@ export function createRunLog(projectDir) {
 }
 
 /**
+ * Parse the run log to extract current status information.
+ */
+function parseRunStatus(lines) {
+  const status = {
+    currentStage: null,
+    currentAgent: null,
+    startedAt: null,
+    isRunning: false,
+    lastEvent: null,
+    iteration: null,
+    errors: []
+  };
+
+  for (const line of lines) {
+    // Detect run start
+    if (line.includes("[kj_run] started") || line.includes("[kj_code] started") || line.includes("[kj_plan] started")) {
+      status.isRunning = true;
+      const tool = line.includes("kj_run") ? "kj_run" : line.includes("kj_code") ? "kj_code" : "kj_plan";
+      status.currentStage = tool;
+      const tsMatch = line.match(/^(\d{2}:\d{2}:\d{2}\.\d{3})/);
+      if (tsMatch) status.startedAt = tsMatch[1];
+    }
+
+    // Detect run finish
+    if (line.includes("[kj_run] finished") || line.includes("[kj_code] finished") || line.includes("[kj_plan] finished") || line.includes("finished")) {
+      if (line.includes("[kj_run]") || line.includes("[kj_code]") || line.includes("[kj_plan]")) {
+        status.isRunning = false;
+      }
+    }
+
+    // Detect stage transitions
+    const stageStart = line.match(/\[(\w+):start\]/);
+    if (stageStart) {
+      status.currentStage = stageStart[1];
+    }
+    const stageDone = line.match(/\[(\w+):done\]|\[(\w+)\] finished/);
+    if (stageDone) {
+      const doneName = stageDone[1] || stageDone[2];
+      if (doneName === status.currentStage) status.currentStage = "idle";
+    }
+
+    // Detect agent
+    const agentMatch = line.match(/agent=(\w+)/);
+    if (agentMatch) status.currentAgent = agentMatch[1];
+
+    // Detect iteration
+    const iterMatch = line.match(/[Ii]teration\s+(\d+)/);
+    if (iterMatch) status.iteration = parseInt(iterMatch[1], 10);
+
+    // Detect errors
+    if (line.match(/\[.*:fail\]|\[.*error\]/i) || line.includes("ERROR")) {
+      status.errors.push(line.trim());
+    }
+
+    // Detect standby
+    if (line.includes("[standby]") || line.includes("standby")) {
+      status.currentStage = "standby";
+    }
+
+    status.lastEvent = line.trim();
+  }
+
+  // Keep only last 3 errors
+  if (status.errors.length > 3) status.errors = status.errors.slice(-3);
+
+  return status;
+}
+
+/**
  * Read the current run log contents.
- * Returns the last N lines (default 50).
+ * Returns the last N lines (default 50) plus a parsed status summary.
  */
 export function readRunLog(maxLines = 50, projectDir) {
   const logPath = resolveLogPath(projectDir);
@@ -107,10 +179,12 @@ export function readRunLog(maxLines = 50, projectDir) {
     const lines = content.split("\n").filter(Boolean);
     const total = lines.length;
     const shown = lines.slice(-maxLines);
+    const status = parseRunStatus(lines);
     return {
       ok: true,
       path: logPath,
       totalLines: total,
+      status,
       lines: shown,
       summary: shown.join("\n")
     };
