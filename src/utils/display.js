@@ -41,6 +41,9 @@ const ICONS = {
   "solomon:start": "\u2696\ufe0f",
   "solomon:end": "\u2696\ufe0f",
   "solomon:escalate": "\u26a0\ufe0f",
+  "coder:standby": "\u23f3",
+  "coder:standby_heartbeat": "\u23f3",
+  "coder:standby_resume": "\u25b6\ufe0f",
   "budget:update": "\ud83d\udcb8",
   "iteration:end": "\u23f1\ufe0f",
   "session:end": "\ud83c\udfc1",
@@ -244,6 +247,24 @@ export function printEvent(event) {
       console.log(`  \u251c\u2500 ${icon} ${subloop} sub-loop limit reached (${retryCount}/${limit}), invoking Solomon...`);
       break;
     }
+
+    case "coder:standby": {
+      const until = event.detail?.cooldownUntil || "?";
+      const attempt = event.detail?.retryCount || "?";
+      const maxRetries = event.detail?.maxRetries || "?";
+      console.log(`  \u251c\u2500 ${ANSI.yellow}${icon} Rate limited \u2014 standby until ${until} (attempt ${attempt}/${maxRetries})${ANSI.reset}`);
+      break;
+    }
+
+    case "coder:standby_heartbeat": {
+      const remaining = event.detail?.remainingMs !== undefined ? Math.round(event.detail.remainingMs / 1000) : "?";
+      console.log(`  \u251c\u2500 ${ANSI.yellow}${icon} Standby: ${remaining}s remaining${ANSI.reset}`);
+      break;
+    }
+
+    case "coder:standby_resume":
+      console.log(`  \u251c\u2500 ${ANSI.green}${icon} Cooldown expired \u2014 resuming with ${event.detail?.coder || event.detail?.provider || "?"}${ANSI.reset}`);
+      break;
 
     case "iteration:end":
       console.log(`  \u2514\u2500 ${icon} Duration: ${formatElapsed(event.detail?.duration)}  ${elapsed}`);

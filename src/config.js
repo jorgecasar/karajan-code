@@ -21,11 +21,11 @@ const DEFAULTS = {
   pipeline: {
     planner: { enabled: false },
     refactorer: { enabled: false },
-    solomon: { enabled: false },
+    solomon: { enabled: true },
     researcher: { enabled: false },
-    tester: { enabled: false },
-    security: { enabled: false },
-    triage: { enabled: false }
+    tester: { enabled: true },
+    security: { enabled: true },
+    triage: { enabled: true }
   },
   review_mode: "standard",
   max_iterations: 5,
@@ -155,6 +155,19 @@ export function getConfigPath() {
   return path.join(getKarajanHome(), "kj.config.yml");
 }
 
+export function getProjectConfigPath(projectDir = process.cwd()) {
+  return path.join(projectDir, ".karajan", "kj.config.yml");
+}
+
+export async function loadProjectConfig(projectDir = process.cwd()) {
+  const projectConfigPath = getProjectConfigPath(projectDir);
+  if (!(await exists(projectConfigPath))) {
+    return null;
+  }
+  const raw = await fs.readFile(projectConfigPath, "utf8");
+  return yaml.load(raw) || {};
+}
+
 async function loadProjectPricingOverrides(projectDir = process.cwd()) {
   const projectConfigPath = path.join(projectDir, ".karajan.yml");
   if (!(await exists(projectConfigPath))) {
@@ -171,24 +184,32 @@ async function loadProjectPricingOverrides(projectDir = process.cwd()) {
   return pricing;
 }
 
-export async function loadConfig() {
+export async function loadConfig(projectDir) {
   const configPath = getConfigPath();
-  const projectPricing = await loadProjectPricingOverrides();
-  if (!(await exists(configPath))) {
-    const baseDefaults = mergeDeep(DEFAULTS, {});
-    if (projectPricing) {
-      baseDefaults.budget = mergeDeep(baseDefaults.budget || {}, { pricing: projectPricing });
-    }
-    return { config: baseDefaults, path: configPath, exists: false };
+  const projectPricing = await loadProjectPricingOverrides(projectDir);
+
+  // Load global config
+  let globalConfig = {};
+  const globalExists = await exists(configPath);
+  if (globalExists) {
+    const raw = await fs.readFile(configPath, "utf8");
+    globalConfig = yaml.load(raw) || {};
   }
 
-  const raw = await fs.readFile(configPath, "utf8");
-  const parsed = yaml.load(raw) || {};
-  const merged = mergeDeep(DEFAULTS, parsed);
+  // Load project config (.karajan/kj.config.yml)
+  const projectConfig = await loadProjectConfig(projectDir);
+
+  // Merge: DEFAULTS < global < project
+  let merged = mergeDeep(DEFAULTS, globalConfig);
+  if (projectConfig) {
+    merged = mergeDeep(merged, projectConfig);
+  }
+
   if (projectPricing) {
     merged.budget = mergeDeep(merged.budget || {}, { pricing: projectPricing });
   }
-  return { config: merged, path: configPath, exists: true };
+
+  return { config: merged, path: configPath, exists: globalExists, hasProjectConfig: !!projectConfig };
 }
 
 export async function writeConfig(configPath, config) {

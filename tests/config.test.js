@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { applyRunOverrides, loadConfig, resolveRole, validateConfig } from "../src/config.js";
+import { applyRunOverrides, loadConfig, loadProjectConfig, getProjectConfigPath, resolveRole, validateConfig } from "../src/config.js";
 
 const originalCwd = process.cwd();
 const originalKjHome = process.env.KJ_HOME;
@@ -154,7 +154,110 @@ describe("applyRunOverrides", () => {
   });
 });
 
+describe("DEFAULTS pipeline", () => {
+  it("has tester and security enabled by default", async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "kj-defaults-"));
+    const kjHome = path.join(tmpDir, "home");
+    await fs.mkdir(kjHome, { recursive: true });
+
+    process.chdir(tmpDir);
+    process.env.KJ_HOME = kjHome;
+
+    const { config } = await loadConfig();
+    expect(config.pipeline.tester.enabled).toBe(true);
+    expect(config.pipeline.security.enabled).toBe(true);
+  });
+});
+
 describe("loadConfig", () => {
+  it("merges project config (.karajan/kj.config.yml) over global config", async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "kj-projcfg-"));
+    const kjHome = path.join(tmpDir, "home");
+    await fs.mkdir(kjHome, { recursive: true });
+    await fs.writeFile(
+      path.join(kjHome, "kj.config.yml"),
+      `coder: claude\nroles:\n  coder:\n    provider: claude\n  reviewer:\n    provider: codex\n`,
+      "utf8"
+    );
+    const karajanDir = path.join(tmpDir, ".karajan");
+    await fs.mkdir(karajanDir, { recursive: true });
+    await fs.writeFile(
+      path.join(karajanDir, "kj.config.yml"),
+      `roles:\n  coder:\n    provider: gemini\n`,
+      "utf8"
+    );
+
+    process.chdir(tmpDir);
+    process.env.KJ_HOME = kjHome;
+
+    const { config, hasProjectConfig } = await loadConfig();
+    expect(hasProjectConfig).toBe(true);
+    expect(config.roles.coder.provider).toBe("gemini");
+    expect(config.roles.reviewer.provider).toBe("codex");
+  });
+
+  it("uses global config only when no project config exists", async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "kj-noproj-"));
+    const kjHome = path.join(tmpDir, "home");
+    await fs.mkdir(kjHome, { recursive: true });
+    await fs.writeFile(
+      path.join(kjHome, "kj.config.yml"),
+      `roles:\n  coder:\n    provider: claude\n`,
+      "utf8"
+    );
+
+    process.chdir(tmpDir);
+    process.env.KJ_HOME = kjHome;
+
+    const { config, hasProjectConfig } = await loadConfig();
+    expect(hasProjectConfig).toBe(false);
+    expect(config.roles.coder.provider).toBe("claude");
+  });
+
+  it("project config roles override global roles while preserving unset fields", async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "kj-rolemerge-"));
+    const kjHome = path.join(tmpDir, "home");
+    await fs.mkdir(kjHome, { recursive: true });
+    await fs.writeFile(
+      path.join(kjHome, "kj.config.yml"),
+      `roles:\n  coder:\n    provider: claude\n    model: opus\n  reviewer:\n    provider: codex\n    model: o4-mini\nmax_iterations: 10\n`,
+      "utf8"
+    );
+    const karajanDir = path.join(tmpDir, ".karajan");
+    await fs.mkdir(karajanDir, { recursive: true });
+    await fs.writeFile(
+      path.join(karajanDir, "kj.config.yml"),
+      `roles:\n  coder:\n    provider: gemini\nmax_iterations: 3\n`,
+      "utf8"
+    );
+
+    process.chdir(tmpDir);
+    process.env.KJ_HOME = kjHome;
+
+    const { config } = await loadConfig();
+    // Project overrides coder provider
+    expect(config.roles.coder.provider).toBe("gemini");
+    // Global coder model preserved (deep merge)
+    expect(config.roles.coder.model).toBe("opus");
+    // Reviewer untouched
+    expect(config.roles.reviewer.provider).toBe("codex");
+    expect(config.roles.reviewer.model).toBe("o4-mini");
+    // Scalar override
+    expect(config.max_iterations).toBe(3);
+  });
+
+  it("loadProjectConfig returns null when .karajan/kj.config.yml is missing", async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "kj-noprojcfg-"));
+    process.chdir(tmpDir);
+    const result = await loadProjectConfig(tmpDir);
+    expect(result).toBeNull();
+  });
+
+  it("getProjectConfigPath points to .karajan/kj.config.yml in given dir", () => {
+    const p = getProjectConfigPath("/foo/bar");
+    expect(p).toBe(path.join("/foo/bar", ".karajan", "kj.config.yml"));
+  });
+
   it("merges budget.pricing overrides from project .karajan.yml", async () => {
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "kj-config-"));
     const kjHome = path.join(tmpDir, "home");
