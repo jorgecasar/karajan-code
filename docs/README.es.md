@@ -30,7 +30,7 @@ En lugar de ejecutar un agente de IA y revisar manualmente su output, `kj` encad
 **Caracteristicas principales:**
 - **Pipeline multi-agente** con 11 roles configurables
 - **4 agentes de IA soportados**: Claude, Codex, Gemini, Aider
-- **Servidor MCP** con 11 herramientas — usa `kj` desde Claude, Codex o cualquier host compatible con MCP sin salir de tu agente. [Ver configuracion MCP](#servidor-mcp)
+- **Servidor MCP** con 15 herramientas — usa `kj` desde Claude, Codex o cualquier host compatible con MCP sin salir de tu agente. [Ver configuracion MCP](#servidor-mcp)
 - **TDD obligatorio** — se exigen cambios en tests cuando se modifican ficheros fuente
 - **Integracion con SonarQube** — analisis estatico con quality gates (requiere [Docker](#requisitos))
 - **Perfiles de revision** — standard, strict, relaxed, paranoid
@@ -43,6 +43,9 @@ En lugar de ejecutar un agente de IA y revisar manualmente su output, `kj` encad
 - **Retry con backoff** — recuperacion automatica ante errores transitorios de API (429, 5xx) con backoff exponencial y jitter
 - **Pipeline stage tracker** — vista de progreso acumulativo durante `kj_run` mostrando que stages estan completadas, en ejecucion o pendientes — tanto en CLI como via eventos MCP para renderizado en tiempo real en el host
 - **Guardarrailes de observabilidad del planner** — telemetria continua de heartbeat/stall, proteccion configurable por silencio maximo (`session.max_agent_silence_minutes`) y limite duro de ejecucion (`session.max_planner_minutes`) para evitar bloqueos prolongados en `kj_plan`/planner
+- **Standby por rate-limit** — cuando un agente alcanza limites de uso, Karajan parsea el tiempo de espera, espera con backoff exponencial y reanuda automaticamente en vez de fallar
+- **Preflight handshake** — `kj_preflight` requiere confirmacion humana de la configuracion de agentes antes de ejecutar, previniendo que la IA cambie asignaciones silenciosamente
+- **Config de 3 niveles** — sesion > proyecto > global con scoping de `kj_agents`
 - **Integracion con Planning Game** — combina opcionalmente con [Planning Game](https://github.com/AgenteIA-Geniova/planning-game) para gestion agil de proyectos (tareas, sprints, estimacion) — como Jira, pero open-source y nativo XP
 
 > **Mejor con MCP** — Karajan Code esta disenado para usarse como servidor MCP dentro de tu agente de IA (Claude, Codex, etc.). El agente envia tareas a `kj_run`, recibe notificaciones de progreso en tiempo real, y obtiene resultados estructurados — sin copiar y pegar.
@@ -61,16 +64,16 @@ triage? ─> researcher? ─> planner? ─> coder ─> refactorer? ─> sonar? �
 
 | Rol | Descripcion | Por defecto |
 |-----|-------------|-------------|
-| **triage** | Clasifica la complejidad de la tarea (trivial/simple/media/compleja) y activa solo los roles necesarios | Off |
+| **triage** | Director de pipeline — analiza la complejidad y activa roles dinamicamente | **On** |
 | **researcher** | Investiga el contexto del codebase antes de planificar | Off |
 | **planner** | Genera planes de implementacion estructurados | Off |
 | **coder** | Escribe codigo y tests siguiendo metodologia TDD | **Siempre activo** |
 | **refactorer** | Mejora la claridad del codigo sin cambiar comportamiento | Off |
 | **sonar** | Ejecuta analisis estatico SonarQube y quality gates | On (si configurado) |
 | **reviewer** | Revision de codigo con perfiles de exigencia configurables | **Siempre activo** |
-| **tester** | Quality gate de tests y verificacion de cobertura | Off |
-| **security** | Auditoria de seguridad OWASP | Off |
-| **solomon** | Resolutor de conflictos cuando coder y reviewer discrepan | Off |
+| **tester** | Quality gate de tests y verificacion de cobertura | **On** |
+| **security** | Auditoria de seguridad OWASP | **On** |
+| **solomon** | Supervisor de sesion — monitoriza salud de iteraciones con 4 reglas, escala ante anomalias | **On** |
 | **commiter** | Automatizacion de git commit, push y PR tras aprobacion | Off |
 
 Los roles marcados con `?` son opcionales y se pueden activar por ejecucion o via config.
