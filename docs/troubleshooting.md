@@ -103,6 +103,61 @@ kj run --max-iteration-minutes 10
 
 Also consider breaking the task into smaller subtasks.
 
+### Claude subprocess hangs or produces no output
+
+**Cause**: Claude Code 2.x introduced three changes that break spawning `claude -p` as a subprocess from Node.js:
+
+1. **`CLAUDECODE` env var**: Claude Code sets `CLAUDECODE=1` to block nested sessions. The subprocess sees it and refuses to start.
+2. **stdin inheritance**: The child inherits the parent's stdin and blocks waiting for input that never arrives.
+3. **stderr output**: Without a TTY, Claude Code writes structured output (`json`/`stream-json`) to stderr, not stdout.
+
+**Fix** (v1.9.6): Karajan handles all three in `src/agents/claude-agent.js`:
+
+```js
+function cleanExecaOpts(extra = {}) {
+  const { CLAUDECODE, ...env } = process.env;
+  return { env, stdin: "ignore", ...extra };
+}
+
+function pickOutput(res) {
+  return res.stdout || res.stderr || "";
+}
+```
+
+**Verify manually**:
+```bash
+# Hangs (inherits env + stdin):
+claude -p "Reply PONG" --output-format json
+
+# Works (clean env, no stdin, read stderr):
+env -u CLAUDECODE claude -p "Reply PONG" --output-format json < /dev/null 2>&1
+```
+
+> This only affects Claude Code 2.x as a subprocess. Other agents (Codex, Gemini, Aider) are unaffected.
+
+### Coder hangs on interactive CLI wizards
+
+**Cause**: The coder runs as a non-interactive subprocess (`stdin: "ignore"`). Commands that prompt for user input (e.g. `pnpm create astro`, `npm init`, `create-react-app`) hang forever.
+
+**Fix** (v1.10.0): The coder prompt includes constraints telling the agent to use non-interactive flags (`--yes`, `--no-input`, `--template`, `--defaults`), or report that the task cannot be done non-interactively. If the coder still hangs, run the interactive part manually and then use Karajan for the coding work.
+
+### Checkpoint stops the session unexpectedly
+
+**Cause**: The checkpoint fires every 5 minutes and asks the AI agent what to do via `elicitInput`. If the response is null (timeout, error), older versions treated it as "stop".
+
+**Fix** (v1.10.0): Null/empty responses default to "continue 5 more minutes". Only explicit "4" or "stop" stops the session. Adjust the interval in config:
+
+```yaml
+session:
+  checkpoint_interval_minutes: 10  # default: 5
+```
+
+### Session stopped — cannot resume
+
+**Cause**: `kj_resume` only accepted "paused" sessions.
+
+**Fix** (v1.10.0): `kj_resume` now accepts stopped and failed sessions. It re-runs the flow from scratch with the original task and config.
+
 ### Reviewer rejects changes repeatedly (session stalled)
 
 **Cause**: The coder and reviewer are in a loop — the coder can't fix what the reviewer flags.
