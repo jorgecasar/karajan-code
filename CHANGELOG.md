@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-03-07
+
+### Added
+- **Rate-limit standby with auto-retry**: when a coder/reviewer hits a rate limit, Karajan now parses the cooldown time (5 message patterns supported), waits with exponential backoff (5min default, 30min max, 5 retries), then auto-resumes. Emits standby/heartbeat/resume events for real-time monitoring
+- **Preflight handshake**: `kj_preflight` tool requires human confirmation of agent config before `kj_run`/`kj_code`. Prevents AI from silently overriding agent assignments. Supports natural language ("use gemini as coder")
+- **Session-scoped agent config**: `kj_agents` via MCP defaults to session scope (in-memory, dies with server restart). CLI defaults to project scope. Both override global config
+- **Pipeline intelligence — triage as pipeline director**: triage analyzes task complexity and returns role activation decisions (tester, security, refactorer, researcher). Enabled by default
+- **Tester and security enabled by default**: pipeline now runs tester and security checks unless explicitly disabled
+- **Solomon supervisor**: runs after each iteration with 4 rules (max_files_per_iteration, max_stale_iterations, dependency_guard, scope_guard). Pauses on critical alerts and asks for human input
+- **3-tier config merge**: DEFAULTS < global (~/.karajan/) < project (.karajan/)
+- **MCP progress streaming for kj_code/kj_review/kj_plan**: `notifications/progress` now sent by all direct handlers (was only kj_run). Hosts that support progressToken (like Claude Code) show real-time stage progress
+- **Enhanced kj_status**: returns parsed status summary (currentStage, currentAgent, iteration, isRunning, recent errors) alongside raw log lines
+- **kj-tail resilient tracking**: uses `tail -F` instead of `tail -f` to survive log file truncation across runs
+- ADR documenting MCP progress notification investigation
+- 76 new tests (1180 total across 106 test files)
+
 ## [1.10.1] - 2026-03-07
 
 ### Added
