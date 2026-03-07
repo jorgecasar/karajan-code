@@ -101,10 +101,20 @@ function pickOutput(res) {
   return res.stdout || res.stderr || "";
 }
 
+/**
+ * Default tools to allow for Claude subprocess.
+ * Since claude -p runs non-interactively (stdin: "ignore"), it cannot ask for
+ * permission approval.  Without --allowedTools, it blocks waiting for approval
+ * that never comes.
+ */
+const ALLOWED_TOOLS = [
+  "Read", "Write", "Edit", "Bash", "Glob", "Grep"
+];
+
 export class ClaudeAgent extends BaseAgent {
   async runTask(task) {
     const role = task.role || "coder";
-    const args = ["-p", task.prompt];
+    const args = ["-p", task.prompt, "--allowedTools", ...ALLOWED_TOOLS];
     const model = this.getRoleModel(role);
     if (model) args.push("--model", model);
 
@@ -131,7 +141,7 @@ export class ClaudeAgent extends BaseAgent {
   }
 
   async reviewTask(task) {
-    const args = ["-p", task.prompt, "--output-format", "stream-json"];
+    const args = ["-p", task.prompt, "--allowedTools", ...ALLOWED_TOOLS, "--output-format", "stream-json"];
     const model = this.getRoleModel(task.role || "reviewer");
     if (model) args.push("--model", model);
     const res = await runCommand(resolveBin("claude"), args, cleanExecaOpts({
