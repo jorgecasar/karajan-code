@@ -47,6 +47,7 @@ Instead of running one AI agent and manually reviewing its output, `kj` chains a
 - **Rate-limit standby** — when agents hit rate limits, Karajan parses cooldown times, waits with exponential backoff, and auto-resumes instead of failing
 - **Preflight handshake** — `kj_preflight` requires human confirmation of agent assignments before execution, preventing AI from silently overriding your config
 - **3-tier config** — session > project > global config layering with `kj_agents` scoping
+- **Intelligent reviewer mediation** — scope filter auto-defers out-of-scope reviewer issues (files not in the diff) as tracked tech debt instead of stalling; Solomon mediates stalled reviews; deferred context injected into coder prompt
 - **Planning Game integration** — optionally pair with [Planning Game](https://github.com/AgenteIA-Geniova/planning-game) for agile project management (tasks, sprints, estimation) — like Jira, but open-source and XP-native
 
 > **Best with MCP** — Karajan Code is designed to be used as an MCP server inside your AI agent (Claude, Codex, etc.). The agent sends tasks to `kj_run`, gets real-time progress notifications, and receives structured results — no copy-pasting needed.
@@ -74,7 +75,7 @@ triage? ─> researcher? ─> planner? ─> coder ─> refactorer? ─> sonar? �
 | **reviewer** | Code review with configurable strictness profiles | **Always on** |
 | **tester** | Test quality gate and coverage verification | **On** |
 | **security** | OWASP security audit | **On** |
-| **solomon** | Session supervisor — monitors iteration health with 4 rules, escalates on anomalies | **On** |
+| **solomon** | Session supervisor — monitors iteration health with 5 rules (incl. reviewer overreach), mediates stalled reviews, escalates on anomalies | **On** |
 | **commiter** | Git commit, push, and PR automation after approval | Off |
 
 Roles marked with `?` are optional and can be enabled per-run or via config.
@@ -477,7 +478,7 @@ Use `kj roles show <role>` to inspect any template. Create a project override to
 git clone https://github.com/manufosela/karajan-code.git
 cd karajan-code
 npm install
-npm test              # Run 1180+ tests with Vitest
+npm test              # Run 1190+ tests with Vitest
 npm run test:watch    # Watch mode
 npm run validate      # Lint + test
 ```
