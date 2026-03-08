@@ -17,7 +17,9 @@ import { emitProgress, makeEvent } from "./utils/events.js";
 import { BudgetTracker, extractUsageMetrics } from "./utils/budget.js";
 import {
   prepareGitAutomation,
-  finalizeGitAutomation
+  finalizeGitAutomation,
+  earlyPrCreation,
+  incrementalPush
 } from "./git/automation.js";
 import { resolveRoleMdPath, loadFirstExisting } from "./roles/base-role.js";
 import { resolveReviewProfile } from "./review/profiles.js";
@@ -486,6 +488,56 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
       }
     }
 
+    // --- BecarIA Gateway: early PR or incremental push ---
+    const becariaEnabled = Boolean(config.becaria_gateway?.enabled) && gitCtx?.enabled;
+    if (becariaEnabled) {
+      try {
+        const { dispatchComment } = await import("./becaria/dispatch.js");
+        const { detectRepo } = await import("./becaria/repo.js");
+        const repo = await detectRepo();
+
+        if (!session.becaria_pr_number) {
+          // First iteration: commit + push + create PR
+          const earlyPr = await earlyPrCreation({ gitCtx, task, logger, session, stageResults });
+          if (earlyPr) {
+            session.becaria_pr_number = earlyPr.prNumber;
+            session.becaria_pr_url = earlyPr.prUrl;
+            session.becaria_commits = earlyPr.commits;
+            await saveSession(session);
+            emitProgress(emitter, makeEvent("becaria:pr-created", { ...eventBase, stage: "becaria" }, {
+              message: `Early PR created: #${earlyPr.prNumber}`,
+              detail: { prNumber: earlyPr.prNumber, prUrl: earlyPr.prUrl }
+            }));
+
+            // Post coder comment on new PR
+            if (repo) {
+              await dispatchComment({
+                repo, prNumber: earlyPr.prNumber, agent: "Coder",
+                body: `**Iteration ${i}** — Initial implementation.\n\nTask: ${task}`
+              });
+            }
+          }
+        } else {
+          // Subsequent iterations: incremental push + comment
+          const pushResult = await incrementalPush({ gitCtx, task, logger, session });
+          if (pushResult) {
+            session.becaria_commits = [...(session.becaria_commits || []), ...pushResult.commits];
+            await saveSession(session);
+
+            if (repo) {
+              const feedback = session.last_reviewer_feedback || "N/A";
+              await dispatchComment({
+                repo, prNumber: session.becaria_pr_number, agent: "Coder",
+                body: `**Iteration ${i}** — Addressing reviewer feedback:\n\n${feedback}`
+              });
+            }
+          }
+        }
+      } catch (err) {
+        logger.warn(`BecarIA early PR/push failed (non-blocking): ${err.message}`);
+      }
+    }
+
     // --- Reviewer ---
     let review = {
       approved: true,
@@ -578,6 +630,33 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
         }
       } catch (err) {
         logger.warn(`Solomon rules evaluation failed: ${err.message}`);
+      }
+    }
+
+    // --- BecarIA Gateway: dispatch review result ---
+    if (becariaEnabled && session.becaria_pr_number) {
+      try {
+        const { dispatchReview, dispatchComment } = await import("./becaria/dispatch.js");
+        const { detectRepo } = await import("./becaria/repo.js");
+        const repo = await detectRepo();
+        if (repo) {
+          if (review.approved) {
+            await dispatchReview({
+              repo, prNumber: session.becaria_pr_number,
+              event: "APPROVE", body: review.summary || "Approved", agent: "Reviewer"
+            });
+          } else {
+            await dispatchReview({
+              repo, prNumber: session.becaria_pr_number,
+              event: "REQUEST_CHANGES",
+              body: review.blocking_issues?.map((x) => `- ${x.id || "ISSUE"}: ${x.description}`).join("\n") || review.summary || "Changes requested",
+              agent: "Reviewer"
+            });
+          }
+          logger.info(`BecarIA: dispatched review for PR #${session.becaria_pr_number}`);
+        }
+      } catch (err) {
+        logger.warn(`BecarIA dispatch failed (non-blocking): ${err.message}`);
       }
     }
 

@@ -84,6 +84,7 @@ program
   .option("--auto-commit")
   .option("--auto-push")
   .option("--auto-pr")
+  .option("--enable-becaria", "Enable BecarIA Gateway (early PR + dispatch comments/reviews)")
   .option("--branch-prefix <prefix>")
   .option("--methodology <name>")
   .option("--no-auto-rebase")
