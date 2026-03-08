@@ -37,6 +37,7 @@ program
   .command("init")
   .description("Initialize config, review rules and SonarQube")
   .option("--no-interactive", "Skip wizard, use defaults (for CI/scripts)")
+  .option("--scaffold-becaria", "Scaffold BecarIA Gateway workflow files")
   .action(async (flags) => {
     await withConfig("init", flags, async ({ config, logger }) => {
       await initCommand({ logger, flags });
