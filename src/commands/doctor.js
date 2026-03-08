@@ -129,7 +129,62 @@ export async function runChecks({ config }) {
     });
   }
 
-  // 8. Review rules / Coder rules
+  // 8. BecarIA Gateway infrastructure
+  if (config.becaria_gateway?.enabled) {
+    const projectDir = config.projectDir || process.cwd();
+
+    // Workflow files
+    const workflowDir = path.join(projectDir, ".github", "workflows");
+    const requiredWorkflows = ["becaria-gateway.yml", "automerge.yml", "houston-override.yml"];
+    for (const wf of requiredWorkflows) {
+      const wfPath = path.join(workflowDir, wf);
+      const wfExists = await exists(wfPath);
+      checks.push({
+        name: `becaria:workflow:${wf}`,
+        label: `BecarIA workflow: ${wf}`,
+        ok: wfExists,
+        detail: wfExists ? "Found" : "Not found",
+        fix: wfExists ? null : `Run 'kj init --scaffold-becaria' or copy from karajan-code/templates/workflows/${wf}`
+      });
+    }
+
+    // gh CLI
+    const ghCheck = await checkBinary("gh");
+    checks.push({
+      name: "becaria:gh",
+      label: "BecarIA: gh CLI",
+      ok: ghCheck.ok,
+      detail: ghCheck.ok ? ghCheck.version : "Not found",
+      fix: ghCheck.ok ? null : "Install GitHub CLI: https://cli.github.com/"
+    });
+
+    // Secrets check via gh api (best effort — only works if user has admin access)
+    let secretsOk = false;
+    try {
+      const { detectRepo } = await import("../becaria/repo.js");
+      const repo = await detectRepo();
+      if (repo) {
+        const secretsRes = await runCommand("gh", ["api", `repos/${repo}/actions/secrets`, "--jq", ".secrets[].name"]);
+        if (secretsRes.exitCode === 0) {
+          const names = secretsRes.stdout.split("\n").map((s) => s.trim());
+          const hasAppId = names.includes("BECARIA_APP_ID");
+          const hasKey = names.includes("BECARIA_APP_PRIVATE_KEY");
+          secretsOk = hasAppId && hasKey;
+          checks.push({
+            name: "becaria:secrets",
+            label: "BecarIA: GitHub secrets",
+            ok: secretsOk,
+            detail: secretsOk ? "BECARIA_APP_ID + BECARIA_APP_PRIVATE_KEY found" : `Missing: ${!hasAppId ? "BECARIA_APP_ID " : ""}${!hasKey ? "BECARIA_APP_PRIVATE_KEY" : ""}`.trim(),
+            fix: secretsOk ? null : "Add BECARIA_APP_ID and BECARIA_APP_PRIVATE_KEY as GitHub repository secrets"
+          });
+        }
+      }
+    } catch {
+      // Skip secrets check if we can't access the API
+    }
+  }
+
+  // 9. Review rules / Coder rules
   const projectDir = config.projectDir || process.cwd();
   const reviewRules = await loadFirstExisting(resolveRoleMdPath("reviewer", projectDir));
   const coderRules = await loadFirstExisting(resolveRoleMdPath("coder", projectDir));
