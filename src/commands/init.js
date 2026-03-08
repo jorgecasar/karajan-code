@@ -177,4 +177,37 @@ export async function initCommand({ logger, flags = {} }) {
   } else {
     logger.info("SonarQube disabled — skipping container setup.");
   }
+
+  // --- BecarIA Gateway scaffolding ---
+  if (config.becaria?.enabled || flags.scaffoldBecaria) {
+    const projectDir = process.cwd();
+    const workflowDir = path.join(projectDir, ".github", "workflows");
+    await ensureDir(workflowDir);
+
+    const templatesDir = path.resolve(import.meta.dirname, "../../templates/workflows");
+    const workflows = ["becaria-gateway.yml", "automerge.yml", "houston-override.yml"];
+
+    for (const wf of workflows) {
+      const destPath = path.join(workflowDir, wf);
+      if (!(await exists(destPath))) {
+        const srcPath = path.join(templatesDir, wf);
+        try {
+          const content = await fs.readFile(srcPath, "utf8");
+          await fs.writeFile(destPath, content, "utf8");
+          logger.info(`Created ${path.relative(projectDir, destPath)}`);
+        } catch (err) {
+          logger.warn(`Could not scaffold ${wf}: ${err.message}`);
+        }
+      } else {
+        logger.info(`${wf} already exists — skipping`);
+      }
+    }
+
+    logger.info("");
+    logger.info("BecarIA Gateway scaffolded. Next steps:");
+    logger.info("  1. Create a GitHub App named 'becaria-reviewer' with pull_request write permissions");
+    logger.info("  2. Install the App on your repository");
+    logger.info("  3. Add secrets: BECARIA_APP_ID and BECARIA_APP_PRIVATE_KEY");
+    logger.info("  4. Push the workflow files and enable 'kj run --enable-becaria'");
+  }
 }
