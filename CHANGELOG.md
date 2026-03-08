@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-03-08
+
+### Added
+- **BecarIA Gateway integration**: full CI/CD integration with GitHub PRs via repository_dispatch events. PRs become the source of truth for the pipeline
+- **Early PR creation**: PR created after first coder iteration (before reviewer), subsequent iterations push incrementally
+- **All-agent dispatch comments**: Sonar, Solomon, Tester, Security, Planner, Coder, and Reviewer all post comments on the PR with their results
+- **Formal PR reviews**: Reviewer dispatches APPROVE/REQUEST_CHANGES via becaria-review event
+- **Configurable dispatch**: custom event types (`review_event`, `comment_event`) and optional `[Agent]` prefix via `becaria` config section
+- **PR-based review**: Reviewer reads `gh pr diff` instead of local `git diff` when BecarIA is enabled
+- **`kj review` standalone with BecarIA**: reads PR diff, dispatches review result, errors if no open PR
+- **Repo and PR auto-detection**: `detectRepo()` parses SSH/HTTPS remotes, `detectPrNumber()` uses `gh pr view`
+- **BecarIA workflow templates**: `becaria-gateway.yml`, `automerge.yml`, `houston-override.yml` embedded in package
+- **`kj init --scaffold-becaria`**: copies workflow templates to `.github/workflows/`
+- **`kj doctor` BecarIA checks**: verifies workflows, gh CLI, and GitHub secrets when BecarIA enabled
+- **`--enable-becaria` flag**: CLI and MCP support, auto-enables git automation (commit + push + PR)
+- 50 new tests for BecarIA modules (1230 total across 111 test files)
+
 ## [1.12.0] - 2026-03-07
 
 ### Added
