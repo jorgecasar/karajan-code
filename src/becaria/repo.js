@@ -34,15 +34,10 @@ export async function detectRepo() {
  * Returns null if no PR exists for the branch.
  */
 export async function detectPrNumber(branch) {
-  const res = await runCommand("gh", [
-    "pr",
-    "view",
-    branch,
-    "--json",
-    "number",
-    "--jq",
-    ".number"
-  ]);
+  const args = ["pr", "view"];
+  if (branch) args.push(branch);
+  args.push("--json", "number", "--jq", ".number");
+  const res = await runCommand("gh", args);
   if (res.exitCode !== 0) return null;
 
   const num = parseInt(res.stdout.trim(), 10);

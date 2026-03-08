@@ -130,7 +130,7 @@ export async function runChecks({ config }) {
   }
 
   // 8. BecarIA Gateway infrastructure
-  if (config.becaria_gateway?.enabled) {
+  if (config.becaria?.enabled) {
     const projectDir = config.projectDir || process.cwd();
 
     // Workflow files
