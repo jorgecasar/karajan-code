@@ -402,7 +402,14 @@ export async function runReviewerStage({ reviewerRole, config, logger, emitter, 
     })
   );
 
-  const diff = await generateDiff({ baseRef: session.session_start_sha });
+  let diff;
+  if (session.becaria_pr_number) {
+    const { getPrDiff } = await import("../becaria/pr-diff.js");
+    diff = await getPrDiff(session.becaria_pr_number);
+    logger.info(`Reviewer reading PR diff #${session.becaria_pr_number}`);
+  } else {
+    diff = await generateDiff({ baseRef: session.session_start_sha });
+  }
   const reviewerOnOutput = ({ stream, line }) => {
     emitProgress(emitter, makeEvent("agent:output", { ...eventBase, stage: "reviewer" }, {
       message: line,
