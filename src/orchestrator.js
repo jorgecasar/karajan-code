@@ -290,6 +290,23 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
     const plannerResult = await runPlannerStage({ config, logger, emitter, eventBase, session, plannerRole, researchContext, triageDecomposition, trackBudget });
     plannedTask = plannerResult.plannedTask;
     stageResults.planner = plannerResult.stageResult;
+
+    // BecarIA: dispatch planner comment (only on resume where PR already exists)
+    if (Boolean(config.becaria?.enabled) && session.becaria_pr_number) {
+      try {
+        const { dispatchComment } = await import("./becaria/dispatch.js");
+        const { detectRepo } = await import("./becaria/repo.js");
+        const repo = await detectRepo();
+        if (repo) {
+          const p = plannerResult.stageResult;
+          await dispatchComment({
+            repo, prNumber: session.becaria_pr_number, agent: "Planner",
+            body: `Plan: ${p?.summary || plannedTask}`,
+            becariaConfig: config.becaria
+          });
+        }
+      } catch { /* non-blocking */ }
+    }
   }
 
   const gitCtx = await prepareGitAutomation({ config, task, logger, session });
@@ -395,6 +412,7 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
 
     eventBase.iteration = i;
     const iterStart = Date.now();
+    const becariaEnabled = Boolean(config.becaria?.enabled) && gitCtx?.enabled;
     logger.setContext({ iteration: i, stage: "iteration" });
 
     emitProgress(
@@ -485,11 +503,26 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
       }
       if (sonarResult.stageResult) {
         stageResults.sonar = sonarResult.stageResult;
+        // BecarIA: dispatch sonar comment
+        if (becariaEnabled && session.becaria_pr_number) {
+          try {
+            const { dispatchComment } = await import("./becaria/dispatch.js");
+            const { detectRepo } = await import("./becaria/repo.js");
+            const repo = await detectRepo();
+            if (repo) {
+              const s = sonarResult.stageResult;
+              await dispatchComment({
+                repo, prNumber: session.becaria_pr_number, agent: "Sonar",
+                body: `SonarQube scan: ${s.summary || "completed"}`,
+                becariaConfig: config.becaria
+              });
+            }
+          } catch { /* non-blocking */ }
+        }
       }
     }
 
     // --- BecarIA Gateway: early PR or incremental push ---
-    const becariaEnabled = Boolean(config.becaria_gateway?.enabled) && gitCtx?.enabled;
     if (becariaEnabled) {
       try {
         const { dispatchComment } = await import("./becaria/dispatch.js");
@@ -511,9 +544,11 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
 
             // Post coder comment on new PR
             if (repo) {
+              const commitList = earlyPr.commits.map((c) => `- \`${c.hash.slice(0, 7)}\` ${c.message}`).join("\n");
               await dispatchComment({
                 repo, prNumber: earlyPr.prNumber, agent: "Coder",
-                body: `**Iteration ${i}** — Initial implementation.\n\nTask: ${task}`
+                body: `Iteración ${i} completada.\n\nCommits:\n${commitList}`,
+                becariaConfig: config.becaria
               });
             }
           }
@@ -526,9 +561,11 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
 
             if (repo) {
               const feedback = session.last_reviewer_feedback || "N/A";
+              const commitList = pushResult.commits.map((c) => `- \`${c.hash.slice(0, 7)}\` ${c.message}`).join("\n");
               await dispatchComment({
                 repo, prNumber: session.becaria_pr_number, agent: "Coder",
-                body: `**Iteration ${i}** — Addressing reviewer feedback:\n\n${feedback}`
+                body: `Issues corregidos:\n${feedback}\n\nCommits:\n${commitList}`,
+                becariaConfig: config.becaria
               });
             }
           }
@@ -628,6 +665,26 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
             }
           }
         }
+
+        // BecarIA: dispatch solomon comment
+        if (becariaEnabled && session.becaria_pr_number) {
+          try {
+            const { dispatchComment } = await import("./becaria/dispatch.js");
+            const { detectRepo } = await import("./becaria/repo.js");
+            const repo = await detectRepo();
+            if (repo) {
+              const alerts = rulesResult.alerts || [];
+              const alertMsg = alerts.length > 0
+                ? alerts.map(a => `- [${a.severity}] ${a.message}`).join("\n")
+                : "No anomalies detected";
+              await dispatchComment({
+                repo, prNumber: session.becaria_pr_number, agent: "Solomon",
+                body: `Supervisor check iteración ${i}: ${alertMsg}`,
+                becariaConfig: config.becaria
+              });
+            }
+          } catch { /* non-blocking */ }
+        }
       } catch (err) {
         logger.warn(`Solomon rules evaluation failed: ${err.message}`);
       }
@@ -640,19 +697,35 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
         const { detectRepo } = await import("./becaria/repo.js");
         const repo = await detectRepo();
         if (repo) {
+          const bc = config.becaria;
+          // Formal review (APPROVE / REQUEST_CHANGES)
           if (review.approved) {
             await dispatchReview({
               repo, prNumber: session.becaria_pr_number,
-              event: "APPROVE", body: review.summary || "Approved", agent: "Reviewer"
+              event: "APPROVE", body: review.summary || "Approved", agent: "Reviewer", becariaConfig: bc
             });
           } else {
+            const blocking = review.blocking_issues?.map((x) => `- ${x.id || "ISSUE"} [${x.severity || ""}] ${x.description}`).join("\n") || "";
             await dispatchReview({
               repo, prNumber: session.becaria_pr_number,
               event: "REQUEST_CHANGES",
-              body: review.blocking_issues?.map((x) => `- ${x.id || "ISSUE"}: ${x.description}`).join("\n") || review.summary || "Changes requested",
-              agent: "Reviewer"
+              body: blocking || review.summary || "Changes requested",
+              agent: "Reviewer", becariaConfig: bc
             });
           }
+
+          // Detailed comment
+          const status = review.approved ? "APPROVED" : "REQUEST_CHANGES";
+          const blocking = review.blocking_issues?.map((x) => `- ${x.id || "ISSUE"} [${x.severity || ""}] ${x.description}`).join("\n") || "";
+          const suggestions = review.non_blocking_suggestions?.map((s) => `- ${typeof s === "string" ? s : `${s.id || ""} ${s.description || s}`}`).join("\n") || "";
+          let reviewBody = `Review iteración ${i}: ${status}`;
+          if (blocking) reviewBody += `\n\n**Blocking:**\n${blocking}`;
+          if (suggestions) reviewBody += `\n\n**Suggestions:**\n${suggestions}`;
+          await dispatchComment({
+            repo, prNumber: session.becaria_pr_number, agent: "Reviewer",
+            body: reviewBody, becariaConfig: bc
+          });
+
           logger.info(`BecarIA: dispatched review for PR #${session.becaria_pr_number}`);
         }
       } catch (err) {
@@ -679,6 +752,22 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
         }
         if (testerResult.stageResult) {
           stageResults.tester = testerResult.stageResult;
+          // BecarIA: dispatch tester comment
+          if (becariaEnabled && session.becaria_pr_number) {
+            try {
+              const { dispatchComment } = await import("./becaria/dispatch.js");
+              const { detectRepo } = await import("./becaria/repo.js");
+              const repo = await detectRepo();
+              if (repo) {
+                const t = testerResult.stageResult;
+                await dispatchComment({
+                  repo, prNumber: session.becaria_pr_number, agent: "Tester",
+                  body: `Tests: ${t.summary || "completed"}`,
+                  becariaConfig: config.becaria
+                });
+              }
+            } catch { /* non-blocking */ }
+          }
         }
       }
 
@@ -695,6 +784,22 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
         }
         if (securityResult.stageResult) {
           stageResults.security = securityResult.stageResult;
+          // BecarIA: dispatch security comment
+          if (becariaEnabled && session.becaria_pr_number) {
+            try {
+              const { dispatchComment } = await import("./becaria/dispatch.js");
+              const { detectRepo } = await import("./becaria/repo.js");
+              const repo = await detectRepo();
+              if (repo) {
+                const s = securityResult.stageResult;
+                await dispatchComment({
+                  repo, prNumber: session.becaria_pr_number, agent: "Security",
+                  body: `Security scan: ${s.summary || "completed"}`,
+                  becariaConfig: config.becaria
+                });
+              }
+            } catch { /* non-blocking */ }
+          }
         }
       }
 

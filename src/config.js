@@ -99,7 +99,7 @@ const DEFAULTS = {
   },
   serena: { enabled: false },
   planning_game: { enabled: false, project_id: null, codeveloper: null },
-  becaria_gateway: { enabled: false },
+  becaria: { enabled: false, review_event: "becaria-review", comment_event: "becaria-comment", comment_prefix: true },
   git: { auto_commit: false, auto_push: false, auto_pr: false, auto_rebase: true, branch_prefix: "feat/" },
   output: { report_dir: "./.reviews", log_level: "info" },
   budget: {
@@ -288,11 +288,11 @@ export function applyRunOverrides(config, flags) {
   if (flags.noSonar || flags.sonar === false) out.sonarqube.enabled = false;
   out.serena = out.serena || { enabled: false };
   if (flags.enableSerena !== undefined) out.serena.enabled = Boolean(flags.enableSerena);
-  out.becaria_gateway = out.becaria_gateway || { enabled: false };
+  out.becaria = out.becaria || { enabled: false };
   if (flags.enableBecaria !== undefined) {
-    out.becaria_gateway.enabled = Boolean(flags.enableBecaria);
+    out.becaria.enabled = Boolean(flags.enableBecaria);
     // BecarIA requires git automation (commit + push + PR)
-    if (out.becaria_gateway.enabled) {
+    if (out.becaria.enabled) {
       out.git.auto_commit = true;
       out.git.auto_push = true;
       out.git.auto_pr = true;

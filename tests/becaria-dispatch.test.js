@@ -55,7 +55,27 @@ describe("becaria/dispatch", () => {
       expect(payload.event_type).toBe("becaria-comment");
       expect(payload.client_payload.pr_number).toBe(42);
       expect(payload.client_payload.agent).toBe("Coder");
-      expect(payload.client_payload.body).toBe("Fixed the bug");
+      expect(payload.client_payload.body).toBe("[Coder] Fixed the bug");
+    });
+
+    it("uses custom event type from becariaConfig", async () => {
+      await dispatchComment({
+        repo: "o/r", prNumber: 1, agent: "Coder", body: "test",
+        becariaConfig: { comment_event: "custom-comment" }
+      });
+      const opts = mockRunCommand.mock.calls[0][2];
+      const payload = JSON.parse(opts.input);
+      expect(payload.event_type).toBe("custom-comment");
+    });
+
+    it("omits prefix when comment_prefix is false", async () => {
+      await dispatchComment({
+        repo: "o/r", prNumber: 1, agent: "Coder", body: "no prefix",
+        becariaConfig: { comment_prefix: false }
+      });
+      const opts = mockRunCommand.mock.calls[0][2];
+      const payload = JSON.parse(opts.input);
+      expect(payload.client_payload.body).toBe("no prefix");
     });
 
     it("rejects invalid agent name", async () => {
@@ -140,6 +160,16 @@ describe("becaria/dispatch", () => {
       const opts = mockRunCommand.mock.calls[0][2];
       const payload = JSON.parse(opts.input);
       expect(payload.client_payload.event).toBe("REQUEST_CHANGES");
+    });
+
+    it("uses custom event type from becariaConfig", async () => {
+      await dispatchReview({
+        repo: "o/r", prNumber: 1, event: "APPROVE", body: "ok", agent: "Reviewer",
+        becariaConfig: { review_event: "custom-review" }
+      });
+      const opts = mockRunCommand.mock.calls[0][2];
+      const payload = JSON.parse(opts.input);
+      expect(payload.event_type).toBe("custom-review");
     });
 
     it("rejects invalid event type", async () => {

@@ -2,9 +2,11 @@
  * BecarIA dispatch client — sends repository_dispatch events via gh CLI
  * so the BecarIA Gateway can publish comments and reviews on PRs.
  *
- * Event types:
- *   - becaria-comment: agent posts a comment on the PR
- *   - becaria-review:  agent submits a formal review (APPROVE / REQUEST_CHANGES)
+ * Event types are configurable via becaria config:
+ *   - comment_event (default: "becaria-comment")
+ *   - review_event  (default: "becaria-review")
+ *
+ * Only active when becaria.enabled: true.
  */
 
 import { runCommand } from "../utils/process.js";
@@ -55,23 +57,30 @@ async function sendDispatch(repo, payload) {
 }
 
 /**
- * Send a becaria-comment event so the gateway posts a PR comment.
+ * Send a comment event so the gateway posts a PR comment.
+ * @param {object} opts
+ * @param {object} [opts.becariaConfig] - becaria config section (optional)
  */
-export async function dispatchComment({ repo, prNumber, agent, body }) {
+export async function dispatchComment({ repo, prNumber, agent, body, becariaConfig }) {
   validateCommon({ repo, prNumber });
   validateAgent(agent);
   if (!body) throw new Error("body is required (comment text)");
 
+  const prefix = becariaConfig?.comment_prefix !== false ? `[${agent}] ` : "";
+  const eventType = becariaConfig?.comment_event || "becaria-comment";
+
   await sendDispatch(repo, {
-    event_type: "becaria-comment",
-    client_payload: { pr_number: prNumber, agent, body }
+    event_type: eventType,
+    client_payload: { pr_number: prNumber, agent, body: `${prefix}${body}` }
   });
 }
 
 /**
- * Send a becaria-review event so the gateway submits a formal PR review.
+ * Send a review event so the gateway submits a formal PR review.
+ * @param {object} opts
+ * @param {object} [opts.becariaConfig] - becaria config section (optional)
  */
-export async function dispatchReview({ repo, prNumber, event, body, agent }) {
+export async function dispatchReview({ repo, prNumber, event, body, agent, becariaConfig }) {
   validateCommon({ repo, prNumber });
   validateAgent(agent);
   if (!VALID_REVIEW_EVENTS.includes(event)) {
@@ -81,8 +90,10 @@ export async function dispatchReview({ repo, prNumber, event, body, agent }) {
   }
   if (!body) throw new Error("body is required (review text)");
 
+  const eventType = becariaConfig?.review_event || "becaria-review";
+
   await sendDispatch(repo, {
-    event_type: "becaria-review",
+    event_type: eventType,
     client_payload: { pr_number: prNumber, event, body, agent }
   });
 }

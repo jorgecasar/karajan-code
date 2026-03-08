@@ -179,7 +179,7 @@ export async function initCommand({ logger, flags = {} }) {
   }
 
   // --- BecarIA Gateway scaffolding ---
-  if (config.becaria_gateway?.enabled || flags.scaffoldBecaria) {
+  if (config.becaria?.enabled || flags.scaffoldBecaria) {
     const projectDir = process.cwd();
     const workflowDir = path.join(projectDir, ".github", "workflows");
     await ensureDir(workflowDir);
