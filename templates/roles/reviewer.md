@@ -52,7 +52,7 @@ When rejecting:
   "result": {
     "approved": false,
     "blocking_issues": [
-      { "file": "src/foo.js", "line": 42, "severity": "critical", "description": "SQL injection vulnerability" }
+      { "id": "R-1", "file": "src/foo.js", "line": 42, "severity": "critical", "description": "SQL injection vulnerability", "suggested_fix": "Use parameterized queries instead of string concatenation" }
     ],
     "non_blocking_suggestions": [],
     "confidence": 0.9
