@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.13.2] - 2026-03-10
+
+### Fixed
+- **npm bin entries removed during publish**: npm 11.x rejected `bin` entries pointing directly to `src/`. Created proper wrapper scripts in `bin/kj` and `bin/karajan-mcp` that delegate to the source files
+
 ## [1.13.1] - 2026-03-10
 
 ### Fixed
@@ -296,7 +301,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI/CD**: GitHub Actions workflow with validation and PR annotations
 - **716+ unit tests** with Vitest
 
-[Unreleased]: https://github.com/manufosela/karajan-code/compare/v1.13.1...HEAD
+[Unreleased]: https://github.com/manufosela/karajan-code/compare/v1.13.2...HEAD
+[1.13.2]: https://github.com/manufosela/karajan-code/compare/v1.13.1...v1.13.2
 [1.13.1]: https://github.com/manufosela/karajan-code/compare/v1.13.0...v1.13.1
 [1.13.0]: https://github.com/manufosela/karajan-code/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/manufosela/karajan-code/compare/v1.11.1...v1.12.0
