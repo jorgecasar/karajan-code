@@ -3,7 +3,7 @@ import { CoderRole } from "../roles/coder-role.js";
 import { RefactorerRole } from "../roles/refactorer-role.js";
 import { SonarRole } from "../roles/sonar-role.js";
 import { addCheckpoint, markSessionStatus, saveSession, pauseSession } from "../session-store.js";
-import { generateDiff } from "../review/diff-generator.js";
+import { generateDiff, getUntrackedFiles } from "../review/diff-generator.js";
 import { evaluateTddPolicy } from "../review/tdd-policy.js";
 import { validateReviewResult } from "../review/schema.js";
 import { filterReviewScope, buildDeferredContext } from "../review/scope-filter.js";
@@ -198,7 +198,8 @@ export async function runRefactorerStage({ refactorerRole, config, logger, emitt
 export async function runTddCheckStage({ config, logger, emitter, eventBase, session, trackBudget, iteration, askQuestion }) {
   logger.setContext({ iteration, stage: "tdd" });
   const tddDiff = await generateDiff({ baseRef: session.session_start_sha });
-  const tddEval = evaluateTddPolicy(tddDiff, config.development);
+  const untrackedFiles = await getUntrackedFiles();
+  const tddEval = evaluateTddPolicy(tddDiff, config.development, untrackedFiles);
   await addCheckpoint(session, {
     stage: "tdd-policy",
     iteration,
@@ -227,34 +228,42 @@ export async function runTddCheckStage({ config, logger, emitter, eventBase, ses
     session.repeated_issue_count += 1;
     await saveSession(session);
     if (session.repeated_issue_count >= config.session.fail_fast_repeats) {
-      const question = `TDD policy has failed ${session.repeated_issue_count} times. The coder is not creating tests. How should we proceed? Issue: ${tddEval.reason}`;
-      if (askQuestion) {
-        const answer = await askQuestion(question, { iteration, stage: "tdd" });
-        if (answer) {
-          session.last_reviewer_feedback += `\nUser guidance: ${answer}`;
-          session.repeated_issue_count = 0;
-          await saveSession(session);
-          return { action: "continue" };
-        }
-      }
-      await pauseSession(session, {
-        question,
-        context: {
-          iteration,
-          stage: "tdd",
-          lastFeedback: tddEval.message,
-          repeatedCount: session.repeated_issue_count
-        }
-      });
       emitProgress(
         emitter,
-        makeEvent("question", { ...eventBase, stage: "tdd" }, {
-          status: "paused",
-          message: question,
-          detail: { question, sessionId: session.id }
+        makeEvent("solomon:escalate", { ...eventBase, stage: "tdd" }, {
+          message: `TDD sub-loop limit reached (${session.repeated_issue_count}/${config.session.fail_fast_repeats})`,
+          detail: { subloop: "tdd", retryCount: session.repeated_issue_count, reason: tddEval.reason }
         })
       );
-      return { action: "pause", result: { paused: true, sessionId: session.id, question, context: "tdd_fail_fast" } };
+
+      const solomonResult = await invokeSolomon({
+        config, logger, emitter, eventBase, stage: "tdd", askQuestion, session, iteration,
+        conflict: {
+          stage: "tdd",
+          task: session.task,
+          iterationCount: session.repeated_issue_count,
+          maxIterations: config.session.fail_fast_repeats,
+          reason: tddEval.reason,
+          sourceFiles: tddEval.sourceFiles,
+          testFiles: tddEval.testFiles,
+          history: [{ agent: "tdd-policy", feedback: tddEval.message }]
+        }
+      });
+
+      if (solomonResult.action === "pause") {
+        return { action: "pause", result: { paused: true, sessionId: session.id, question: solomonResult.question, context: "tdd_fail_fast" } };
+      }
+      if (solomonResult.action === "continue") {
+        if (solomonResult.humanGuidance) {
+          session.last_reviewer_feedback += `\nUser guidance: ${solomonResult.humanGuidance}`;
+        }
+        session.repeated_issue_count = 0;
+        await saveSession(session);
+        return { action: "continue" };
+      }
+      if (solomonResult.action === "subtask") {
+        return { action: "pause", result: { paused: true, sessionId: session.id, subtask: solomonResult.subtask, context: "tdd_subtask" } };
+      }
     }
     return { action: "continue" };
   }

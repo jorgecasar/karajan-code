@@ -33,6 +33,7 @@ vi.mock("../src/utils/events.js", () => ({
 }));
 
 vi.mock("../src/review/diff-generator.js", () => ({
+  getUntrackedFiles: vi.fn().mockResolvedValue([]),
   generateDiff: vi.fn().mockResolvedValue("diff content")
 }));
 
