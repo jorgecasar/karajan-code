@@ -35,6 +35,7 @@ vi.mock("../src/utils/events.js", () => ({
 }));
 
 vi.mock("../src/review/diff-generator.js", () => ({
+  getUntrackedFiles: vi.fn().mockResolvedValue([]),
   generateDiff: vi.fn().mockResolvedValue("diff content")
 }));
 
@@ -171,16 +172,22 @@ describe("iteration-stages", () => {
       expect(result.action).toBe("continue");
     });
 
-    it("returns pause when TDD fails repeatedly without askQuestion", async () => {
+    it("returns pause when TDD fails repeatedly and Solomon escalates to pause", async () => {
       const { evaluateTddPolicy } = await import("../src/review/tdd-policy.js");
       evaluateTddPolicy.mockReturnValue({ ok: false, reason: "no tests", message: "Missing", sourceFiles: ["a.js"], testFiles: [] });
 
-      const session = { id: "s1", session_start_sha: "abc", checkpoints: [], repeated_issue_count: 1 };
-      const config = { development: {}, session: { fail_fast_repeats: 2 } };
+      const { invokeSolomon } = await import("../src/orchestrator/solomon-escalation.js");
+      invokeSolomon.mockResolvedValue({ action: "pause", question: "TDD stalled — needs human input" });
+
+      const session = { id: "s1", session_start_sha: "abc", checkpoints: [], repeated_issue_count: 1, task: "test task" };
+      const config = { development: {}, session: { fail_fast_repeats: 2 }, pipeline: { solomon: { enabled: true } } };
 
       const result = await runTddCheckStage({ config, logger, emitter, eventBase, session, trackBudget, iteration: 1, askQuestion: null });
       expect(result.action).toBe("pause");
       expect(result.result.paused).toBe(true);
+      expect(invokeSolomon).toHaveBeenCalledWith(expect.objectContaining({
+        conflict: expect.objectContaining({ stage: "tdd" })
+      }));
     });
   });
 
