@@ -37,8 +37,8 @@
     "README.md"
   ],
   "bin": {
-    "kj": "./bin/kj",
-    "karajan-mcp": "./bin/karajan-mcp"
+    "kj": "bin/kj.js",
+    "karajan-mcp": "bin/karajan-mcp.js"
   },
   "scripts": {
     "postinstall": "node scripts/postinstall.js",
