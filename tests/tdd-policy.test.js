@@ -44,4 +44,83 @@ describe("evaluateTddPolicy", () => {
     expect(out.ok).toBe(true);
     expect(out.reason).toBe("no_source_changes");
   });
+
+  describe("untracked files support", () => {
+    it("passes when source is only in diff but tests are untracked (new files)", () => {
+      const diff = [
+        "diff --git a/src/config.js b/src/config.js",
+        "index 111..222 100644",
+        "--- a/src/config.js",
+        "+++ b/src/config.js"
+      ].join("\n");
+
+      const untrackedFiles = [
+        "src/guards/policy-resolver.js",
+        "tests/guards/policy-resolver.test.js"
+      ];
+
+      const out = evaluateTddPolicy(diff, { require_test_changes: true }, untrackedFiles);
+      expect(out.ok).toBe(true);
+      expect(out.reason).toBe("tests_present");
+      expect(out.testFiles).toContain("tests/guards/policy-resolver.test.js");
+      expect(out.sourceFiles).toContain("src/guards/policy-resolver.js");
+    });
+
+    it("fails when untracked files are all source with no tests", () => {
+      const diff = "";
+      const untrackedFiles = [
+        "src/guards/policy-resolver.js",
+        "src/guards/utils.js"
+      ];
+
+      const out = evaluateTddPolicy(diff, { require_test_changes: true }, untrackedFiles);
+      expect(out.ok).toBe(false);
+      expect(out.reason).toBe("source_changes_without_tests");
+    });
+
+    it("passes when all untracked files are tests (add-tests scenario)", () => {
+      const diff = "";
+      const untrackedFiles = [
+        "tests/guards/policy-resolver.test.js",
+        "tests/guards/utils.test.js"
+      ];
+
+      const out = evaluateTddPolicy(diff, { require_test_changes: true }, untrackedFiles);
+      expect(out.ok).toBe(true);
+      expect(out.reason).toBe("no_source_changes");
+    });
+
+    it("merges diff files and untracked files without duplicates", () => {
+      const diff = [
+        "diff --git a/src/config.js b/src/config.js",
+        "index 111..222 100644",
+        "--- a/src/config.js",
+        "+++ b/src/config.js"
+      ].join("\n");
+
+      const untrackedFiles = [
+        "src/config.js",
+        "tests/config.test.js"
+      ];
+
+      const out = evaluateTddPolicy(diff, { require_test_changes: true }, untrackedFiles);
+      expect(out.ok).toBe(true);
+      expect(out.sourceFiles.filter(f => f === "src/config.js")).toHaveLength(1);
+    });
+
+    it("handles empty/undefined untrackedFiles gracefully", () => {
+      const diff = [
+        "diff --git a/src/auth.js b/src/auth.js",
+        "index 111..222 100644",
+        "--- a/src/auth.js",
+        "+++ b/src/auth.js"
+      ].join("\n");
+
+      const out1 = evaluateTddPolicy(diff, { require_test_changes: true }, []);
+      expect(out1.ok).toBe(false);
+
+      const out2 = evaluateTddPolicy(diff, { require_test_changes: true }, undefined);
+      expect(out2.ok).toBe(false);
+    });
+  });
 });

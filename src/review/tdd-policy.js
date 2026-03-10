@@ -19,13 +19,15 @@ function isSourceFile(file, extensions = []) {
   return extensions.some((ext) => file.endsWith(ext));
 }
 
-export function evaluateTddPolicy(diff, developmentConfig = {}) {
+export function evaluateTddPolicy(diff, developmentConfig = {}, untrackedFiles = []) {
   const requireTestChanges = developmentConfig.require_test_changes !== false;
   const patterns = developmentConfig.test_file_patterns || ["/tests/", "/__tests__/", ".test.", ".spec."];
   const extensions =
     developmentConfig.source_file_extensions || [".js", ".jsx", ".ts", ".tsx", ".py", ".go", ".java", ".rb", ".php", ".cs"];
 
-  const files = extractChangedFiles(diff);
+  const diffFiles = extractChangedFiles(diff);
+  const extra = Array.isArray(untrackedFiles) ? untrackedFiles : [];
+  const files = [...new Set([...diffFiles, ...extra])];
   const sourceFiles = files.filter((f) => isSourceFile(f, extensions) && !isTestFile(f, patterns));
   const testFiles = files.filter((f) => isTestFile(f, patterns));
 

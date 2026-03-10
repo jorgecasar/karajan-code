@@ -49,6 +49,7 @@ vi.mock("../src/session-store.js", () => {
 
 vi.mock("../src/review/diff-generator.js", () => ({
   computeBaseRef: vi.fn().mockResolvedValue("abc123"),
+  getUntrackedFiles: vi.fn().mockResolvedValue([]),
   generateDiff: vi.fn().mockResolvedValue("diff content")
 }));
 
@@ -64,6 +65,10 @@ vi.mock("../src/review/tdd-policy.js", () => ({
     testFiles: ["a.test.js"],
     message: "OK"
   })
+}));
+
+vi.mock("../src/orchestrator/solomon-escalation.js", () => ({
+  invokeSolomon: vi.fn().mockResolvedValue({ action: "continue", humanGuidance: "Proceed" })
 }));
 
 vi.mock("../src/prompts/coder.js", () => ({
@@ -361,8 +366,9 @@ describe("orchestrator events", () => {
     expect(outputEvents[2].stage).toBe("reviewer");
   });
 
-  it("calls askQuestion on fail-fast and continues if answer provided", async () => {
+  it("escalates to Solomon on TDD fail-fast and continues if Solomon resolves", async () => {
     const { evaluateTddPolicy } = await import("../src/review/tdd-policy.js");
+    const { invokeSolomon } = await import("../src/orchestrator/solomon-escalation.js");
     let tddCallCount = 0;
     evaluateTddPolicy.mockImplementation(() => {
       tddCallCount += 1;
@@ -371,8 +377,9 @@ describe("orchestrator events", () => {
       }
       return { ok: true, reason: "pass", sourceFiles: ["a.js"], testFiles: ["a.test.js"], message: "OK" };
     });
+    invokeSolomon.mockResolvedValue({ action: "continue", humanGuidance: "Coder should create test files first" });
 
-    const askQuestion = vi.fn().mockResolvedValue("Skip tests for now");
+    const askQuestion = vi.fn();
 
     const config = {
       coder: "codex",
@@ -386,6 +393,7 @@ describe("orchestrator events", () => {
       git: { auto_commit: false, auto_push: false, auto_pr: false },
       session: { max_total_minutes: 120, fail_fast_repeats: 2 },
       reviewer_options: { retries: 0, fallback_reviewer: null },
+      pipeline: { solomon: { enabled: true } },
       output: { log_level: "info" }
     };
 
@@ -397,16 +405,19 @@ describe("orchestrator events", () => {
     const emitter = new EventEmitter();
     const result = await runFlow({ task: "test", config, logger, flags: {}, emitter, askQuestion });
 
-    expect(askQuestion).toHaveBeenCalledTimes(1);
-    expect(askQuestion.mock.calls[0][0]).toContain("TDD policy has failed");
+    expect(invokeSolomon).toHaveBeenCalledWith(expect.objectContaining({
+      conflict: expect.objectContaining({ stage: "tdd" })
+    }));
     expect(result.approved).toBe(true);
   });
 
-  it("falls back to pause when askQuestion returns null", async () => {
+  it("falls back to pause when Solomon cannot resolve TDD conflict", async () => {
     const { evaluateTddPolicy } = await import("../src/review/tdd-policy.js");
+    const { invokeSolomon } = await import("../src/orchestrator/solomon-escalation.js");
     evaluateTddPolicy.mockReturnValue({
       ok: false, reason: "no tests", sourceFiles: ["a.js"], testFiles: [], message: "No tests found"
     });
+    invokeSolomon.mockResolvedValue({ action: "pause", question: "TDD conflict unresolved — needs human input" });
 
     const askQuestion = vi.fn().mockResolvedValue(null);
 
@@ -422,6 +433,7 @@ describe("orchestrator events", () => {
       git: { auto_commit: false, auto_push: false, auto_pr: false },
       session: { max_total_minutes: 120, fail_fast_repeats: 2 },
       reviewer_options: { retries: 0, fallback_reviewer: null },
+      pipeline: { solomon: { enabled: true } },
       output: { log_level: "info" }
     };
 
@@ -433,7 +445,9 @@ describe("orchestrator events", () => {
     const emitter = new EventEmitter();
     const result = await runFlow({ task: "test", config, logger, flags: {}, emitter, askQuestion });
 
-    expect(askQuestion).toHaveBeenCalledTimes(1);
+    expect(invokeSolomon).toHaveBeenCalledWith(expect.objectContaining({
+      conflict: expect.objectContaining({ stage: "tdd" })
+    }));
     expect(result.paused).toBe(true);
   });
 
