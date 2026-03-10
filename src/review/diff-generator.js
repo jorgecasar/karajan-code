@@ -20,3 +20,9 @@ export async function generateDiff({ baseRef }) {
   }
   return result.stdout;
 }
+
+export async function getUntrackedFiles() {
+  const result = await runCommand("git", ["ls-files", "--others", "--exclude-standard"]);
+  if (result.exitCode !== 0) return [];
+  return result.stdout.trim().split("\n").filter(Boolean);
+}
