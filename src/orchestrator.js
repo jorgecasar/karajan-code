@@ -22,6 +22,7 @@ import {
   incrementalPush
 } from "./git/automation.js";
 import { resolveRoleMdPath, loadFirstExisting } from "./roles/base-role.js";
+import { applyPolicies } from "./guards/policy-resolver.js";
 import { resolveReviewProfile } from "./review/profiles.js";
 import { CoderRole } from "./roles/coder-role.js";
 import { invokeSolomon } from "./orchestrator/solomon-escalation.js";
@@ -47,6 +48,10 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
 
   // --- Dry-run: return summary without executing anything ---
   if (flags.dryRun) {
+    const dryRunPolicies = applyPolicies({
+      taskType: flags.taskType || config.taskType || null,
+      policies: config.policies,
+    });
     const projectDir = config.projectDir || process.cwd();
     const { rules: reviewRules } = await resolveReviewProfile({ mode: config.review_mode, projectDir });
     const coderRules = await loadFirstExisting(resolveRoleMdPath("coder", projectDir));
@@ -56,6 +61,7 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
     const summary = {
       dry_run: true,
       task,
+      policies: dryRunPolicies,
       roles: {
         planner: plannerRole,
         coder: coderRole,
@@ -274,6 +280,32 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
   if (flags.enableReviewer !== undefined) reviewerEnabled = Boolean(flags.enableReviewer);
   if (flags.enableTester !== undefined) testerEnabled = Boolean(flags.enableTester);
   if (flags.enableSecurity !== undefined) securityEnabled = Boolean(flags.enableSecurity);
+
+  // --- Policy resolver: gate stages by taskType ---
+  const resolvedPolicies = applyPolicies({
+    taskType: flags.taskType || config.taskType || null,
+    policies: config.policies,
+  });
+  session.resolved_policies = resolvedPolicies;
+
+  // Apply policy gates on shallow copies (never mutate the caller's config)
+  if (!resolvedPolicies.tdd) {
+    config = { ...config, development: { ...config.development, methodology: "standard", require_test_changes: false } };
+  }
+  if (!resolvedPolicies.sonar) {
+    config = { ...config, sonarqube: { ...config.sonarqube, enabled: false } };
+  }
+  if (!resolvedPolicies.reviewer) {
+    reviewerEnabled = false;
+  }
+
+  emitProgress(
+    emitter,
+    makeEvent("policies:resolved", eventBase, {
+      message: `Policies resolved for taskType="${resolvedPolicies.taskType}"`,
+      detail: resolvedPolicies
+    })
+  );
 
   // --- Researcher (pre-planning) ---
   let researchContext = null;
