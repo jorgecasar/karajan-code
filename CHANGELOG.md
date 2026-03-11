@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-03-11
+
+### Added
+- **Policy resolver**: new `src/guards/policy-resolver.js` module maps taskType (sw, infra, doc, add-tests, refactor) to pipeline policies (tdd, sonar, reviewer, testsRequired) with per-project config overrides
+- **Pipeline policy gating**: orchestrator applies resolved policies to gate TDD, SonarQube, and reviewer stages based on taskType, emits `policies:resolved` event
+- **Config immutability**: policy gates use shallow copies, never mutating the caller's config object
+
 ## [1.13.2] - 2026-03-10
 
 ### Fixed
