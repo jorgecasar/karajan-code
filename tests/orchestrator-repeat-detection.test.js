@@ -154,7 +154,7 @@ describe("orchestrator repeat detection", () => {
   it("stalls when SonarQube issues repeat consecutively", async () => {
     const { createAgent } = await import("../src/agents/index.js");
     const coderAgent = { runTask: vi.fn().mockResolvedValue({ ok: true, output: "" }) };
-    const reviewerAgent = { reviewTask: vi.fn().mockResolvedValue({ ok: true, output: "" }) };
+    const reviewerAgent = { runTask: vi.fn().mockResolvedValue({ ok: true, output: "" }), reviewTask: vi.fn().mockResolvedValue({ ok: true, output: "" }) };
     createAgent.mockImplementation((name) => (name === "codex" ? coderAgent : reviewerAgent));
 
     const { runSonarScan } = await import("../src/sonar/scanner.js");
@@ -207,7 +207,7 @@ describe("orchestrator repeat detection", () => {
   it("stalls when reviewer blocking issues repeat consecutively", async () => {
     const { createAgent } = await import("../src/agents/index.js");
     const coderAgent = { runTask: vi.fn().mockResolvedValue({ ok: true, output: "" }) };
-    const reviewerAgent = { reviewTask: vi.fn().mockResolvedValue({ ok: true, output: REVIEW_BLOCKING }) };
+    const reviewerAgent = { runTask: vi.fn().mockResolvedValue({ ok: true, output: "" }), reviewTask: vi.fn().mockResolvedValue({ ok: true, output: REVIEW_BLOCKING }) };
     createAgent.mockImplementation((name) => (name === "codex" ? coderAgent : reviewerAgent));
 
     const logger = {

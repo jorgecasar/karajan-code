@@ -44,7 +44,8 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
   let testerEnabled = Boolean(config.pipeline?.tester?.enabled);
   let securityEnabled = Boolean(config.pipeline?.security?.enabled);
   let reviewerEnabled = config.pipeline?.reviewer?.enabled !== false;
-  const triageEnabled = Boolean(config.pipeline?.triage?.enabled);
+  // Triage is always mandatory — it classifies taskType for policy resolution
+  const triageEnabled = true;
 
   // --- Dry-run: return summary without executing anything ---
   if (flags.dryRun) {
@@ -282,8 +283,9 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
   if (flags.enableSecurity !== undefined) securityEnabled = Boolean(flags.enableSecurity);
 
   // --- Policy resolver: gate stages by taskType ---
+  // Priority: explicit flag > config > triage classification > default (sw)
   const resolvedPolicies = applyPolicies({
-    taskType: flags.taskType || config.taskType || null,
+    taskType: flags.taskType || config.taskType || stageResults.triage?.taskType || null,
     policies: config.policies,
   });
   session.resolved_policies = resolvedPolicies;

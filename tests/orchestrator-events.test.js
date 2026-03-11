@@ -196,6 +196,8 @@ describe("orchestrator events", () => {
     expect(result.approved).toBe(true);
     expect(events).toEqual([
       "session:start",
+      "triage:start",
+      "triage:end",
       "policies:resolved",
       "iteration:start",
       "coder:start",
@@ -251,6 +253,7 @@ describe("orchestrator events", () => {
       runTask: vi.fn().mockResolvedValue({ ok: true, output: "" })
     };
     const reviewerAgent = {
+      runTask: vi.fn().mockResolvedValue({ ok: true, output: "" }),
       reviewTask: vi.fn().mockResolvedValue({ ok: true, output: REVIEW_OK })
     };
     createAgent.mockImplementation((name) => {
@@ -357,14 +360,15 @@ describe("orchestrator events", () => {
 
     await runFlow({ task: "test", config, logger, flags: {}, emitter });
 
-    const outputEvents = events.filter((e) => e.type === "agent:output");
-    expect(outputEvents.length).toBe(3);
-    expect(outputEvents[0].message).toBe("coder line 1");
-    expect(outputEvents[0].detail.agent).toBe("codex");
-    expect(outputEvents[0].stage).toBe("coder");
-    expect(outputEvents[2].message).toBe("reviewer line 1");
-    expect(outputEvents[2].detail.agent).toBe("claude");
-    expect(outputEvents[2].stage).toBe("reviewer");
+    const coderOutputEvents = events.filter((e) => e.type === "agent:output" && e.stage === "coder");
+    const reviewerOutputEvents = events.filter((e) => e.type === "agent:output" && e.stage === "reviewer");
+    expect(coderOutputEvents.length).toBe(2);
+    expect(coderOutputEvents[0].message).toBe("coder line 1");
+    expect(coderOutputEvents[0].detail.agent).toBe("codex");
+    expect(reviewerOutputEvents.length).toBe(1);
+    expect(reviewerOutputEvents[0].message).toBe("reviewer line 1");
+    expect(reviewerOutputEvents[0].detail.agent).toBe("claude");
+    expect(reviewerOutputEvents[0].stage).toBe("reviewer");
   });
 
   it("escalates to Solomon on TDD fail-fast and continues if Solomon resolves", async () => {
@@ -531,6 +535,8 @@ describe("orchestrator events", () => {
     expect(result.approved).toBe(true);
     expect(events).toEqual([
       "session:start",
+      "triage:start",
+      "triage:end",
       "policies:resolved",
       "planner:start",
       "planner:end",
