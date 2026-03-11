@@ -8,6 +8,7 @@ Return a single valid JSON object and nothing else:
 ```json
 {
   "level": "trivial|simple|medium|complex",
+  "taskType": "sw|infra|doc|add-tests|refactor",
   "roles": ["planner", "researcher", "refactorer", "reviewer", "tester", "security"],
   "reasoning": "brief practical justification",
   "shouldDecompose": false,
@@ -15,7 +16,14 @@ Return a single valid JSON object and nothing else:
 }
 ```
 
-## Classification guidance
+## Task type classification
+- `sw`: writing or modifying business logic, features, APIs, components, services.
+- `infra`: CI/CD, Docker, deploy scripts, build configuration, environment setup.
+- `doc`: documentation, README, CHANGELOG, comments-only changes.
+- `add-tests`: adding tests to existing code without changing functionality.
+- `refactor`: restructuring code without changing external behavior.
+
+## Complexity classification
 - `trivial`: tiny, low-risk, straightforward. Usually no extra roles.
 - `simple`: limited scope with low risk. Usually reviewer only.
 - `medium`: moderate scope/risk. Reviewer required; optional planner/researcher.
