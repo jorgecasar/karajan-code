@@ -97,6 +97,7 @@ const DEFAULTS = {
       disabled_rules: ["javascript:S1116", "javascript:S3776"]
     }
   },
+  policies: {},
   serena: { enabled: false },
   planning_game: { enabled: false, project_id: null, codeveloper: null },
   becaria: { enabled: false, review_event: "becaria-review", comment_event: "becaria-comment", comment_prefix: true },
@@ -285,6 +286,7 @@ export function applyRunOverrides(config, flags) {
     out.development.methodology = methodology;
     out.development.require_test_changes = methodology === "tdd";
   }
+  if (flags.taskType) out.taskType = String(flags.taskType);
   if (flags.noSonar || flags.sonar === false) out.sonarqube.enabled = false;
   out.serena = out.serena || { enabled: false };
   if (flags.enableSerena !== undefined) out.serena.enabled = Boolean(flags.enableSerena);

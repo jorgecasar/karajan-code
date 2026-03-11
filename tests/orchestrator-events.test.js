@@ -196,6 +196,7 @@ describe("orchestrator events", () => {
     expect(result.approved).toBe(true);
     expect(events).toEqual([
       "session:start",
+      "policies:resolved",
       "iteration:start",
       "coder:start",
       "coder:end",
@@ -530,6 +531,7 @@ describe("orchestrator events", () => {
     expect(result.approved).toBe(true);
     expect(events).toEqual([
       "session:start",
+      "policies:resolved",
       "planner:start",
       "planner:end",
       "iteration:start",
@@ -635,5 +637,72 @@ describe("orchestrator events", () => {
     expect(sessionEnd?.detail?.stages?.sonar?.issuesResolved).toBe(5);
     expect(sessionEnd?.detail?.git?.commits).toEqual([{ hash: "abc1234", message: "feat: auth hardening" }]);
     expect(sessionEnd?.detail?.git?.prUrl).toBe("https://github.com/org/repo/pull/9");
+  });
+
+  it("does not mutate caller config when policy gates disable TDD/Sonar (R-1)", async () => {
+    const emitter = new EventEmitter();
+
+    const config = {
+      coder: "codex",
+      reviewer: "claude",
+      review_mode: "standard",
+      max_iterations: 1,
+      review_rules: "./review-rules.md",
+      base_branch: "main",
+      taskType: "doc",
+      development: { methodology: "tdd", require_test_changes: true },
+      sonarqube: { enabled: true, host: "http://localhost:9000" },
+      git: { auto_commit: false, auto_push: false, auto_pr: false },
+      session: { max_total_minutes: 120, fail_fast_repeats: 2 },
+      reviewer_options: { retries: 0, fallback_reviewer: null },
+      output: { log_level: "info" }
+    };
+
+    const logger = {
+      debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(),
+      setContext: vi.fn(), resetContext: vi.fn()
+    };
+
+    await runFlow({ task: "update docs", config, logger, flags: {}, emitter });
+
+    // The caller's config must remain untouched after runFlow
+    expect(config.development.methodology).toBe("tdd");
+    expect(config.development.require_test_changes).toBe(true);
+    expect(config.sonarqube.enabled).toBe(true);
+  });
+
+  it("honors config.taskType when flags.taskType is absent (R-1)", async () => {
+    const emitter = new EventEmitter();
+    const events = [];
+    emitter.on("progress", (e) => events.push(e));
+
+    const config = {
+      coder: "codex",
+      reviewer: "claude",
+      review_mode: "standard",
+      max_iterations: 1,
+      review_rules: "./review-rules.md",
+      base_branch: "main",
+      taskType: "doc",
+      development: { methodology: "tdd", require_test_changes: true },
+      sonarqube: { enabled: true, host: "http://localhost:9000" },
+      git: { auto_commit: false, auto_push: false, auto_pr: false },
+      session: { max_total_minutes: 120, fail_fast_repeats: 2 },
+      reviewer_options: { retries: 0, fallback_reviewer: null },
+      output: { log_level: "info" }
+    };
+
+    const logger = {
+      debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(),
+      setContext: vi.fn(), resetContext: vi.fn()
+    };
+
+    await runFlow({ task: "update docs", config, logger, flags: {}, emitter });
+
+    const policyEvent = events.find((e) => e.type === "policies:resolved");
+    expect(policyEvent).toBeTruthy();
+    expect(policyEvent.detail.taskType).toBe("doc");
+    expect(policyEvent.detail.tdd).toBe(false);
+    expect(policyEvent.detail.sonar).toBe(false);
   });
 });

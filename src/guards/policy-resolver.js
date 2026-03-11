@@ -1,0 +1,37 @@
+export const VALID_TASK_TYPES = ["sw", "infra", "doc", "add-tests", "refactor"];
+
+export const DEFAULT_POLICIES = {
+  sw:        { tdd: true,  sonar: true,  reviewer: true, testsRequired: true  },
+  infra:     { tdd: false, sonar: false, reviewer: true, testsRequired: false },
+  doc:       { tdd: false, sonar: false, reviewer: true, testsRequired: false },
+  "add-tests": { tdd: false, sonar: true,  reviewer: true, testsRequired: true  },
+  refactor:  { tdd: true,  sonar: true,  reviewer: true, testsRequired: false },
+};
+
+const FALLBACK_TYPE = "sw";
+
+/**
+ * Resolve pipeline policies for a given taskType.
+ * Unknown / null / undefined taskType falls back to "sw" (conservative).
+ * configOverrides optionally merges over defaults per taskType.
+ */
+export function resolvePolicies(taskType, configOverrides) {
+  const resolvedType = VALID_TASK_TYPES.includes(taskType) ? taskType : FALLBACK_TYPE;
+  const base = { ...DEFAULT_POLICIES[resolvedType] };
+  const overrides = configOverrides?.[resolvedType];
+  if (overrides && typeof overrides === "object") {
+    Object.assign(base, overrides);
+  }
+  return base;
+}
+
+/**
+ * Resolve policies for a taskType and return a flat object with the resolved
+ * taskType plus all policy flags. This is the main entry point for the
+ * orchestrator to determine which pipeline stages to enable/disable.
+ */
+export function applyPolicies({ taskType, policies } = {}) {
+  const resolvedType = VALID_TASK_TYPES.includes(taskType) ? taskType : FALLBACK_TYPE;
+  const resolved = resolvePolicies(taskType, policies);
+  return { taskType: resolvedType, ...resolved };
+}
