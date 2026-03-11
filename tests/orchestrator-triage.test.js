@@ -151,12 +151,12 @@ describe("orchestrator triage pipeline", () => {
     },
     pipeline: {
       triage: { enabled: true },
-      planner: { enabled: true },
-      refactorer: { enabled: true },
-      researcher: { enabled: true },
-      tester: { enabled: true },
-      security: { enabled: true },
-      reviewer: { enabled: true }
+      planner: { enabled: false },
+      refactorer: { enabled: false },
+      researcher: { enabled: false },
+      tester: { enabled: false },
+      security: { enabled: false },
+      reviewer: { enabled: false }
     },
     review_mode: "standard",
     max_iterations: 1,

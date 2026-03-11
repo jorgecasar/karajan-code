@@ -45,7 +45,7 @@ vi.mock("../src/orchestrator/solomon-escalation.js", () => ({
 }));
 
 vi.mock("../src/orchestrator/pre-loop-stages.js", () => ({
-  runTriageStage: vi.fn(),
+  runTriageStage: vi.fn().mockResolvedValue({ roleOverrides: {}, stageResult: { ok: true } }),
   runResearcherStage: vi.fn(),
   runPlannerStage: vi.fn()
 }));
