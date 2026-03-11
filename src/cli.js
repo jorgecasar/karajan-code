@@ -87,6 +87,7 @@ program
   .option("--auto-pr")
   .option("--enable-becaria", "Enable BecarIA Gateway (early PR + dispatch comments/reviews)")
   .option("--branch-prefix <prefix>")
+  .option("--task-type <type>", "Explicit task type: sw, infra, doc, add-tests, refactor")
   .option("--methodology <name>")
   .option("--no-auto-rebase")
   .option("--no-sonar")
