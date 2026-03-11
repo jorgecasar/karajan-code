@@ -1,9 +1,11 @@
 import { BaseRole } from "./base-role.js";
 import { createAgent as defaultCreateAgent } from "../agents/index.js";
 import { buildTriagePrompt } from "../prompts/triage.js";
+import { VALID_TASK_TYPES } from "../guards/policy-resolver.js";
 
 const VALID_LEVELS = new Set(["trivial", "simple", "medium", "complex"]);
 const VALID_ROLES = new Set(["planner", "researcher", "refactorer", "reviewer", "tester", "security"]);
+const FALLBACK_TASK_TYPE = "sw";
 
 function resolveProvider(config) {
   return (
@@ -74,6 +76,7 @@ export class TriageRole extends BaseRole {
             level: "medium",
             roles: ["reviewer"],
             reasoning: "Unstructured output, using safe defaults.",
+            taskType: FALLBACK_TASK_TYPE,
             provider,
             raw: result.output
           },
@@ -87,11 +90,13 @@ export class TriageRole extends BaseRole {
       const reasoning = String(parsed.reasoning || "").trim() || "No reasoning provided.";
       const shouldDecompose = Boolean(parsed.shouldDecompose);
       const subtasks = normalizeSubtasks(parsed.subtasks);
+      const taskType = VALID_TASK_TYPES.includes(parsed.taskType) ? parsed.taskType : FALLBACK_TASK_TYPE;
 
       const triageResult = {
         level,
         roles,
         reasoning,
+        taskType,
         provider
       };
 
@@ -116,6 +121,7 @@ export class TriageRole extends BaseRole {
           level: "medium",
           roles: ["reviewer"],
           reasoning: "Failed to parse triage output, using safe defaults.",
+          taskType: FALLBACK_TASK_TYPE,
           provider,
           raw: result.output
         },
