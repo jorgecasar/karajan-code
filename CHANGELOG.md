@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-03-11
+
+### Added
+- **Triage taskType classification**: triage now classifies tasks as sw, infra, doc, add-tests, or refactor for policy-driven pipeline gating
+- **`--taskType` parameter**: explicit taskType override for `kj_run` CLI and MCP tool, bypasses triage classification
+- **Mandatory triage**: triage always runs to classify taskType; can activate roles but respects pipeline config for explicitly enabled roles
+- **Triage → policy integration**: taskType from triage feeds into policy-resolver (priority: flags > config > triage > default sw)
+
 ## [1.14.0] - 2026-03-11
 
 ### Added
