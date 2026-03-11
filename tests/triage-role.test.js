@@ -181,6 +181,148 @@ describe("TriageRole", () => {
     expect(call.prompt).toContain("decomposed");
   });
 
+  it("parses taskType from triage output (sw)", async () => {
+    mockRunTask.mockResolvedValue({
+      ok: true,
+      output: JSON.stringify({
+        level: "medium",
+        roles: ["reviewer", "tester"],
+        reasoning: "Business logic task.",
+        taskType: "sw"
+      }),
+      usage: { tokens_in: 100, tokens_out: 80, cost_usd: 0.001 }
+    });
+
+    const role = new TriageRole({ config, logger, createAgentFn: mockCreateAgent });
+    await role.init({});
+    const output = await role.run("Implement user registration");
+
+    expect(output.result.taskType).toBe("sw");
+  });
+
+  it("parses taskType 'infra' for CI/CD tasks", async () => {
+    mockRunTask.mockResolvedValue({
+      ok: true,
+      output: JSON.stringify({
+        level: "simple",
+        roles: ["reviewer"],
+        reasoning: "Infrastructure config.",
+        taskType: "infra"
+      }),
+      usage: { tokens_in: 100, tokens_out: 80, cost_usd: 0.001 }
+    });
+
+    const role = new TriageRole({ config, logger, createAgentFn: mockCreateAgent });
+    await role.init({});
+    const output = await role.run("Update Docker config");
+
+    expect(output.result.taskType).toBe("infra");
+  });
+
+  it("parses taskType 'doc' for documentation tasks", async () => {
+    mockRunTask.mockResolvedValue({
+      ok: true,
+      output: JSON.stringify({
+        level: "trivial",
+        roles: ["reviewer"],
+        reasoning: "Documentation only.",
+        taskType: "doc"
+      }),
+      usage: { tokens_in: 100, tokens_out: 80, cost_usd: 0.001 }
+    });
+
+    const role = new TriageRole({ config, logger, createAgentFn: mockCreateAgent });
+    await role.init({});
+    const output = await role.run("Update README");
+
+    expect(output.result.taskType).toBe("doc");
+  });
+
+  it("parses taskType 'add-tests' for testing tasks", async () => {
+    mockRunTask.mockResolvedValue({
+      ok: true,
+      output: JSON.stringify({
+        level: "medium",
+        roles: ["reviewer"],
+        reasoning: "Adding tests to legacy code.",
+        taskType: "add-tests"
+      }),
+      usage: { tokens_in: 100, tokens_out: 80, cost_usd: 0.001 }
+    });
+
+    const role = new TriageRole({ config, logger, createAgentFn: mockCreateAgent });
+    await role.init({});
+    const output = await role.run("Add tests for auth module");
+
+    expect(output.result.taskType).toBe("add-tests");
+  });
+
+  it("parses taskType 'refactor'", async () => {
+    mockRunTask.mockResolvedValue({
+      ok: true,
+      output: JSON.stringify({
+        level: "medium",
+        roles: ["reviewer", "refactorer"],
+        reasoning: "Pure refactor.",
+        taskType: "refactor"
+      }),
+      usage: { tokens_in: 100, tokens_out: 80, cost_usd: 0.001 }
+    });
+
+    const role = new TriageRole({ config, logger, createAgentFn: mockCreateAgent });
+    await role.init({});
+    const output = await role.run("Refactor config module");
+
+    expect(output.result.taskType).toBe("refactor");
+  });
+
+  it("defaults taskType to 'sw' when LLM returns invalid taskType", async () => {
+    mockRunTask.mockResolvedValue({
+      ok: true,
+      output: JSON.stringify({
+        level: "medium",
+        roles: ["reviewer"],
+        reasoning: "Some task.",
+        taskType: "invalid-type"
+      }),
+      usage: { tokens_in: 100, tokens_out: 80, cost_usd: 0.001 }
+    });
+
+    const role = new TriageRole({ config, logger, createAgentFn: mockCreateAgent });
+    await role.init({});
+    const output = await role.run("Some task");
+
+    expect(output.result.taskType).toBe("sw");
+  });
+
+  it("defaults taskType to 'sw' when LLM omits taskType", async () => {
+    const role = new TriageRole({ config, logger, createAgentFn: mockCreateAgent });
+    await role.init({});
+    const output = await role.run("Fix typo");
+
+    // Default mock has no taskType field
+    expect(output.result.taskType).toBe("sw");
+  });
+
+  it("defaults taskType to 'sw' in fallback (unparseable output)", async () => {
+    mockRunTask.mockResolvedValue({ ok: true, output: "not-json" });
+
+    const role = new TriageRole({ config, logger, createAgentFn: mockCreateAgent });
+    await role.init({});
+    const output = await role.run("Task");
+
+    expect(output.result.taskType).toBe("sw");
+  });
+
+  it("includes taskType in triage prompt schema", async () => {
+    const role = new TriageRole({ config, logger, createAgentFn: mockCreateAgent });
+    await role.init({});
+    await role.run("Some task");
+
+    const call = mockRunTask.mock.calls[0][0];
+    expect(call.prompt).toContain("taskType");
+  });
+
   it("emits role:start and role:end events", async () => {
     const events = [];
     emitter.on(ROLE_EVENTS.START, (e) => events.push({ type: "start", ...e }));
