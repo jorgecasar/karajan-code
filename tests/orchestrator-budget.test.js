@@ -112,6 +112,7 @@ describe("orchestrator budget integration", () => {
         };
       }
       return {
+        runTask: vi.fn().mockResolvedValue({ ok: true, output: "" }),
         reviewTask: vi.fn().mockResolvedValue({
           ok: true,
           output: REVIEW_APPROVED,
@@ -217,6 +218,7 @@ describe("orchestrator budget integration", () => {
         };
       }
       return {
+        runTask: vi.fn().mockResolvedValue({ ok: true, output: "" }),
         reviewTask: vi.fn().mockResolvedValue({
           ok: true,
           output: REVIEW_APPROVED

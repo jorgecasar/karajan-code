@@ -119,7 +119,7 @@ describe("kj_run smoke", () => {
   it("autostarts SonarQube and scans before review when sonar service is unavailable", async () => {
     const { createAgent } = await import("../src/agents/index.js");
     const coderAgent = { runTask: vi.fn().mockResolvedValue({ ok: true, output: "" }) };
-    const reviewerAgent = { reviewTask: vi.fn().mockResolvedValue({ ok: true, output: REVIEW_OK }) };
+    const reviewerAgent = { runTask: vi.fn().mockResolvedValue({ ok: true, output: "" }), reviewTask: vi.fn().mockResolvedValue({ ok: true, output: REVIEW_OK }) };
     createAgent.mockImplementation((name) => {
       if (name === "codex") return coderAgent;
       return reviewerAgent;
@@ -188,7 +188,7 @@ describe("kj_run smoke", () => {
   it("autostarts SonarQube and auto-authenticates when token is not configured", async () => {
     const { createAgent } = await import("../src/agents/index.js");
     const coderAgent = { runTask: vi.fn().mockResolvedValue({ ok: true, output: "" }) };
-    const reviewerAgent = { reviewTask: vi.fn().mockResolvedValue({ ok: true, output: REVIEW_OK }) };
+    const reviewerAgent = { runTask: vi.fn().mockResolvedValue({ ok: true, output: "" }), reviewTask: vi.fn().mockResolvedValue({ ok: true, output: REVIEW_OK }) };
     createAgent.mockImplementation((name) => {
       if (name === "codex") return coderAgent;
       return reviewerAgent;
@@ -266,7 +266,7 @@ describe("kj_run smoke", () => {
   it("runs configured coverage command before scan when enabled", async () => {
     const { createAgent } = await import("../src/agents/index.js");
     const coderAgent = { runTask: vi.fn().mockResolvedValue({ ok: true, output: "" }) };
-    const reviewerAgent = { reviewTask: vi.fn().mockResolvedValue({ ok: true, output: REVIEW_OK }) };
+    const reviewerAgent = { runTask: vi.fn().mockResolvedValue({ ok: true, output: "" }), reviewTask: vi.fn().mockResolvedValue({ ok: true, output: REVIEW_OK }) };
     createAgent.mockImplementation((name) => {
       if (name === "codex") return coderAgent;
       return reviewerAgent;

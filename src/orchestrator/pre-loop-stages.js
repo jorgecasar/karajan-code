@@ -56,12 +56,14 @@ export async function runTriageStage({ config, logger, emitter, eventBase, sessi
   const recommendedRoles = new Set(triageOutput.result?.roles || []);
   const roleOverrides = {};
   if (triageOutput.ok) {
-    roleOverrides.plannerEnabled = recommendedRoles.has("planner");
-    roleOverrides.researcherEnabled = recommendedRoles.has("researcher");
-    roleOverrides.refactorerEnabled = recommendedRoles.has("refactorer");
-    roleOverrides.reviewerEnabled = recommendedRoles.has("reviewer");
-    roleOverrides.testerEnabled = recommendedRoles.has("tester");
-    roleOverrides.securityEnabled = recommendedRoles.has("security");
+    // Triage can activate roles, but cannot deactivate roles explicitly enabled in pipeline config
+    const p = config.pipeline || {};
+    roleOverrides.plannerEnabled = recommendedRoles.has("planner") || Boolean(p.planner?.enabled);
+    roleOverrides.researcherEnabled = recommendedRoles.has("researcher") || Boolean(p.researcher?.enabled);
+    roleOverrides.refactorerEnabled = recommendedRoles.has("refactorer") || Boolean(p.refactorer?.enabled);
+    roleOverrides.reviewerEnabled = recommendedRoles.has("reviewer") || Boolean(p.reviewer?.enabled);
+    roleOverrides.testerEnabled = recommendedRoles.has("tester") || Boolean(p.tester?.enabled);
+    roleOverrides.securityEnabled = recommendedRoles.has("security") || Boolean(p.security?.enabled);
   }
 
   const shouldDecompose = triageOutput.result?.shouldDecompose || false;
@@ -72,6 +74,7 @@ export async function runTriageStage({ config, logger, emitter, eventBase, sessi
     level: triageOutput.result?.level || null,
     roles: Array.from(recommendedRoles),
     reasoning: triageOutput.result?.reasoning || null,
+    taskType: triageOutput.result?.taskType || "sw",
     shouldDecompose,
     subtasks
   };

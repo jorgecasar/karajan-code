@@ -164,6 +164,55 @@ describe("runTriageStage", () => {
     expect(result.roleOverrides.securityEnabled).toBe(true);
   });
 
+  it("includes taskType in stage result", async () => {
+    triageRunMock.mockResolvedValue({
+      ok: true,
+      result: {
+        level: "simple",
+        roles: ["reviewer"],
+        reasoning: "Infra config.",
+        taskType: "infra"
+      },
+      usage: { tokens_in: 100, tokens_out: 80 }
+    });
+
+    const result = await runTriageStage({
+      config, logger, emitter, eventBase, session,
+      coderRole: { provider: "codex", model: null },
+      trackBudget
+    });
+
+    expect(result.stageResult.taskType).toBe("infra");
+  });
+
+  it("defaults taskType to 'sw' when triage omits it", async () => {
+    // Default mock has no taskType
+    const result = await runTriageStage({
+      config, logger, emitter, eventBase, session,
+      coderRole: { provider: "codex", model: null },
+      trackBudget
+    });
+
+    expect(result.stageResult.taskType).toBe("sw");
+  });
+
+  it("defaults taskType to 'sw' when triage fails", async () => {
+    triageRunMock.mockResolvedValue({
+      ok: false,
+      result: { error: "Agent failed" },
+      summary: "Triage failed",
+      usage: { tokens_in: 50, tokens_out: 20 }
+    });
+
+    const result = await runTriageStage({
+      config, logger, emitter, eventBase, session,
+      coderRole: { provider: "codex", model: null },
+      trackBudget
+    });
+
+    expect(result.stageResult.taskType).toBe("sw");
+  });
+
   it("handles shouldDecompose in stage result", async () => {
     triageRunMock.mockResolvedValue({
       ok: true,
