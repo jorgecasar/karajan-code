@@ -565,6 +565,12 @@ export async function handleToolCall(name, args, server, extra) {
     if (!a.task) {
       return failPayload("Missing required field: task");
     }
+    if (a.taskType) {
+      const validTypes = ["sw", "infra", "doc", "add-tests", "refactor"];
+      if (!validTypes.includes(a.taskType)) {
+        return failPayload(`Invalid taskType "${a.taskType}". Valid values: ${validTypes.join(", ")}`);
+      }
+    }
     if (!isPreflightAcked()) {
       const { config } = await loadConfig();
       const { listAgents } = await import("../commands/agents.js");

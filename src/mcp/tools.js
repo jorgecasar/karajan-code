@@ -88,6 +88,7 @@ export const tools = [
         branchPrefix: { type: "string" },
         smartModels: { type: "boolean", description: "Enable/disable smart model selection based on triage complexity" },
         checkpointInterval: { type: "number", description: "Minutes between interactive checkpoints (default: 5). Set 0 to disable." },
+        taskType: { type: "string", enum: ["sw", "infra", "doc", "add-tests", "refactor"], description: "Explicit task type for policy resolution. Overrides triage classification." },
         noSonar: { type: "boolean" },
         kjHome: { type: "string" },
         sonarToken: { type: "string" },
