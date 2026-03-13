@@ -73,6 +73,7 @@ program
   .option("--enable-security")
   .option("--enable-triage")
   .option("--enable-discover")
+  .option("--enable-architect")
   .option("--enable-serena")
   .option("--mode <name>")
   .option("--max-iterations <n>")
