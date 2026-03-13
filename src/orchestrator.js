@@ -26,7 +26,7 @@ import { applyPolicies } from "./guards/policy-resolver.js";
 import { resolveReviewProfile } from "./review/profiles.js";
 import { CoderRole } from "./roles/coder-role.js";
 import { invokeSolomon } from "./orchestrator/solomon-escalation.js";
-import { runTriageStage, runResearcherStage, runPlannerStage, runDiscoverStage } from "./orchestrator/pre-loop-stages.js";
+import { runTriageStage, runResearcherStage, runArchitectStage, runPlannerStage, runDiscoverStage } from "./orchestrator/pre-loop-stages.js";
 import { runCoderStage, runRefactorerStage, runTddCheckStage, runSonarStage, runReviewerStage } from "./orchestrator/iteration-stages.js";
 import { runTesterStage, runSecurityStage } from "./orchestrator/post-loop-stages.js";
 import { waitForCooldown, MAX_STANDBY_RETRIES } from "./orchestrator/standby.js";
@@ -45,6 +45,7 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
   let securityEnabled = Boolean(config.pipeline?.security?.enabled);
   let reviewerEnabled = config.pipeline?.reviewer?.enabled !== false;
   let discoverEnabled = Boolean(config.pipeline?.discover?.enabled);
+  let architectEnabled = Boolean(config.pipeline?.architect?.enabled);
   // Triage is always mandatory — it classifies taskType for policy resolution
   const triageEnabled = true;
 
@@ -72,6 +73,7 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
       },
       pipeline: {
         discover_enabled: discoverEnabled,
+        architect_enabled: architectEnabled,
         triage_enabled: triageEnabled,
         planner_enabled: plannerEnabled,
         refactorer_enabled: refactorerEnabled,
@@ -226,6 +228,7 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
     const triageResult = await runTriageStage({ config, logger, emitter, eventBase, session, coderRole, trackBudget });
     if (triageResult.roleOverrides.plannerEnabled !== undefined) plannerEnabled = triageResult.roleOverrides.plannerEnabled;
     if (triageResult.roleOverrides.researcherEnabled !== undefined) researcherEnabled = triageResult.roleOverrides.researcherEnabled;
+    if (triageResult.roleOverrides.architectEnabled !== undefined) architectEnabled = triageResult.roleOverrides.architectEnabled;
     if (triageResult.roleOverrides.refactorerEnabled !== undefined) refactorerEnabled = triageResult.roleOverrides.refactorerEnabled;
     if (triageResult.roleOverrides.reviewerEnabled !== undefined) reviewerEnabled = triageResult.roleOverrides.reviewerEnabled;
     if (triageResult.roleOverrides.testerEnabled !== undefined) testerEnabled = triageResult.roleOverrides.testerEnabled;
@@ -286,6 +289,7 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
 
   if (flags.enablePlanner !== undefined) plannerEnabled = Boolean(flags.enablePlanner);
   if (flags.enableResearcher !== undefined) researcherEnabled = Boolean(flags.enableResearcher);
+  if (flags.enableArchitect !== undefined) architectEnabled = Boolean(flags.enableArchitect);
   if (flags.enableRefactorer !== undefined) refactorerEnabled = Boolean(flags.enableRefactorer);
   if (flags.enableReviewer !== undefined) reviewerEnabled = Boolean(flags.enableReviewer);
   if (flags.enableTester !== undefined) testerEnabled = Boolean(flags.enableTester);
@@ -326,11 +330,24 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
     stageResults.researcher = researcherResult.stageResult;
   }
 
+  // --- Architect (between researcher and planner) ---
+  let architectContext = null;
+  if (architectEnabled) {
+    const architectResult = await runArchitectStage({
+      config, logger, emitter, eventBase, session, coderRole, trackBudget,
+      researchContext,
+      discoverResult: stageResults.discover || null,
+      triageLevel: stageResults.triage?.level || null
+    });
+    architectContext = architectResult.architectContext;
+    stageResults.architect = architectResult.stageResult;
+  }
+
   // --- Planner ---
   let plannedTask = task;
   const triageDecomposition = stageResults.triage?.shouldDecompose ? stageResults.triage.subtasks : null;
   if (plannerEnabled) {
-    const plannerResult = await runPlannerStage({ config, logger, emitter, eventBase, session, plannerRole, researchContext, triageDecomposition, trackBudget });
+    const plannerResult = await runPlannerStage({ config, logger, emitter, eventBase, session, plannerRole, researchContext, architectContext, triageDecomposition, trackBudget });
     plannedTask = plannerResult.plannedTask;
     stageResults.planner = plannerResult.stageResult;
 

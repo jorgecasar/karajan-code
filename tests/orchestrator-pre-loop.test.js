@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const triageRunMock = vi.fn();
 const researcherRunMock = vi.fn();
 const discoverRunMock = vi.fn();
+const architectExecuteMock = vi.fn();
 
 vi.mock("../src/roles/triage-role.js", () => ({
   TriageRole: class {
@@ -31,17 +32,30 @@ vi.mock("../src/roles/discover-role.js", () => ({
   }
 }));
 
+vi.mock("../src/roles/architect-role.js", () => ({
+  ArchitectRole: class {
+    context = {};
+    async init() {}
+    async execute(input) {
+      return architectExecuteMock(input);
+    }
+  }
+}));
+
 vi.mock("../src/roles/planner-role.js", () => {
   const executeMock = vi.fn();
+  let lastContext = null;
+  class MockPlannerRole {
+    constructor() { this._context = {}; }
+    async init() {}
+    async execute(task) { return executeMock(task); }
+    set context(val) { this._context = val; lastContext = val; }
+    get context() { return this._context; }
+  }
   return {
-    PlannerRole: class {
-      context = {};
-      async init() {}
-      async execute(task) {
-        return executeMock(task);
-      }
-    },
-    __executeMock: executeMock
+    PlannerRole: MockPlannerRole,
+    __executeMock: executeMock,
+    __getLastContext: () => lastContext
   };
 });
 
@@ -73,7 +87,7 @@ describe("pre-loop-stages", () => {
   const coderRole = { provider: "codex", model: "codex-mini" };
   const trackBudget = vi.fn();
 
-  let runTriageStage, runResearcherStage, runPlannerStage, runDiscoverStage;
+  let runTriageStage, runResearcherStage, runPlannerStage, runDiscoverStage, runArchitectStage;
 
   beforeEach(async () => {
     vi.resetAllMocks();
@@ -93,8 +107,19 @@ describe("pre-loop-stages", () => {
       summary: "Discovery complete: task is ready",
       usage: { tokens_in: 200, tokens_out: 150 }
     });
+    architectExecuteMock.mockResolvedValue({
+      ok: true,
+      result: {
+        verdict: "approved",
+        architecture: { type: "layered", layers: ["api", "service"], patterns: [], dataModel: { entities: [] }, apiContracts: [], dependencies: [], tradeoffs: [] },
+        questions: [],
+        provider: "claude"
+      },
+      summary: "Architecture complete: layered, 2 layers (verdict: approved)",
+      usage: { tokens_in: 300, tokens_out: 250 }
+    });
 
-    ({ runTriageStage, runResearcherStage, runPlannerStage, runDiscoverStage } = await import("../src/orchestrator/pre-loop-stages.js"));
+    ({ runTriageStage, runResearcherStage, runPlannerStage, runDiscoverStage, runArchitectStage } = await import("../src/orchestrator/pre-loop-stages.js"));
   });
 
   describe("runTriageStage", () => {
@@ -215,6 +240,22 @@ describe("pre-loop-stages", () => {
       expect(result.plannedTask).toBe("simple task");
     });
 
+    it("passes architectContext to planner context", async () => {
+      const { __executeMock, __getLastContext } = await import("../src/roles/planner-role.js");
+      __executeMock.mockResolvedValue({ ok: true, result: { plan: "step1" } });
+
+      const session = { id: "s1", task: "build api", checkpoints: [] };
+      const plannerRole = { provider: "claude", model: "claude-sonnet" };
+      const architectContext = { verdict: "approved", architecture: { type: "layered" } };
+      await runPlannerStage({
+        config: {}, logger, emitter, eventBase, session,
+        plannerRole, researchContext: null, architectContext, trackBudget
+      });
+
+      const ctx = __getLastContext();
+      expect(ctx.architecture).toEqual(architectContext);
+    });
+
     it("tracks budget for planner", async () => {
       const { __executeMock } = await import("../src/roles/planner-role.js");
       __executeMock.mockResolvedValue({ ok: true, result: { plan: "step1" } });
@@ -224,6 +265,86 @@ describe("pre-loop-stages", () => {
       await runPlannerStage({ config: {}, logger, emitter, eventBase, session, plannerRole, researchContext: null, trackBudget });
 
       expect(trackBudget).toHaveBeenCalledWith(expect.objectContaining({ role: "planner", provider: "claude" }));
+    });
+  });
+
+  describe("runArchitectStage", () => {
+    it("returns architectContext when successful", async () => {
+      const session = { id: "s1", task: "build feature", checkpoints: [] };
+      const result = await runArchitectStage({ config: {}, logger, emitter, eventBase, session, coderRole, trackBudget });
+
+      expect(result.architectContext).toBeDefined();
+      expect(result.architectContext.verdict).toBe("approved");
+      expect(result.stageResult.ok).toBe(true);
+      expect(result.stageResult.verdict).toBe("approved");
+    });
+
+    it("returns null context when architect fails", async () => {
+      architectExecuteMock.mockResolvedValueOnce({
+        ok: false,
+        result: { error: "LLM timeout" },
+        summary: "Architect failed: LLM timeout",
+        usage: { tokens_in: 50, tokens_out: 0 }
+      });
+      const session = { id: "s1", task: "t", checkpoints: [] };
+      const result = await runArchitectStage({ config: {}, logger, emitter, eventBase, session, coderRole, trackBudget });
+
+      expect(result.architectContext).toBeNull();
+      expect(result.stageResult.ok).toBe(false);
+    });
+
+    it("tracks budget for architect", async () => {
+      const session = { id: "s1", task: "t", checkpoints: [] };
+      await runArchitectStage({ config: {}, logger, emitter, eventBase, session, coderRole, trackBudget });
+
+      expect(trackBudget).toHaveBeenCalledWith(expect.objectContaining({ role: "architect" }));
+    });
+
+    it("uses architect provider from config", async () => {
+      const config = { roles: { architect: { provider: "gemini", model: "gemini-pro" } } };
+      const session = { id: "s1", task: "t", checkpoints: [] };
+      await runArchitectStage({ config, logger, emitter, eventBase, session, coderRole, trackBudget });
+
+      expect(trackBudget).toHaveBeenCalledWith(expect.objectContaining({
+        role: "architect",
+        provider: "gemini"
+      }));
+    });
+
+    it("falls back to coder provider when no architect provider configured", async () => {
+      const session = { id: "s1", task: "t", checkpoints: [] };
+      await runArchitectStage({ config: {}, logger, emitter, eventBase, session, coderRole, trackBudget });
+
+      expect(trackBudget).toHaveBeenCalledWith(expect.objectContaining({
+        role: "architect",
+        provider: "codex"
+      }));
+    });
+
+    it("passes researchContext and triageLevel to execute", async () => {
+      const session = { id: "s1", task: "design api", checkpoints: [] };
+      const researchContext = { files: ["a.js"] };
+      const triageLevel = "complex";
+      await runArchitectStage({ config: {}, logger, emitter, eventBase, session, coderRole, trackBudget, researchContext, triageLevel });
+
+      expect(architectExecuteMock).toHaveBeenCalledWith(expect.objectContaining({
+        task: "design api",
+        researchContext: { files: ["a.js"] },
+        triageLevel: "complex"
+      }));
+    });
+
+    it("does not throw when architect fails — stage is non-blocking", async () => {
+      architectExecuteMock.mockResolvedValueOnce({
+        ok: false,
+        result: { error: "timeout" },
+        summary: "Architect failed",
+        usage: {}
+      });
+      const session = { id: "s1", task: "t", checkpoints: [] };
+
+      const result = await runArchitectStage({ config: {}, logger, emitter, eventBase, session, coderRole, trackBudget });
+      expect(result.stageResult.ok).toBe(false);
     });
   });
 
