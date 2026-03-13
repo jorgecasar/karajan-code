@@ -71,6 +71,8 @@ export const tools = [
         enableSecurity: { type: "boolean" },
         enableTriage: { type: "boolean" },
         enableDiscover: { type: "boolean" },
+        enableArchitect: { type: "boolean" },
+        architectModel: { type: "string" },
         enableSerena: { type: "boolean" },
         enableBecaria: { type: "boolean", description: "Enable BecarIA Gateway (early PR + dispatch comments/reviews)" },
         reviewerFallback: { type: "string" },
