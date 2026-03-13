@@ -2,6 +2,7 @@ import { TriageRole } from "../roles/triage-role.js";
 import { ResearcherRole } from "../roles/researcher-role.js";
 import { PlannerRole } from "../roles/planner-role.js";
 import { DiscoverRole } from "../roles/discover-role.js";
+import { ArchitectRole } from "../roles/architect-role.js";
 import { createAgent } from "../agents/index.js";
 import { addCheckpoint, markSessionStatus } from "../session-store.js";
 import { emitProgress, makeEvent } from "../utils/events.js";
@@ -61,6 +62,7 @@ export async function runTriageStage({ config, logger, emitter, eventBase, sessi
     const p = config.pipeline || {};
     roleOverrides.plannerEnabled = recommendedRoles.has("planner") || Boolean(p.planner?.enabled);
     roleOverrides.researcherEnabled = recommendedRoles.has("researcher") || Boolean(p.researcher?.enabled);
+    roleOverrides.architectEnabled = recommendedRoles.has("architect") || Boolean(p.architect?.enabled);
     roleOverrides.refactorerEnabled = recommendedRoles.has("refactorer") || Boolean(p.refactorer?.enabled);
     roleOverrides.reviewerEnabled = recommendedRoles.has("reviewer") || Boolean(p.reviewer?.enabled);
     roleOverrides.testerEnabled = recommendedRoles.has("tester") || Boolean(p.tester?.enabled);
@@ -186,7 +188,79 @@ export async function runResearcherStage({ config, logger, emitter, eventBase, s
   return { researchContext, stageResult };
 }
 
-export async function runPlannerStage({ config, logger, emitter, eventBase, session, plannerRole, researchContext, triageDecomposition = null, trackBudget }) {
+export async function runArchitectStage({ config, logger, emitter, eventBase, session, coderRole, trackBudget, researchContext = null, discoverResult = null, triageLevel = null }) {
+  logger.setContext({ iteration: 0, stage: "architect" });
+  emitProgress(
+    emitter,
+    makeEvent("architect:start", { ...eventBase, stage: "architect" }, {
+      message: "Architect designing solution architecture"
+    })
+  );
+
+  const architectProvider = config?.roles?.architect?.provider || coderRole.provider;
+  const architectOnOutput = ({ stream, line }) => {
+    emitProgress(emitter, makeEvent("agent:output", { ...eventBase, stage: "architect" }, {
+      message: line,
+      detail: { stream, agent: architectProvider }
+    }));
+  };
+  const architectStall = createStallDetector({
+    onOutput: architectOnOutput, emitter, eventBase, stage: "architect", provider: architectProvider
+  });
+
+  const architect = new ArchitectRole({ config, logger, emitter, createAgentFn: createAgent });
+  await architect.init({ task: session.task, sessionId: session.id, iteration: 0 });
+  const architectStart = Date.now();
+  let architectOutput;
+  try {
+    architectOutput = await architect.execute({
+      task: session.task,
+      onOutput: architectStall.onOutput,
+      researchContext,
+      discoverResult,
+      triageLevel
+    });
+  } finally {
+    architectStall.stop();
+  }
+  trackBudget({
+    role: "architect",
+    provider: architectProvider,
+    model: config?.roles?.architect?.model || coderRole.model,
+    result: architectOutput,
+    duration_ms: Date.now() - architectStart
+  });
+
+  await addCheckpoint(session, {
+    stage: "architect",
+    iteration: 0,
+    ok: architectOutput.ok,
+    provider: architectProvider,
+    model: config?.roles?.architect?.model || coderRole.model || null
+  });
+
+  const stageResult = {
+    ok: architectOutput.ok,
+    verdict: architectOutput.result?.verdict || null,
+    architecture: architectOutput.result?.architecture || null,
+    questions: architectOutput.result?.questions || []
+  };
+
+  emitProgress(
+    emitter,
+    makeEvent("architect:end", { ...eventBase, stage: "architect" }, {
+      status: architectOutput.ok ? "ok" : "fail",
+      message: architectOutput.ok ? "Architecture completed" : `Architecture failed: ${architectOutput.summary}`,
+      detail: stageResult
+    })
+  );
+
+  const architectContext = architectOutput.ok ? architectOutput.result : null;
+
+  return { architectContext, stageResult };
+}
+
+export async function runPlannerStage({ config, logger, emitter, eventBase, session, plannerRole, researchContext, architectContext = null, triageDecomposition = null, trackBudget }) {
   const task = session.task;
   logger.setContext({ iteration: 0, stage: "planner" });
   emitProgress(
@@ -208,7 +282,7 @@ export async function runPlannerStage({ config, logger, emitter, eventBase, sess
   });
 
   const planRole = new PlannerRole({ config, logger, emitter, createAgentFn: createAgent });
-  planRole.context = { task, research: researchContext, triageDecomposition };
+  planRole.context = { task, research: researchContext, architecture: architectContext, triageDecomposition };
   await planRole.init();
   const plannerStart = Date.now();
   let planResult;
