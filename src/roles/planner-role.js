@@ -21,7 +21,7 @@ function resolvePlannerRuntimeTimeoutMs(config) {
   return Math.round(minutes * 60 * 1000);
 }
 
-function buildPrompt({ task, instructions, research, triageDecomposition }) {
+function buildPrompt({ task, instructions, research, triageDecomposition, architectContext }) {
   const sections = [];
 
   if (instructions) {
@@ -41,6 +41,19 @@ function buildPrompt({ task, instructions, research, triageDecomposition }) {
     }
     sections.push("");
     sections.push("Focus your plan on the FIRST subtask only. List the remaining subtasks as 'pending_subtasks' in your output for documentation.");
+    sections.push("");
+  }
+
+  if (architectContext) {
+    const arch = architectContext.architecture || {};
+    sections.push("## Architecture context");
+    if (arch.type) sections.push(`Type: ${arch.type}`);
+    if (arch.layers?.length) sections.push(`Layers: ${arch.layers.join(", ")}`);
+    if (arch.patterns?.length) sections.push(`Patterns: ${arch.patterns.join(", ")}`);
+    if (arch.dataModel?.entities?.length) sections.push(`Data model entities: ${arch.dataModel.entities.join(", ")}`);
+    if (arch.apiContracts?.length) sections.push(`API contracts: ${arch.apiContracts.join(", ")}`);
+    if (arch.tradeoffs?.length) sections.push(`Tradeoffs: ${arch.tradeoffs.join(", ")}`);
+    if (architectContext.summary) sections.push(`Summary: ${architectContext.summary}`);
     sections.push("");
   }
 
@@ -83,10 +96,11 @@ export class PlannerRole extends BaseRole {
     const taskStr = task || this.context?.task || "";
     const research = this.context?.research || null;
     const triageDecomposition = this.context?.triageDecomposition || null;
+    const architectContext = this.context?.architecture || null;
     const provider = resolveProvider(this.config);
 
     const agent = this._createAgent(provider, this.config, this.logger);
-    const prompt = buildPrompt({ task: taskStr, instructions: this.instructions, research, triageDecomposition });
+    const prompt = buildPrompt({ task: taskStr, instructions: this.instructions, research, triageDecomposition, architectContext });
 
     const runArgs = { prompt, role: "planner" };
     if (onOutput) runArgs.onOutput = onOutput;
