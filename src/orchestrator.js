@@ -337,7 +337,8 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
       config, logger, emitter, eventBase, session, coderRole, trackBudget,
       researchContext,
       discoverResult: stageResults.discover || null,
-      triageLevel: stageResults.triage?.level || null
+      triageLevel: stageResults.triage?.level || null,
+      askQuestion
     });
     architectContext = architectResult.architectContext;
     stageResults.architect = architectResult.stageResult;
