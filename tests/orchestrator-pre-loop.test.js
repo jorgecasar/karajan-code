@@ -381,6 +381,118 @@ describe("pre-loop-stages", () => {
     });
   });
 
+  describe("runArchitectStage needs_clarification", () => {
+    it("pauses and re-runs architect when needs_clarification and askQuestion available", async () => {
+      const clarificationOutput = {
+        ok: true,
+        result: {
+          verdict: "needs_clarification",
+          architecture: { type: "layered", layers: ["api"], patterns: [], dataModel: { entities: [] }, apiContracts: [], dependencies: [], tradeoffs: [] },
+          questions: ["What database should we use?", "Should we use REST or GraphQL?"],
+          provider: "claude"
+        },
+        summary: "Architecture needs clarification",
+        usage: { tokens_in: 300, tokens_out: 250 }
+      };
+      const approvedOutput = {
+        ok: true,
+        result: {
+          verdict: "approved",
+          architecture: { type: "layered", layers: ["api", "db"], patterns: [], dataModel: { entities: [] }, apiContracts: [], dependencies: [], tradeoffs: [] },
+          questions: [],
+          provider: "claude"
+        },
+        summary: "Architecture approved after clarification",
+        usage: { tokens_in: 400, tokens_out: 300 }
+      };
+
+      architectExecuteMock
+        .mockResolvedValueOnce(clarificationOutput)
+        .mockResolvedValueOnce(approvedOutput);
+
+      const askQuestion = vi.fn().mockResolvedValue("Use PostgreSQL and REST");
+      const session = { id: "s1", task: "build api", checkpoints: [] };
+
+      const result = await runArchitectStage({
+        config: {}, logger, emitter, eventBase, session, coderRole, trackBudget, askQuestion
+      });
+
+      // askQuestion should have been called with the formatted questions
+      expect(askQuestion).toHaveBeenCalledTimes(1);
+      const questionArg = askQuestion.mock.calls[0][0];
+      expect(questionArg).toContain("What database should we use?");
+      expect(questionArg).toContain("Should we use REST or GraphQL?");
+
+      // Architect should have been called twice (original + with answers)
+      expect(architectExecuteMock).toHaveBeenCalledTimes(2);
+      const secondCall = architectExecuteMock.mock.calls[1][0];
+      expect(secondCall.humanAnswers).toBe("Use PostgreSQL and REST");
+
+      // Final result should be the approved output
+      expect(result.architectContext.verdict).toBe("approved");
+      expect(result.stageResult.verdict).toBe("approved");
+    });
+
+    it("emits warning and continues with best-effort when askQuestion not available", async () => {
+      const clarificationOutput = {
+        ok: true,
+        result: {
+          verdict: "needs_clarification",
+          architecture: { type: "layered", layers: ["api"], patterns: [], dataModel: { entities: [] }, apiContracts: [], dependencies: [], tradeoffs: [] },
+          questions: ["What database should we use?"],
+          provider: "claude"
+        },
+        summary: "Architecture needs clarification",
+        usage: { tokens_in: 300, tokens_out: 250 }
+      };
+
+      architectExecuteMock.mockResolvedValueOnce(clarificationOutput);
+      const session = { id: "s1", task: "build api", checkpoints: [] };
+
+      const result = await runArchitectStage({
+        config: {}, logger, emitter, eventBase, session, coderRole, trackBudget
+        // no askQuestion
+      });
+
+      // Should warn and continue with current output
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("needs_clarification"));
+      // Should NOT re-run architect
+      expect(architectExecuteMock).toHaveBeenCalledTimes(1);
+      // Should still return the best-effort context
+      expect(result.architectContext.verdict).toBe("needs_clarification");
+      expect(result.stageResult.verdict).toBe("needs_clarification");
+    });
+
+    it("continues with best-effort when askQuestion returns null", async () => {
+      const clarificationOutput = {
+        ok: true,
+        result: {
+          verdict: "needs_clarification",
+          architecture: { type: "layered", layers: ["api"], patterns: [], dataModel: { entities: [] }, apiContracts: [], dependencies: [], tradeoffs: [] },
+          questions: ["What database?"],
+          provider: "claude"
+        },
+        summary: "Needs clarification",
+        usage: { tokens_in: 300, tokens_out: 250 }
+      };
+
+      architectExecuteMock.mockResolvedValueOnce(clarificationOutput);
+      const askQuestion = vi.fn().mockResolvedValue(null);
+      const session = { id: "s1", task: "build api", checkpoints: [] };
+
+      const result = await runArchitectStage({
+        config: {}, logger, emitter, eventBase, session, coderRole, trackBudget, askQuestion
+      });
+
+      // askQuestion was called but returned null
+      expect(askQuestion).toHaveBeenCalledTimes(1);
+      // Should NOT re-run architect
+      expect(architectExecuteMock).toHaveBeenCalledTimes(1);
+      // Continue with best-effort
+      expect(result.architectContext.verdict).toBe("needs_clarification");
+    });
+  });
+
   describe("runDiscoverStage", () => {
     it("returns stageResult with verdict and gaps when discovery succeeds", async () => {
       const session = { id: "s1", task: "build feature", checkpoints: [] };
