@@ -334,6 +334,17 @@ describe("pre-loop-stages", () => {
       }));
     });
 
+    it("passes discoverResult to execute when provided", async () => {
+      const session = { id: "s1", task: "build api", checkpoints: [] };
+      const discoverResult = { ok: true, verdict: "ready", gaps: [], mode: "gaps" };
+      await runArchitectStage({ config: {}, logger, emitter, eventBase, session, coderRole, trackBudget, discoverResult });
+
+      expect(architectExecuteMock).toHaveBeenCalledWith(expect.objectContaining({
+        task: "build api",
+        discoverResult: { ok: true, verdict: "ready", gaps: [], mode: "gaps" }
+      }));
+    });
+
     it("does not throw when architect fails — stage is non-blocking", async () => {
       architectExecuteMock.mockResolvedValueOnce({
         ok: false,
@@ -345,6 +356,28 @@ describe("pre-loop-stages", () => {
 
       const result = await runArchitectStage({ config: {}, logger, emitter, eventBase, session, coderRole, trackBudget });
       expect(result.stageResult.ok).toBe(false);
+    });
+
+    it("receives discover stageResult when both discover and architect run (orchestrator wiring)", async () => {
+      const session = { id: "s1", task: "build api", checkpoints: [] };
+
+      // Step 1: run discover to get its stageResult (as orchestrator does)
+      const discoverOut = await runDiscoverStage({ config: {}, logger, emitter, eventBase, session, coderRole, trackBudget });
+
+      // Step 2: pass discover stageResult as discoverResult to architect (mirrors orchestrator.js line 339)
+      await runArchitectStage({
+        config: {}, logger, emitter, eventBase, session, coderRole, trackBudget,
+        discoverResult: discoverOut.stageResult
+      });
+
+      expect(architectExecuteMock).toHaveBeenCalledWith(expect.objectContaining({
+        discoverResult: expect.objectContaining({
+          ok: true,
+          verdict: "ready",
+          gaps: [],
+          mode: "gaps"
+        })
+      }));
     });
   });
 
