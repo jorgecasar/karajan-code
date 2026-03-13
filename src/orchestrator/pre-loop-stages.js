@@ -4,6 +4,7 @@ import { PlannerRole } from "../roles/planner-role.js";
 import { DiscoverRole } from "../roles/discover-role.js";
 import { ArchitectRole } from "../roles/architect-role.js";
 import { createAgent } from "../agents/index.js";
+import { createArchitectADRs } from "../planning-game/architect-adrs.js";
 import { addCheckpoint, markSessionStatus } from "../session-store.js";
 import { emitProgress, makeEvent } from "../utils/events.js";
 import { parsePlannerOutput } from "../prompts/planner.js";
@@ -310,6 +311,31 @@ export async function runArchitectStage({ config, logger, emitter, eventBase, se
   );
 
   const architectContext = architectOutput.ok ? architectOutput.result : null;
+
+  // Generate ADRs from architect tradeoffs when PG is linked
+  const tradeoffs = architectOutput.result?.architecture?.tradeoffs;
+  if (architectOutput.ok
+    && architectOutput.result?.verdict === "ready"
+    && tradeoffs?.length > 0
+    && session.pg_task_id
+    && session.pg_project_id) {
+    try {
+      const pgClient = await import("../planning-game/client.js");
+      const adrResult = await createArchitectADRs({
+        tradeoffs,
+        pgTaskId: session.pg_task_id,
+        pgProject: session.pg_project_id,
+        taskTitle: session.task,
+        mcpClient: pgClient
+      });
+      stageResult.adrs = adrResult;
+      if (adrResult.created > 0) {
+        logger.info(`Architect: created ${adrResult.created} ADR(s) in Planning Game`);
+      }
+    } catch (err) {
+      logger.warn(`Architect: failed to create ADRs: ${err.message}`);
+    }
+  }
 
   return { architectContext, stageResult };
 }
