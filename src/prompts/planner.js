@@ -49,7 +49,23 @@ export function parsePlannerOutput(output) {
   return { title, approach, steps };
 }
 
-export function buildPlannerPrompt({ task, context }) {
+function formatArchitectContext(architectContext) {
+  if (!architectContext) return null;
+  const arch = architectContext.architecture || {};
+  const lines = ["## Architecture Context"];
+
+  if (arch.type) lines.push(`**Type:** ${arch.type}`);
+  if (arch.layers?.length) lines.push(`**Layers:** ${arch.layers.join(", ")}`);
+  if (arch.patterns?.length) lines.push(`**Patterns:** ${arch.patterns.join(", ")}`);
+  if (arch.dataModel?.entities?.length) lines.push(`**Data model entities:** ${arch.dataModel.entities.join(", ")}`);
+  if (arch.apiContracts?.length) lines.push(`**API contracts:** ${arch.apiContracts.join(", ")}`);
+  if (arch.tradeoffs?.length) lines.push(`**Tradeoffs:** ${arch.tradeoffs.join(", ")}`);
+  if (architectContext.summary) lines.push(`**Summary:** ${architectContext.summary}`);
+
+  return lines.length > 1 ? lines.join("\n") : null;
+}
+
+export function buildPlannerPrompt({ task, context, architectContext }) {
   const parts = [
     "You are an expert software architect. Create an implementation plan for the following task.",
     "",
@@ -60,6 +76,11 @@ export function buildPlannerPrompt({ task, context }) {
 
   if (context) {
     parts.push("## Context", context, "");
+  }
+
+  const archSection = formatArchitectContext(architectContext);
+  if (archSection) {
+    parts.push(archSection, "");
   }
 
   parts.push(
