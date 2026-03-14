@@ -65,7 +65,7 @@ export async function planCommand({ task, config, logger, json, context }) {
     return;
   }
 
-  if (parsed && parsed.approach) {
+  if (parsed?.approach) {
     console.log(formatPlan(parsed));
   } else {
     console.log(result.output);

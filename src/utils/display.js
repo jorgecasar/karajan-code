@@ -87,308 +87,348 @@ export function printHeader({ task, config }) {
   if (pipeline.security?.enabled) activeRoles.push("Security");
   if (pipeline.solomon?.enabled) activeRoles.push(`Solomon (${config.roles?.solomon?.provider || "?"})`);
   if (activeRoles.length > 0) {
-    console.log(`${ANSI.bold}Pipeline:${ANSI.reset} ${activeRoles.join(` ${ANSI.dim}|${ANSI.reset} `)}`);
+    const separator = ` ${ANSI.dim}|${ANSI.reset} `;
+    console.log(`${ANSI.bold}Pipeline:${ANSI.reset} ${activeRoles.join(separator)}`);
   }
 
   console.log(BAR);
   console.log();
 }
 
+/* ── Helper: role start/end one-liners ───────────────────────── */
+
+function roleStart(icon, label, provider) {
+  console.log(`  \u251c\u2500 ${icon} ${label} (${provider || "?"}) running...`);
+}
+
+function roleEnd(status, label, elapsed) {
+  console.log(`  \u251c\u2500 ${status} ${label} completed  ${elapsed}`);
+}
+
+/* ── Helper: pass/fail stage result ─────────────────────────── */
+
+function passFailStage(detail, label, failDefault, elapsed) {
+  if (detail?.ok === false) {
+    const summary = detail?.summary || failDefault;
+    console.log(`  \u251c\u2500 ${ANSI.red}\u274c ${label}: ${summary}${ANSI.reset}  ${elapsed}`);
+  } else {
+    console.log(`  \u251c\u2500 ${ANSI.green}\u2705 ${label}: passed${ANSI.reset}  ${elapsed}`);
+  }
+}
+
+/* ── Helper: solomon ruling display ─────────────────────────── */
+
+const SOLOMON_RULING_HANDLERS = {
+  approve(detail, elapsed) {
+    const dismissedCount = detail?.dismissed?.length || 0;
+    const dismissedSuffix = dismissedCount > 0 ? ` (${dismissedCount} dismissed)` : "";
+    console.log(`  \u251c\u2500 ${ANSI.green}\u2696\ufe0f Solomon: APPROVE${dismissedSuffix}${ANSI.reset}  ${elapsed}`);
+  },
+  approve_with_conditions(detail, elapsed) {
+    const condCount = detail?.conditions?.length || 0;
+    console.log(`  \u251c\u2500 ${ANSI.yellow}\u2696\ufe0f Solomon: ${condCount} condition${condCount === 1 ? "" : "s"}${ANSI.reset}  ${elapsed}`);
+    if (detail?.conditions) {
+      for (const cond of detail.conditions) {
+        console.log(`  \u2502   ${ANSI.dim}${cond}${ANSI.reset}`);
+      }
+    }
+  },
+  escalate_human(detail, elapsed) {
+    const reason = detail?.escalate_reason || "unknown reason";
+    console.log(`  \u251c\u2500 ${ANSI.red}\u2696\ufe0f Solomon: ESCALATE \u2014 ${reason}${ANSI.reset}  ${elapsed}`);
+  },
+  create_subtask(detail, elapsed) {
+    const subtaskTitle = detail?.subtask?.title || "untitled";
+    console.log(`  \u251c\u2500 ${ANSI.magenta}\u2696\ufe0f Solomon: SUBTASK \u2014 ${subtaskTitle}${ANSI.reset}  ${elapsed}`);
+  }
+};
+
+function printSolomonRuling(detail, elapsed) {
+  const ruling = detail?.ruling || "unknown";
+  const handler = SOLOMON_RULING_HANDLERS[ruling];
+  if (handler) {
+    handler(detail, elapsed);
+  } else {
+    const rulingUpper = ruling.toUpperCase().replaceAll("_", " ");
+    console.log(`  \u251c\u2500 \u2696\ufe0f Solomon: ${rulingUpper}  ${elapsed}`);
+  }
+}
+
+/* ── Helper: budget color selection ─────────────────────────── */
+
+function budgetColor(max, pct, warn) {
+  if (max > 0 && pct >= 100) return ANSI.red;
+  if (max > 0 && pct >= warn) return ANSI.yellow;
+  return ANSI.green;
+}
+
+/* ── Helpers: session:end sub-sections ──────────────────────── */
+
+function printSessionStages(stages) {
+  if (!stages) return;
+  if (stages.researcher?.summary) {
+    console.log(`  ${ANSI.dim}\ud83d\udd2c Research: ${stages.researcher.summary}${ANSI.reset}`);
+  }
+  printSessionPlanner(stages.planner);
+  if (stages.tester?.summary) {
+    console.log(`  ${ANSI.dim}\ud83e\uddea Tester: ${stages.tester.summary}${ANSI.reset}`);
+  }
+  if (stages.security?.summary) {
+    console.log(`  ${ANSI.dim}\ud83d\udd12 Security: ${stages.security.summary}${ANSI.reset}`);
+  }
+  printSessionSonar(stages.sonar);
+}
+
+function printSessionPlanner(planner) {
+  if (!planner?.title && !planner?.approach && !planner?.completedSteps?.length) return;
+  const planParts = [];
+  if (planner.title) planParts.push(planner.title);
+  if (planner.approach) planParts.push(`approach: ${planner.approach}`);
+  console.log(`  ${ANSI.dim}\ud83d\uddfa Plan: ${planParts.join(" | ")}${ANSI.reset}`);
+  for (const step of planner.completedSteps || []) {
+    console.log(`  ${ANSI.dim}   \u2713 ${step}${ANSI.reset}`);
+  }
+}
+
+function printSessionSonar(sonar) {
+  if (!sonar) return;
+  const gateLabel = sonar.gateStatus === "OK" ? ANSI.green : ANSI.red;
+  console.log(`  ${ANSI.dim}\ud83d\udd0d Sonar: ${gateLabel}${sonar.gateStatus}${ANSI.reset}${ANSI.dim} (${sonar.openIssues ?? 0} issues)${ANSI.reset}`);
+  if (typeof sonar.issuesInitial === "number" || typeof sonar.issuesResolved === "number") {
+    const issuesInitial = sonar.issuesInitial ?? sonar.openIssues ?? 0;
+    const issuesFinal = sonar.issuesFinal ?? sonar.openIssues ?? 0;
+    const issuesResolved = sonar.issuesResolved ?? Math.max(issuesInitial - issuesFinal, 0);
+    console.log(`  ${ANSI.dim}\ud83d\udee0 Issues: ${issuesInitial} detected, ${issuesFinal} open, ${issuesResolved} resolved${ANSI.reset}`);
+  }
+}
+
+function printSessionGit(git) {
+  if (!git?.branch) return;
+  const parts = [`branch: ${git.branch}`];
+  if (git.committed) parts.push("committed");
+  if (git.pushed) parts.push("pushed");
+  if (git.pr || git.prUrl) parts.push(`PR: ${git.pr || git.prUrl}`);
+  console.log(`  ${ANSI.dim}\ud83d\udcce Git: ${parts.join(", ")}${ANSI.reset}`);
+  if (Array.isArray(git.commits) && git.commits.length > 0) {
+    console.log(`  ${ANSI.dim}\ud83e\uddfe Commits:${ANSI.reset}`);
+    for (const commit of git.commits) {
+      const shortHash = (commit.hash || "").slice(0, 7) || "unknown";
+      const message = commit.message || "";
+      console.log(`  ${ANSI.dim}   - ${shortHash} ${message}${ANSI.reset}`);
+    }
+  }
+}
+
+function printSessionBudget(budget) {
+  if (!budget) return;
+  console.log(`  ${ANSI.dim}\ud83d\udcb0 Total tokens: ${budget.total_tokens ?? 0}${ANSI.reset}`);
+  console.log(`  ${ANSI.dim}\ud83d\udcb0 Total cost: $${Number(budget.total_cost_usd || 0).toFixed(2)}${ANSI.reset}`);
+  for (const [role, metrics] of Object.entries(budget.breakdown_by_role || {})) {
+    console.log(
+      `  ${ANSI.dim}   - ${role}: ${metrics.total_tokens ?? 0} tokens, $${Number(metrics.total_cost_usd || 0).toFixed(2)}${ANSI.reset}`
+    );
+  }
+}
+
+/* ── Helper: pipeline tracker stage icon/color ──────────────── */
+
+const TRACKER_STATUS = {
+  done:    { icon: "\u2713", color: ANSI.green },
+  running: { icon: "\u25b6", color: ANSI.cyan },
+  failed:  { icon: "\u2717", color: ANSI.red }
+};
+const TRACKER_DEFAULT = { icon: "\u00b7", color: ANSI.dim };
+
+/* ── Event handler map ──────────────────────────────────────── */
+
+const EVENT_HANDLERS = {
+  "session:start": () => {},
+
+  "iteration:start": (event, icon, elapsed) => {
+    console.log(
+      `\n${ANSI.bold}${icon} Iteration ${event.detail?.iteration}/${event.detail?.maxIterations}${ANSI.reset}  ${elapsed}`
+    );
+  },
+
+  "planner:start": (event, icon) => {
+    roleStart(icon, "Planner", event.detail?.planner);
+  },
+
+  "planner:end": (_event, _icon, elapsed, status) => {
+    roleEnd(status, "Planner", elapsed);
+  },
+
+  "coder:start": (event, icon) => {
+    roleStart(icon, "Coder", event.detail?.coder);
+  },
+
+  "coder:end": (_event, _icon, elapsed, status) => {
+    roleEnd(status, "Coder", elapsed);
+  },
+
+  "refactorer:start": (event, icon) => {
+    roleStart(icon, "Refactorer", event.detail?.refactorer);
+  },
+
+  "refactorer:end": (_event, _icon, elapsed, status) => {
+    roleEnd(status, "Refactorer", elapsed);
+  },
+
+  "tdd:result": (event, icon) => {
+    const tdd = event.detail || {};
+    const label = tdd.ok ? `${ANSI.green}PASS${ANSI.reset}` : `${ANSI.red}FAIL${ANSI.reset}`;
+    const files = tdd.sourceFiles === undefined ? "" : ` (${tdd.sourceFiles} src, ${tdd.testFiles} test)`;
+    console.log(`  \u251c\u2500 ${icon} TDD policy: ${label}${files}`);
+  },
+
+  "researcher:start": (event, icon) => {
+    console.log(`  \u251c\u2500 ${icon} Researcher (${event.detail?.researcher || "?"}) investigating...`);
+  },
+
+  "researcher:end": (_event, _icon, elapsed, status) => {
+    roleEnd(status, "Researcher", elapsed);
+  },
+
+  "sonar:start": (_event, icon) => {
+    console.log(`  \u251c\u2500 ${icon} SonarQube scanning...`);
+  },
+
+  "sonar:end": (event, _icon, elapsed, status) => {
+    const gate = event.detail?.gateStatus || "?";
+    const gateColor = gate === "OK" ? ANSI.green : ANSI.red;
+    console.log(`  \u251c\u2500 ${status} Quality gate: ${gateColor}${gate}${ANSI.reset}  ${elapsed}`);
+  },
+
+  "reviewer:start": (event, icon) => {
+    console.log(`  \u251c\u2500 ${icon} Reviewer (${event.detail?.reviewer || "?"}) running...`);
+  },
+
+  "reviewer:end": (event, _icon, elapsed) => {
+    const review = event.detail || {};
+    if (review.approved) {
+      console.log(`  \u251c\u2500 ${ANSI.green}\u2705 Review: APPROVED${ANSI.reset}  ${elapsed}`);
+    } else {
+      const count = review.blockingCount || 0;
+      console.log(`  \u251c\u2500 ${ANSI.red}\u274c Review: REJECTED (${count} blocking)${ANSI.reset}`);
+      if (review.issues) {
+        for (const issue of review.issues) {
+          console.log(`  \u2502   ${ANSI.dim}${issue}${ANSI.reset}`);
+        }
+      }
+    }
+  },
+
+  "tester:start": (_event, icon) => {
+    console.log(`  \u251c\u2500 ${icon} Tester evaluating...`);
+  },
+
+  "tester:end": (event, _icon, elapsed) => {
+    passFailStage(event.detail, "Tester", "issues found", elapsed);
+  },
+
+  "security:start": (_event, icon) => {
+    console.log(`  \u251c\u2500 ${icon} Security auditing...`);
+  },
+
+  "security:end": (event, _icon, elapsed) => {
+    passFailStage(event.detail, "Security", "vulnerabilities found", elapsed);
+  },
+
+  "solomon:start": (event, icon) => {
+    console.log(`  \u251c\u2500 ${icon} Solomon arbitrating ${event.detail?.conflictStage || "?"} conflict...`);
+  },
+
+  "solomon:end": (event, _icon, elapsed) => {
+    printSolomonRuling(event.detail, elapsed);
+  },
+
+  "solomon:escalate": (event, icon) => {
+    const subloop = event.detail?.subloop || "?";
+    const retryCount = event.detail?.retryCount || 0;
+    const limit = event.detail?.limit || "?";
+    console.log(`  \u251c\u2500 ${icon} ${subloop} sub-loop limit reached (${retryCount}/${limit}), invoking Solomon...`);
+  },
+
+  "coder:standby": (event, icon) => {
+    const until = event.detail?.cooldownUntil || "?";
+    const attempt = event.detail?.retryCount || "?";
+    const maxRetries = event.detail?.maxRetries || "?";
+    console.log(`  \u251c\u2500 ${ANSI.yellow}${icon} Rate limited \u2014 standby until ${until} (attempt ${attempt}/${maxRetries})${ANSI.reset}`);
+  },
+
+  "coder:standby_heartbeat": (event, icon) => {
+    const remaining = event.detail?.remainingMs === undefined ? "?" : Math.round(event.detail.remainingMs / 1000);
+    console.log(`  \u251c\u2500 ${ANSI.yellow}${icon} Standby: ${remaining}s remaining${ANSI.reset}`);
+  },
+
+  "coder:standby_resume": (event, icon) => {
+    console.log(`  \u251c\u2500 ${ANSI.green}${icon} Cooldown expired \u2014 resuming with ${event.detail?.coder || event.detail?.provider || "?"}${ANSI.reset}`);
+  },
+
+  "iteration:end": (event, icon, elapsed) => {
+    console.log(`  \u2514\u2500 ${icon} Duration: ${formatElapsed(event.detail?.duration)}  ${elapsed}`);
+  },
+
+  "budget:update": (event, icon) => {
+    const total = Number(event.detail?.total_cost_usd || 0);
+    const max = Number(event.detail?.max_budget_usd);
+    const pct = Number(event.detail?.pct_used ?? 0);
+    const warn = Number(event.detail?.warn_threshold_pct ?? 80);
+    const color = budgetColor(max, pct, warn);
+    if (Number.isFinite(max) && max >= 0) {
+      console.log(`  \u251c\u2500 ${icon} Budget: ${color}$${total.toFixed(2)} / $${max.toFixed(2)} (${pct.toFixed(1)}%)${ANSI.reset}`);
+    }
+  },
+
+  "session:end": (event, icon, elapsed) => {
+    console.log();
+    const resultLabel = event.detail?.approved
+      ? `${ANSI.bold}${ANSI.green}APPROVED${ANSI.reset}`
+      : `${ANSI.bold}${ANSI.red}${event.detail?.reason || "FAILED"}${ANSI.reset}`;
+    console.log(`${icon} Result: ${resultLabel}  ${elapsed}`);
+    printSessionStages(event.detail?.stages);
+    printSessionGit(event.detail?.git);
+    printSessionBudget(event.detail?.budget);
+    console.log(`${ANSI.dim}Session: ${event.sessionId}${ANSI.reset}`);
+  },
+
+  question: (event, icon) => {
+    console.log();
+    console.log(`${ANSI.bold}${ANSI.yellow}${icon} Paused - question:${ANSI.reset}`);
+    console.log(`  ${event.detail?.question || event.message}`);
+    console.log(`${ANSI.dim}Resume with: kj resume ${event.sessionId} --answer "<response>"${ANSI.reset}`);
+  },
+
+  "pipeline:tracker": (event) => {
+    const trackerStages = event.detail?.stages || [];
+    console.log(`  ${ANSI.dim}\u250c Pipeline${ANSI.reset}`);
+    for (const stage of trackerStages) {
+      const { icon: stIcon, color: stColor } = TRACKER_STATUS[stage.status] || TRACKER_DEFAULT;
+      let suffix = "";
+      if (stage.summary) {
+        suffix = stage.status === "running" ? ` (${stage.summary})` : ` \u2192 ${stage.summary}`;
+      }
+      console.log(`  ${ANSI.dim}\u2502${ANSI.reset} ${stColor}${stIcon} ${stage.name}${suffix}${ANSI.reset}`);
+    }
+    console.log(`  ${ANSI.dim}\u2514${ANSI.reset}`);
+  },
+
+  "agent:output": (event) => {
+    console.log(`  \u2502 ${ANSI.dim}${event.message}${ANSI.reset}`);
+  }
+};
+
+/* ── Main entry point ───────────────────────────────────────── */
+
 export function printEvent(event) {
   const icon = ICONS[event.type] || "\u2022";
-  const elapsed = event.elapsed !== undefined ? `${ANSI.dim}[${formatElapsed(event.elapsed)}]${ANSI.reset}` : "";
+  const elapsed = event.elapsed === undefined ? "" : `${ANSI.dim}[${formatElapsed(event.elapsed)}]${ANSI.reset}`;
   const status = event.status ? STATUS_ICON[event.status] || "" : "";
 
-  switch (event.type) {
-    case "session:start":
-      break;
-
-    case "iteration:start":
-      console.log(
-        `\n${ANSI.bold}${icon} Iteration ${event.detail?.iteration}/${event.detail?.maxIterations}${ANSI.reset}  ${elapsed}`
-      );
-      break;
-
-    case "planner:start":
-      console.log(`  \u251c\u2500 ${icon} Planner (${event.detail?.planner || "?"}) running...`);
-      break;
-
-    case "planner:end":
-      console.log(`  \u251c\u2500 ${status} Planner completed  ${elapsed}`);
-      break;
-
-    case "coder:start":
-      console.log(`  \u251c\u2500 ${icon} Coder (${event.detail?.coder || "?"}) running...`);
-      break;
-
-    case "coder:end":
-      console.log(`  \u251c\u2500 ${status} Coder completed  ${elapsed}`);
-      break;
-
-    case "refactorer:start":
-      console.log(`  \u251c\u2500 ${icon} Refactorer (${event.detail?.refactorer || "?"}) running...`);
-      break;
-
-    case "refactorer:end":
-      console.log(`  \u251c\u2500 ${status} Refactorer completed  ${elapsed}`);
-      break;
-
-    case "tdd:result": {
-      const tdd = event.detail || {};
-      const label = tdd.ok ? `${ANSI.green}PASS${ANSI.reset}` : `${ANSI.red}FAIL${ANSI.reset}`;
-      const files = tdd.sourceFiles !== undefined ? ` (${tdd.sourceFiles} src, ${tdd.testFiles} test)` : "";
-      console.log(`  \u251c\u2500 ${icon} TDD policy: ${label}${files}`);
-      break;
-    }
-
-    case "researcher:start":
-      console.log(`  \u251c\u2500 ${icon} Researcher (${event.detail?.researcher || "?"}) investigating...`);
-      break;
-
-    case "researcher:end":
-      console.log(`  \u251c\u2500 ${status} Researcher completed  ${elapsed}`);
-      break;
-
-    case "sonar:start":
-      console.log(`  \u251c\u2500 ${icon} SonarQube scanning...`);
-      break;
-
-    case "sonar:end": {
-      const gate = event.detail?.gateStatus || "?";
-      const gateColor = gate === "OK" ? ANSI.green : ANSI.red;
-      console.log(`  \u251c\u2500 ${status} Quality gate: ${gateColor}${gate}${ANSI.reset}  ${elapsed}`);
-      break;
-    }
-
-    case "reviewer:start":
-      console.log(`  \u251c\u2500 ${icon} Reviewer (${event.detail?.reviewer || "?"}) running...`);
-      break;
-
-    case "reviewer:end": {
-      const review = event.detail || {};
-      if (review.approved) {
-        console.log(`  \u251c\u2500 ${ANSI.green}\u2705 Review: APPROVED${ANSI.reset}  ${elapsed}`);
-      } else {
-        const count = review.blockingCount || 0;
-        console.log(`  \u251c\u2500 ${ANSI.red}\u274c Review: REJECTED (${count} blocking)${ANSI.reset}`);
-        if (review.issues) {
-          for (const issue of review.issues) {
-            console.log(`  \u2502   ${ANSI.dim}${issue}${ANSI.reset}`);
-          }
-        }
-      }
-      break;
-    }
-
-    case "tester:start":
-      console.log(`  \u251c\u2500 ${icon} Tester evaluating...`);
-      break;
-
-    case "tester:end": {
-      const testerOk = event.detail?.ok !== false;
-      if (testerOk) {
-        console.log(`  \u251c\u2500 ${ANSI.green}\u2705 Tester: passed${ANSI.reset}  ${elapsed}`);
-      } else {
-        const testerSummary = event.detail?.summary || "issues found";
-        console.log(`  \u251c\u2500 ${ANSI.red}\u274c Tester: ${testerSummary}${ANSI.reset}  ${elapsed}`);
-      }
-      break;
-    }
-
-    case "security:start":
-      console.log(`  \u251c\u2500 ${icon} Security auditing...`);
-      break;
-
-    case "security:end": {
-      const secOk = event.detail?.ok !== false;
-      if (secOk) {
-        console.log(`  \u251c\u2500 ${ANSI.green}\u2705 Security: passed${ANSI.reset}  ${elapsed}`);
-      } else {
-        const secSummary = event.detail?.summary || "vulnerabilities found";
-        console.log(`  \u251c\u2500 ${ANSI.red}\u274c Security: ${secSummary}${ANSI.reset}  ${elapsed}`);
-      }
-      break;
-    }
-
-    case "solomon:start":
-      console.log(`  \u251c\u2500 ${icon} Solomon arbitrating ${event.detail?.conflictStage || "?"} conflict...`);
-      break;
-
-    case "solomon:end": {
-      const ruling = event.detail?.ruling || "unknown";
-      const rulingUpper = ruling.toUpperCase().replace(/_/g, " ");
-      if (ruling === "approve") {
-        const dismissedCount = event.detail?.dismissed?.length || 0;
-        console.log(`  \u251c\u2500 ${ANSI.green}\u2696\ufe0f Solomon: APPROVE${dismissedCount > 0 ? ` (${dismissedCount} dismissed)` : ""}${ANSI.reset}  ${elapsed}`);
-      } else if (ruling === "approve_with_conditions") {
-        const condCount = event.detail?.conditions?.length || 0;
-        console.log(`  \u251c\u2500 ${ANSI.yellow}\u2696\ufe0f Solomon: ${condCount} condition${condCount !== 1 ? "s" : ""}${ANSI.reset}  ${elapsed}`);
-        if (event.detail?.conditions) {
-          for (const cond of event.detail.conditions) {
-            console.log(`  \u2502   ${ANSI.dim}${cond}${ANSI.reset}`);
-          }
-        }
-      } else if (ruling === "escalate_human") {
-        const reason = event.detail?.escalate_reason || "unknown reason";
-        console.log(`  \u251c\u2500 ${ANSI.red}\u2696\ufe0f Solomon: ESCALATE \u2014 ${reason}${ANSI.reset}  ${elapsed}`);
-      } else if (ruling === "create_subtask") {
-        const subtaskTitle = event.detail?.subtask?.title || "untitled";
-        console.log(`  \u251c\u2500 ${ANSI.magenta}\u2696\ufe0f Solomon: SUBTASK \u2014 ${subtaskTitle}${ANSI.reset}  ${elapsed}`);
-      } else {
-        console.log(`  \u251c\u2500 \u2696\ufe0f Solomon: ${rulingUpper}  ${elapsed}`);
-      }
-      break;
-    }
-
-    case "solomon:escalate": {
-      const subloop = event.detail?.subloop || "?";
-      const retryCount = event.detail?.retryCount || 0;
-      const limit = event.detail?.limit || "?";
-      console.log(`  \u251c\u2500 ${icon} ${subloop} sub-loop limit reached (${retryCount}/${limit}), invoking Solomon...`);
-      break;
-    }
-
-    case "coder:standby": {
-      const until = event.detail?.cooldownUntil || "?";
-      const attempt = event.detail?.retryCount || "?";
-      const maxRetries = event.detail?.maxRetries || "?";
-      console.log(`  \u251c\u2500 ${ANSI.yellow}${icon} Rate limited \u2014 standby until ${until} (attempt ${attempt}/${maxRetries})${ANSI.reset}`);
-      break;
-    }
-
-    case "coder:standby_heartbeat": {
-      const remaining = event.detail?.remainingMs !== undefined ? Math.round(event.detail.remainingMs / 1000) : "?";
-      console.log(`  \u251c\u2500 ${ANSI.yellow}${icon} Standby: ${remaining}s remaining${ANSI.reset}`);
-      break;
-    }
-
-    case "coder:standby_resume":
-      console.log(`  \u251c\u2500 ${ANSI.green}${icon} Cooldown expired \u2014 resuming with ${event.detail?.coder || event.detail?.provider || "?"}${ANSI.reset}`);
-      break;
-
-    case "iteration:end":
-      console.log(`  \u2514\u2500 ${icon} Duration: ${formatElapsed(event.detail?.duration)}  ${elapsed}`);
-      break;
-
-    case "budget:update": {
-      const total = Number(event.detail?.total_cost_usd || 0);
-      const max = Number(event.detail?.max_budget_usd);
-      const pct = Number(event.detail?.pct_used ?? 0);
-      const warn = Number(event.detail?.warn_threshold_pct ?? 80);
-      const color = max > 0 && pct >= 100 ? ANSI.red : max > 0 && pct >= warn ? ANSI.yellow : ANSI.green;
-      if (Number.isFinite(max) && max >= 0) {
-        console.log(`  \u251c\u2500 ${icon} Budget: ${color}$${total.toFixed(2)} / $${max.toFixed(2)} (${pct.toFixed(1)}%)${ANSI.reset}`);
-      }
-      break;
-    }
-
-    case "session:end": {
-      console.log();
-      const resultLabel = event.detail?.approved
-        ? `${ANSI.bold}${ANSI.green}APPROVED${ANSI.reset}`
-        : `${ANSI.bold}${ANSI.red}${event.detail?.reason || "FAILED"}${ANSI.reset}`;
-      console.log(`${icon} Result: ${resultLabel}  ${elapsed}`);
-
-      const stages = event.detail?.stages;
-      if (stages) {
-        if (stages.researcher?.summary) {
-          console.log(`  ${ANSI.dim}\ud83d\udd2c Research: ${stages.researcher.summary}${ANSI.reset}`);
-        }
-        if (stages.planner?.title || stages.planner?.approach || stages.planner?.completedSteps?.length) {
-          const planParts = [];
-          if (stages.planner.title) planParts.push(stages.planner.title);
-          if (stages.planner.approach) planParts.push(`approach: ${stages.planner.approach}`);
-          console.log(`  ${ANSI.dim}\ud83d\uddfa Plan: ${planParts.join(" | ")}${ANSI.reset}`);
-          for (const step of stages.planner.completedSteps || []) {
-            console.log(`  ${ANSI.dim}   \u2713 ${step}${ANSI.reset}`);
-          }
-        }
-        if (stages.tester?.summary) {
-          console.log(`  ${ANSI.dim}\ud83e\uddea Tester: ${stages.tester.summary}${ANSI.reset}`);
-        }
-        if (stages.security?.summary) {
-          console.log(`  ${ANSI.dim}\ud83d\udd12 Security: ${stages.security.summary}${ANSI.reset}`);
-        }
-        if (stages.sonar) {
-          const gateLabel = stages.sonar.gateStatus === "OK" ? ANSI.green : ANSI.red;
-          console.log(`  ${ANSI.dim}\ud83d\udd0d Sonar: ${gateLabel}${stages.sonar.gateStatus}${ANSI.reset}${ANSI.dim} (${stages.sonar.openIssues ?? 0} issues)${ANSI.reset}`);
-          if (typeof stages.sonar.issuesInitial === "number" || typeof stages.sonar.issuesResolved === "number") {
-            const issuesInitial = stages.sonar.issuesInitial ?? stages.sonar.openIssues ?? 0;
-            const issuesFinal = stages.sonar.issuesFinal ?? stages.sonar.openIssues ?? 0;
-            const issuesResolved = stages.sonar.issuesResolved ?? Math.max(issuesInitial - issuesFinal, 0);
-            console.log(`  ${ANSI.dim}\ud83d\udee0 Issues: ${issuesInitial} detected, ${issuesFinal} open, ${issuesResolved} resolved${ANSI.reset}`);
-          }
-        }
-      }
-
-      const git = event.detail?.git;
-      if (git?.branch) {
-        const parts = [`branch: ${git.branch}`];
-        if (git.committed) parts.push("committed");
-        if (git.pushed) parts.push("pushed");
-        if (git.pr || git.prUrl) parts.push(`PR: ${git.pr || git.prUrl}`);
-        console.log(`  ${ANSI.dim}\ud83d\udcce Git: ${parts.join(", ")}${ANSI.reset}`);
-        if (Array.isArray(git.commits) && git.commits.length > 0) {
-          console.log(`  ${ANSI.dim}\ud83e\uddfe Commits:${ANSI.reset}`);
-          for (const commit of git.commits) {
-            const shortHash = (commit.hash || "").slice(0, 7) || "unknown";
-            const message = commit.message || "";
-            console.log(`  ${ANSI.dim}   - ${shortHash} ${message}${ANSI.reset}`);
-          }
-        }
-      }
-
-      const budget = event.detail?.budget;
-      if (budget) {
-        console.log(`  ${ANSI.dim}\ud83d\udcb0 Total tokens: ${budget.total_tokens ?? 0}${ANSI.reset}`);
-        console.log(`  ${ANSI.dim}\ud83d\udcb0 Total cost: $${Number(budget.total_cost_usd || 0).toFixed(2)}${ANSI.reset}`);
-        const byRole = budget.breakdown_by_role || {};
-        const roles = Object.entries(byRole);
-        if (roles.length > 0) {
-          for (const [role, metrics] of roles) {
-            console.log(
-              `  ${ANSI.dim}   - ${role}: ${metrics.total_tokens ?? 0} tokens, $${Number(metrics.total_cost_usd || 0).toFixed(2)}${ANSI.reset}`
-            );
-          }
-        }
-      }
-
-      console.log(`${ANSI.dim}Session: ${event.sessionId}${ANSI.reset}`);
-      break;
-    }
-
-    case "question":
-      console.log();
-      console.log(`${ANSI.bold}${ANSI.yellow}${icon} Paused - question:${ANSI.reset}`);
-      console.log(`  ${event.detail?.question || event.message}`);
-      console.log(`${ANSI.dim}Resume with: kj resume ${event.sessionId} --answer "<response>"${ANSI.reset}`);
-      break;
-
-    case "pipeline:tracker": {
-      const trackerStages = event.detail?.stages || [];
-      console.log(`  ${ANSI.dim}\u250c Pipeline${ANSI.reset}`);
-      for (const stage of trackerStages) {
-        let stIcon, stColor;
-        switch (stage.status) {
-          case "done": stIcon = "\u2713"; stColor = ANSI.green; break;
-          case "running": stIcon = "\u25b6"; stColor = ANSI.cyan; break;
-          case "failed": stIcon = "\u2717"; stColor = ANSI.red; break;
-          default: stIcon = "\u00b7"; stColor = ANSI.dim; break;
-        }
-        const suffix = stage.summary
-          ? stage.status === "running" ? ` (${stage.summary})` : ` \u2192 ${stage.summary}`
-          : "";
-        console.log(`  ${ANSI.dim}\u2502${ANSI.reset} ${stColor}${stIcon} ${stage.name}${suffix}${ANSI.reset}`);
-      }
-      console.log(`  ${ANSI.dim}\u2514${ANSI.reset}`);
-      break;
-    }
-
-    case "agent:output":
-      console.log(`  \u2502 ${ANSI.dim}${event.message}${ANSI.reset}`);
-      break;
-
-    default:
-      console.log(`  \u251c\u2500 ${icon} ${event.message || event.type}  ${elapsed}`);
+  const handler = EVENT_HANDLERS[event.type];
+  if (handler) {
+    handler(event, icon, elapsed, status);
+  } else {
+    console.log(`  \u251c\u2500 ${icon} ${event.message || event.type}  ${elapsed}`);
   }
 }

@@ -26,17 +26,16 @@ function buildPrompt({ task, instructions }) {
     "Investigate the codebase for the following task.",
     "Identify affected files, patterns, constraints, prior decisions, risks, and test coverage.",
     "Return a single valid JSON object with your findings and nothing else.",
-    'JSON schema: {"affected_files":[string],"patterns":[string],"constraints":[string],"prior_decisions":[string],"risks":[string],"test_coverage":string}'
+    'JSON schema: {"affected_files":[string],"patterns":[string],"constraints":[string],"prior_decisions":[string],"risks":[string],"test_coverage":string}',
+    `## Task\n${task}`
   );
-
-  sections.push(`## Task\n${task}`);
 
   return sections.join("\n\n");
 }
 
 function parseResearchOutput(raw) {
   const text = raw?.trim() || "";
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  const jsonMatch = /\{[\s\S]*\}/.exec(text);
   if (!jsonMatch) return null;
   return JSON.parse(jsonMatch[0]);
 }
@@ -46,9 +45,9 @@ function buildSummary(parsed) {
   const risks = parsed.risks?.length || 0;
   const patterns = parsed.patterns?.length || 0;
   const parts = [];
-  if (files) parts.push(`${files} file${files !== 1 ? "s" : ""}`);
-  if (risks) parts.push(`${risks} risk${risks !== 1 ? "s" : ""}`);
-  if (patterns) parts.push(`${patterns} pattern${patterns !== 1 ? "s" : ""}`);
+  if (files) parts.push(`${files} file${files === 1 ? "" : "s"}`);
+  if (risks) parts.push(`${risks} risk${risks === 1 ? "" : "s"}`);
+  if (patterns) parts.push(`${patterns} pattern${patterns === 1 ? "" : "s"}`);
   return parts.length
     ? `Research complete: ${parts.join(", ")} identified`
     : "Research complete";

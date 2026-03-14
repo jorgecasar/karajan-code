@@ -126,11 +126,11 @@ export async function buildRulesContext({ session, task, iteration }) {
           const addedDeps = (pkgDiff.stdout || "").split("\n")
             .filter(line => line.startsWith("+") && line.includes('"') && !line.startsWith("+++"))
             .map(line => {
-              const match = line.match(/"([^"]+)":\s*"/);
+              const match = /"([^"]+)":\s*"/.exec(line);
               return match ? match[1] : null;
             })
             .filter(Boolean)
-            .filter(name => !["name", "version", "description", "main", "scripts", "type", "license", "author"].includes(name));
+            .filter(name => !new Set(["name", "version", "description", "main", "scripts", "type", "license", "author"]).has(name));
           context.newDependencies = addedDeps;
         } catch { /* ignore */ }
       }

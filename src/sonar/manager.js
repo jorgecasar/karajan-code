@@ -148,7 +148,7 @@ export async function checkVmMaxMapCount(platform) {
     };
   }
 
-  const match = res.stdout.match(/=\s*(\d+)/);
+  const match = /=\s*(\d+)/.exec(res.stdout);
   const current = match ? Number(match[1]) : 0;
 
   if (current >= MIN_MAP_COUNT) {

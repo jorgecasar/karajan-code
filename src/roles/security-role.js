@@ -26,10 +26,9 @@ function buildPrompt({ task, diff, instructions }) {
     "You are a security auditor. Analyze the code changes for vulnerabilities.",
     "Check for: OWASP top 10, exposed secrets/API keys, hardcoded credentials, command injection, XSS, SQL injection, path traversal, prototype pollution, insecure dependencies.",
     "Return a single valid JSON object with your findings and nothing else.",
-    'JSON schema: {"vulnerabilities":[{"severity":"critical|high|medium|low","category":string,"file":string,"line":number,"description":string,"fix_suggestion":string}],"verdict":"pass"|"fail"}'
+    'JSON schema: {"vulnerabilities":[{"severity":"critical|high|medium|low","category":string,"file":string,"line":number,"description":string,"fix_suggestion":string}],"verdict":"pass"|"fail"}',
+    `## Task\n${task}`
   );
-
-  sections.push(`## Task\n${task}`);
 
   if (diff) {
     sections.push(`## Git diff to audit\n${diff}`);
@@ -40,7 +39,7 @@ function buildPrompt({ task, diff, instructions }) {
 
 function parseSecurityOutput(raw) {
   const text = raw?.trim() || "";
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  const jsonMatch = /\{[\s\S]*\}/.exec(text);
   if (!jsonMatch) return null;
   return JSON.parse(jsonMatch[0]);
 }

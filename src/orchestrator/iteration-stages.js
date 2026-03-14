@@ -2,7 +2,7 @@ import { createAgent } from "../agents/index.js";
 import { CoderRole } from "../roles/coder-role.js";
 import { RefactorerRole } from "../roles/refactorer-role.js";
 import { SonarRole } from "../roles/sonar-role.js";
-import { addCheckpoint, markSessionStatus, saveSession, pauseSession } from "../session-store.js";
+import { addCheckpoint, markSessionStatus, saveSession } from "../session-store.js";
 import { generateDiff, getUntrackedFiles } from "../review/diff-generator.js";
 import { evaluateTddPolicy } from "../review/tdd-policy.js";
 import { validateReviewResult } from "../review/schema.js";
@@ -195,6 +195,65 @@ export async function runRefactorerStage({ refactorerRole, config, logger, emitt
   );
 }
 
+function handleSolomonAction(solomonResult, session, contextPrefix) {
+  if (solomonResult.action === "pause") {
+    return { action: "pause", result: { paused: true, sessionId: session.id, question: solomonResult.question, context: `${contextPrefix}_fail_fast` } };
+  }
+  if (solomonResult.action === "subtask") {
+    return { action: "pause", result: { paused: true, sessionId: session.id, subtask: solomonResult.subtask, context: `${contextPrefix}_subtask` } };
+  }
+  return null;
+}
+
+async function handleSolomonContinue(solomonResult, session, counterField) {
+  if (solomonResult.action !== "continue") return false;
+  if (solomonResult.humanGuidance) {
+    session.last_reviewer_feedback += `\nUser guidance: ${solomonResult.humanGuidance}`;
+  }
+  session[counterField] = 0;
+  await saveSession(session);
+  return true;
+}
+
+async function handleTddFailure({ tddEval, config, logger, emitter, eventBase, session, iteration, askQuestion }) {
+  session.last_reviewer_feedback = tddEval.message;
+  session.repeated_issue_count += 1;
+  await saveSession(session);
+
+  if (session.repeated_issue_count < config.session.fail_fast_repeats) {
+    return { action: "continue" };
+  }
+
+  emitProgress(
+    emitter,
+    makeEvent("solomon:escalate", { ...eventBase, stage: "tdd" }, {
+      message: `TDD sub-loop limit reached (${session.repeated_issue_count}/${config.session.fail_fast_repeats})`,
+      detail: { subloop: "tdd", retryCount: session.repeated_issue_count, reason: tddEval.reason }
+    })
+  );
+
+  const solomonResult = await invokeSolomon({
+    config, logger, emitter, eventBase, stage: "tdd", askQuestion, session, iteration,
+    conflict: {
+      stage: "tdd",
+      task: session.task,
+      iterationCount: session.repeated_issue_count,
+      maxIterations: config.session.fail_fast_repeats,
+      reason: tddEval.reason,
+      sourceFiles: tddEval.sourceFiles,
+      testFiles: tddEval.testFiles,
+      history: [{ agent: "tdd-policy", feedback: tddEval.message }]
+    }
+  });
+
+  const actionResult = handleSolomonAction(solomonResult, session, "tdd");
+  if (actionResult) return actionResult;
+  const continued = await handleSolomonContinue(solomonResult, session, "repeated_issue_count");
+  if (continued) return { action: "continue" };
+
+  return { action: "continue" };
+}
+
 export async function runTddCheckStage({ config, logger, emitter, eventBase, session, trackBudget, iteration, askQuestion }) {
   logger.setContext({ iteration, stage: "tdd" });
   const tddDiff = await generateDiff({ baseRef: session.session_start_sha });
@@ -224,51 +283,75 @@ export async function runTddCheckStage({ config, logger, emitter, eventBase, ses
   );
 
   if (!tddEval.ok) {
-    session.last_reviewer_feedback = tddEval.message;
-    session.repeated_issue_count += 1;
-    await saveSession(session);
-    if (session.repeated_issue_count >= config.session.fail_fast_repeats) {
-      emitProgress(
-        emitter,
-        makeEvent("solomon:escalate", { ...eventBase, stage: "tdd" }, {
-          message: `TDD sub-loop limit reached (${session.repeated_issue_count}/${config.session.fail_fast_repeats})`,
-          detail: { subloop: "tdd", retryCount: session.repeated_issue_count, reason: tddEval.reason }
-        })
-      );
-
-      const solomonResult = await invokeSolomon({
-        config, logger, emitter, eventBase, stage: "tdd", askQuestion, session, iteration,
-        conflict: {
-          stage: "tdd",
-          task: session.task,
-          iterationCount: session.repeated_issue_count,
-          maxIterations: config.session.fail_fast_repeats,
-          reason: tddEval.reason,
-          sourceFiles: tddEval.sourceFiles,
-          testFiles: tddEval.testFiles,
-          history: [{ agent: "tdd-policy", feedback: tddEval.message }]
-        }
-      });
-
-      if (solomonResult.action === "pause") {
-        return { action: "pause", result: { paused: true, sessionId: session.id, question: solomonResult.question, context: "tdd_fail_fast" } };
-      }
-      if (solomonResult.action === "continue") {
-        if (solomonResult.humanGuidance) {
-          session.last_reviewer_feedback += `\nUser guidance: ${solomonResult.humanGuidance}`;
-        }
-        session.repeated_issue_count = 0;
-        await saveSession(session);
-        return { action: "continue" };
-      }
-      if (solomonResult.action === "subtask") {
-        return { action: "pause", result: { paused: true, sessionId: session.id, subtask: solomonResult.subtask, context: "tdd_subtask" } };
-      }
-    }
-    return { action: "continue" };
+    return handleTddFailure({ tddEval, config, logger, emitter, eventBase, session, iteration, askQuestion });
   }
 
   return { action: "ok" };
+}
+
+async function handleSonarStalled({ repeatDetector, logger, emitter, eventBase, session, budgetSummary }) {
+  const repeatCounts = repeatDetector.getRepeatCounts();
+  const message = `No progress: SonarQube issues repeated ${repeatCounts.sonar} times.`;
+  logger.warn(message);
+  await markSessionStatus(session, "stalled");
+  const repeatState = repeatDetector.isStalled();
+  emitProgress(
+    emitter,
+    makeEvent("session:end", { ...eventBase, stage: "sonar" }, {
+      status: "stalled",
+      message,
+      detail: { reason: repeatState.reason, repeats: repeatCounts.sonar, budget: budgetSummary() }
+    })
+  );
+  return { action: "stalled", result: { approved: false, sessionId: session.id, reason: "stalled" } };
+}
+
+async function handleSonarRetryLimit({ config, logger, emitter, eventBase, session, iteration, askQuestion, task, maxSonarRetries, sonarResult }) {
+  emitProgress(
+    emitter,
+    makeEvent("solomon:escalate", { ...eventBase, stage: "sonar" }, {
+      message: `Sonar sub-loop limit reached (${session.sonar_retry_count}/${maxSonarRetries})`,
+      detail: { subloop: "sonar", retryCount: session.sonar_retry_count, limit: maxSonarRetries, gateStatus: sonarResult.gateStatus }
+    })
+  );
+
+  const solomonResult = await invokeSolomon({
+    config, logger, emitter, eventBase, stage: "sonar", askQuestion, session, iteration,
+    conflict: {
+      stage: "sonar",
+      task,
+      iterationCount: session.sonar_retry_count,
+      maxIterations: maxSonarRetries,
+      history: [{ agent: "sonar", feedback: session.last_sonar_summary }]
+    }
+  });
+
+  const actionResult = handleSolomonAction(solomonResult, session, "sonar");
+  if (actionResult) return actionResult;
+  const continued = await handleSolomonContinue(solomonResult, session, "sonar_retry_count");
+  if (continued) return { action: "continue" };
+
+  return null;
+}
+
+async function handleSonarBlocking({ sonarResult, config, logger, emitter, eventBase, session, iteration, repeatDetector, budgetSummary, askQuestion, task }) {
+  repeatDetector.addIteration(sonarResult.issues, []);
+  const repeatState = repeatDetector.isStalled();
+  if (repeatState.stalled) {
+    return handleSonarStalled({ repeatDetector, logger, emitter, eventBase, session, budgetSummary });
+  }
+
+  session.last_reviewer_feedback = `Sonar gate blocking (${sonarResult.gateStatus}). Resolve critical findings first.`;
+  session.sonar_retry_count = (session.sonar_retry_count || 0) + 1;
+  await saveSession(session);
+  const maxSonarRetries = config.session.max_sonar_retries ?? config.session.fail_fast_repeats;
+
+  if (session.sonar_retry_count >= maxSonarRetries) {
+    const result = await handleSonarRetryLimit({ config, logger, emitter, eventBase, session, iteration, askQuestion, task, maxSonarRetries, sonarResult });
+    if (result) return result;
+  }
+
+  return { action: "continue" };
 }
 
 export async function runSonarStage({ config, logger, emitter, eventBase, session, trackBudget, iteration, repeatDetector, budgetSummary, sonarState, askQuestion, task }) {
@@ -326,64 +409,7 @@ export async function runSonarStage({ config, logger, emitter, eventBase, sessio
   );
 
   if (sonarResult.blocking) {
-    repeatDetector.addIteration(sonarResult.issues, []);
-    const repeatState = repeatDetector.isStalled();
-    if (repeatState.stalled) {
-      const repeatCounts = repeatDetector.getRepeatCounts();
-      const message = `No progress: SonarQube issues repeated ${repeatCounts.sonar} times.`;
-      logger.warn(message);
-      await markSessionStatus(session, "stalled");
-      emitProgress(
-        emitter,
-        makeEvent("session:end", { ...eventBase, stage: "sonar" }, {
-          status: "stalled",
-          message,
-          detail: { reason: repeatState.reason, repeats: repeatCounts.sonar, budget: budgetSummary() }
-        })
-      );
-      return { action: "stalled", result: { approved: false, sessionId: session.id, reason: "stalled" } };
-    }
-
-    session.last_reviewer_feedback = `Sonar gate blocking (${sonarResult.gateStatus}). Resolve critical findings first.`;
-    session.sonar_retry_count = (session.sonar_retry_count || 0) + 1;
-    await saveSession(session);
-    const maxSonarRetries = config.session.max_sonar_retries ?? config.session.fail_fast_repeats;
-    if (session.sonar_retry_count >= maxSonarRetries) {
-      emitProgress(
-        emitter,
-        makeEvent("solomon:escalate", { ...eventBase, stage: "sonar" }, {
-          message: `Sonar sub-loop limit reached (${session.sonar_retry_count}/${maxSonarRetries})`,
-          detail: { subloop: "sonar", retryCount: session.sonar_retry_count, limit: maxSonarRetries, gateStatus: sonarResult.gateStatus }
-        })
-      );
-
-      const solomonResult = await invokeSolomon({
-        config, logger, emitter, eventBase, stage: "sonar", askQuestion, session, iteration,
-        conflict: {
-          stage: "sonar",
-          task,
-          iterationCount: session.sonar_retry_count,
-          maxIterations: maxSonarRetries,
-          history: [{ agent: "sonar", feedback: session.last_sonar_summary }]
-        }
-      });
-
-      if (solomonResult.action === "pause") {
-        return { action: "pause", result: { paused: true, sessionId: session.id, question: solomonResult.question, context: "sonar_fail_fast" } };
-      }
-      if (solomonResult.action === "continue") {
-        if (solomonResult.humanGuidance) {
-          session.last_reviewer_feedback += `\nUser guidance: ${solomonResult.humanGuidance}`;
-        }
-        session.sonar_retry_count = 0;
-        await saveSession(session);
-        return { action: "continue" };
-      }
-      if (solomonResult.action === "subtask") {
-        return { action: "pause", result: { paused: true, sessionId: session.id, subtask: solomonResult.subtask, context: "sonar_subtask" } };
-      }
-    }
-    return { action: "continue" };
+    return handleSonarBlocking({ sonarResult, config, logger, emitter, eventBase, session, iteration, repeatDetector, budgetSummary, askQuestion, task });
   }
 
   // Sonar passed — reset retry counter
@@ -401,6 +427,78 @@ export async function runSonarStage({ config, logger, emitter, eventBase, sessio
   return { action: "ok", stageResult };
 }
 
+async function handleReviewerStalledSolomon({ review, repeatCounts, repeatState, config, logger, emitter, eventBase, session, iteration, task, askQuestion, budgetSummary, repeatDetector }) {
+  logger.warn(`Reviewer stalled (${repeatCounts.reviewer} repeats). Invoking Solomon mediation.`);
+  emitProgress(
+    emitter,
+    makeEvent("solomon:escalate", { ...eventBase, stage: "reviewer" }, {
+      message: `Reviewer stalled — Solomon mediating`,
+      detail: { repeats: repeatCounts.reviewer, reason: repeatState.reason }
+    })
+  );
+
+  const solomonResult = await invokeSolomon({
+    config, logger, emitter, eventBase, stage: "reviewer", askQuestion, session, iteration,
+    conflict: {
+      stage: "reviewer",
+      task,
+      iterationCount: repeatCounts.reviewer,
+      maxIterations: config.session?.fail_fast_repeats ?? 2,
+      stalledReason: repeatState.reason,
+      blockingIssues: review.blocking_issues,
+      history: [{ agent: "reviewer", feedback: review.blocking_issues.map(x => x.description).join("; ") }]
+    }
+  });
+
+  if (solomonResult.action === "pause") {
+    await markSessionStatus(session, "stalled");
+    return { review, stalled: true, stalledResult: { paused: true, sessionId: session.id, question: solomonResult.question, context: "reviewer_stalled" } };
+  }
+  if (solomonResult.action === "continue") {
+    repeatDetector.reviewer = { lastHash: null, repeatCount: 0 };
+    if (solomonResult.humanGuidance) {
+      session.last_reviewer_feedback = `Solomon/user guidance: ${solomonResult.humanGuidance}`;
+      await saveSession(session);
+    }
+    return { review };
+  }
+  if (solomonResult.action === "subtask") {
+    return { review, stalled: true, stalledResult: { paused: true, sessionId: session.id, subtask: solomonResult.subtask, context: "reviewer_subtask" } };
+  }
+
+  // Fallback
+  const message = `Manual intervention required: reviewer issues repeated ${repeatCounts.reviewer} times.`;
+  await markSessionStatus(session, "stalled");
+  emitProgress(
+    emitter,
+    makeEvent("session:end", { ...eventBase, stage: "reviewer" }, {
+      status: "stalled",
+      message,
+      detail: { reason: repeatState.reason, repeats: repeatCounts.reviewer, budget: budgetSummary() }
+    })
+  );
+  return { review, stalled: true, stalledResult: { approved: false, sessionId: session.id, reason: "stalled" } };
+}
+
+async function handleReviewerRejection({ review, repeatDetector, config, logger, emitter, eventBase, session, iteration, task, askQuestion, budgetSummary }) {
+  repeatDetector.addIteration([], review.blocking_issues);
+  const repeatState = repeatDetector.isStalled();
+  if (!repeatState.stalled) return null;
+
+  const repeatCounts = repeatDetector.getRepeatCounts();
+  return handleReviewerStalledSolomon({ review, repeatCounts, repeatState, config, logger, emitter, eventBase, session, iteration, task, askQuestion, budgetSummary, repeatDetector });
+}
+
+async function fetchReviewDiff(session, logger) {
+  if (session.becaria_pr_number) {
+    const { getPrDiff } = await import("../becaria/pr-diff.js");
+    const diff = await getPrDiff(session.becaria_pr_number);
+    logger.info(`Reviewer reading PR diff #${session.becaria_pr_number}`);
+    return diff;
+  }
+  return generateDiff({ baseRef: session.session_start_sha });
+}
+
 export async function runReviewerStage({ reviewerRole, config, logger, emitter, eventBase, session, trackBudget, iteration, reviewRules, task, repeatDetector, budgetSummary, askQuestion }) {
   logger.setContext({ iteration, stage: "reviewer" });
   emitProgress(
@@ -411,14 +509,7 @@ export async function runReviewerStage({ reviewerRole, config, logger, emitter, 
     })
   );
 
-  let diff;
-  if (session.becaria_pr_number) {
-    const { getPrDiff } = await import("../becaria/pr-diff.js");
-    diff = await getPrDiff(session.becaria_pr_number);
-    logger.info(`Reviewer reading PR diff #${session.becaria_pr_number}`);
-  } else {
-    diff = await generateDiff({ baseRef: session.session_start_sha });
-  }
+  const diff = await fetchReviewDiff(session, logger);
   const reviewerOnOutput = ({ stream, line }) => {
     emitProgress(emitter, makeEvent("agent:output", { ...eventBase, stage: "reviewer" }, {
       message: line,
@@ -447,7 +538,7 @@ export async function runReviewerStage({ reviewerRole, config, logger, emitter, 
     reviewerStall.stop();
   }
 
-  if (!reviewerExec.execResult || !reviewerExec.execResult.ok) {
+  if (!reviewerExec.execResult?.ok) {
     const lastAttempt = reviewerExec.attempts.at(-1);
     const details =
       lastAttempt?.result?.error ||
@@ -493,17 +584,17 @@ export async function runReviewerStage({ reviewerRole, config, logger, emitter, 
       summary: reviewResult.raw_summary || "",
       confidence: reviewResult.confidence ?? 0
     });
-  } catch (parseErr) {
-    logger.warn(`Reviewer output validation failed: ${parseErr.message}`);
+  } catch (error_) {
+    logger.warn(`Reviewer output validation failed: ${error_.message}`);
     review = {
       approved: false,
       blocking_issues: [{
         id: "PARSE_ERROR",
         severity: "high",
-        description: `Reviewer output could not be parsed: ${parseErr.message}`
+        description: `Reviewer output could not be parsed: ${error_.message}`
       }],
       non_blocking_suggestions: [],
-      summary: `Parse error: ${parseErr.message}`,
+      summary: `Parse error: ${error_.message}`,
       confidence: 0
     };
   }
@@ -565,63 +656,8 @@ export async function runReviewerStage({ reviewerRole, config, logger, emitter, 
   );
 
   if (!review.approved) {
-    repeatDetector.addIteration([], review.blocking_issues);
-    const repeatState = repeatDetector.isStalled();
-    if (repeatState.stalled) {
-      const repeatCounts = repeatDetector.getRepeatCounts();
-
-      // --- Solomon mediation for stalled reviewer ---
-      logger.warn(`Reviewer stalled (${repeatCounts.reviewer} repeats). Invoking Solomon mediation.`);
-      emitProgress(
-        emitter,
-        makeEvent("solomon:escalate", { ...eventBase, stage: "reviewer" }, {
-          message: `Reviewer stalled — Solomon mediating`,
-          detail: { repeats: repeatCounts.reviewer, reason: repeatState.reason }
-        })
-      );
-
-      const solomonResult = await invokeSolomon({
-        config, logger, emitter, eventBase, stage: "reviewer", askQuestion, session, iteration,
-        conflict: {
-          stage: "reviewer",
-          task,
-          iterationCount: repeatCounts.reviewer,
-          maxIterations: config.session?.fail_fast_repeats ?? 2,
-          stalledReason: repeatState.reason,
-          blockingIssues: review.blocking_issues,
-          history: [{ agent: "reviewer", feedback: review.blocking_issues.map(x => x.description).join("; ") }]
-        }
-      });
-
-      if (solomonResult.action === "pause") {
-        await markSessionStatus(session, "stalled");
-        return { review, stalled: true, stalledResult: { paused: true, sessionId: session.id, question: solomonResult.question, context: "reviewer_stalled" } };
-      }
-      if (solomonResult.action === "continue") {
-        repeatDetector.reviewer = { lastHash: null, repeatCount: 0 };
-        if (solomonResult.humanGuidance) {
-          session.last_reviewer_feedback = `Solomon/user guidance: ${solomonResult.humanGuidance}`;
-          await saveSession(session);
-        }
-        return { review };
-      }
-      if (solomonResult.action === "subtask") {
-        return { review, stalled: true, stalledResult: { paused: true, sessionId: session.id, subtask: solomonResult.subtask, context: "reviewer_subtask" } };
-      }
-
-      // Fallback
-      const message = `Manual intervention required: reviewer issues repeated ${repeatCounts.reviewer} times.`;
-      await markSessionStatus(session, "stalled");
-      emitProgress(
-        emitter,
-        makeEvent("session:end", { ...eventBase, stage: "reviewer" }, {
-          status: "stalled",
-          message,
-          detail: { reason: repeatState.reason, repeats: repeatCounts.reviewer, budget: budgetSummary() }
-        })
-      );
-      return { review, stalled: true, stalledResult: { approved: false, sessionId: session.id, reason: "stalled" } };
-    }
+    const rejectionResult = await handleReviewerRejection({ review, repeatDetector, config, logger, emitter, eventBase, session, iteration, task, askQuestion, budgetSummary });
+    if (rejectionResult) return rejectionResult;
   }
 
   return { review };

@@ -3,8 +3,8 @@ import { runCommand } from "./process.js";
 function slugifyTask(task) {
   return String(task)
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
+    .replaceAll(/[^a-z0-9]+/g, "-")
+    .replaceAll(/(^-+)|(-+$)/g, "")
     .slice(0, 40);
 }
 
@@ -68,7 +68,7 @@ export async function createBranch(branchName) {
 }
 
 export function buildBranchName(prefix, task) {
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 16);
+  const stamp = new Date().toISOString().replaceAll(/[:.]/g, "-").slice(0, 16);
   return `${prefix}${slugifyTask(task) || "task"}-${stamp}`;
 }
 

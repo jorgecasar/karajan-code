@@ -28,7 +28,6 @@ export async function runCoderWithFallback({
   }
 
   const attempts = [];
-  let allRateLimited = true;
 
   for (const name of candidates) {
     const agentConfig = {
@@ -72,12 +71,11 @@ export async function runCoderWithFallback({
 
     // Only fallback on rate limit errors
     if (!rateLimited) {
-      allRateLimited = false;
       return { execResult: null, attempts, allRateLimited: false };
     }
 
     logger.warn(`Agent ${name} hit rate limit, trying fallback...`);
   }
 
-  return { execResult: null, attempts, allRateLimited };
+  return { execResult: null, attempts, allRateLimited: true };
 }

@@ -60,71 +60,57 @@ export function failPayload(message, details = {}) {
   };
 }
 
+const ERROR_CLASSIFIERS = [
+  {
+    test: (lower) => lower.includes("without output") || lower.includes("silent for") || lower.includes("unresponsive") || lower.includes("exceeded max silence"),
+    category: "agent_stall",
+    suggestion: "Agent output stalled. Check live details with kj_status, then retry with a smaller prompt or increase session.max_agent_silence_minutes if needed."
+  },
+  {
+    test: (lower) => lower.includes("sonar") && (lower.includes("connect") || lower.includes("econnrefused") || lower.includes("not available") || lower.includes("not running")),
+    category: "sonar_unavailable",
+    suggestion: "SonarQube is not reachable. Try: kj_init to set up SonarQube, or run 'docker start sonarqube' if already installed. Use --no-sonar to skip SonarQube."
+  },
+  {
+    test: (lower) => lower.includes("401") || lower.includes("unauthorized") || lower.includes("invalid token"),
+    category: "auth_error",
+    suggestion: "Authentication failed. Regenerate the SonarQube token and update it via kj_init or in ~/.karajan/kj.config.yml under sonarqube.token."
+  },
+  {
+    test: (lower) => lower.includes("config") && (lower.includes("missing") || lower.includes("not found") || lower.includes("invalid")),
+    category: "config_error",
+    suggestion: "Configuration issue detected. Run kj_doctor to diagnose, or kj_init to create a fresh config."
+  },
+  {
+    test: (lower) => lower.includes("missing provider") || lower.includes("not found") && (lower.includes("claude") || lower.includes("codex") || lower.includes("gemini") || lower.includes("aider")),
+    category: "agent_missing",
+    suggestion: "Required agent CLI not found. Run kj_doctor to check which agents are installed and get installation instructions."
+  },
+  {
+    test: (lower) => lower.includes("timed out") || lower.includes("timeout"),
+    category: "timeout",
+    suggestion: "The agent did not complete in time. Try: (1) increase --max-iteration-minutes (default: 5), (2) split the task into smaller pieces, (3) use kj_code for single-agent tasks. If a SonarQube scan timed out, check Docker health."
+  },
+  {
+    test: (lower) => lower.includes("you are on the base branch"),
+    category: "branch_error",
+    suggestion: "Create a feature branch before running Karajan. Use 'git checkout -b feat/<task-description>' and then retry. Do NOT run kj_code directly on the base branch."
+  },
+  {
+    test: (lower) => lower.includes("not a git repository"),
+    category: "git_error",
+    suggestion: "Current directory is not a git repository. Navigate to your project root or initialize git with 'git init'."
+  }
+];
+
 export function classifyError(error) {
   const msg = error?.message || String(error);
   const lower = msg.toLowerCase();
 
-  if (
-    lower.includes("without output")
-    || lower.includes("silent for")
-    || lower.includes("unresponsive")
-    || lower.includes("exceeded max silence")
-  ) {
-    return {
-      category: "agent_stall",
-      suggestion: "Agent output stalled. Check live details with kj_status, then retry with a smaller prompt or increase session.max_agent_silence_minutes if needed."
-    };
+  const match = ERROR_CLASSIFIERS.find(c => c.test(lower));
+  if (match) {
+    return { category: match.category, suggestion: match.suggestion };
   }
-
-  if (lower.includes("sonar") && (lower.includes("connect") || lower.includes("econnrefused") || lower.includes("not available") || lower.includes("not running"))) {
-    return {
-      category: "sonar_unavailable",
-      suggestion: "SonarQube is not reachable. Try: kj_init to set up SonarQube, or run 'docker start sonarqube' if already installed. Use --no-sonar to skip SonarQube."
-    };
-  }
-
-  if (lower.includes("401") || lower.includes("unauthorized") || lower.includes("invalid token")) {
-    return {
-      category: "auth_error",
-      suggestion: "Authentication failed. Regenerate the SonarQube token and update it via kj_init or in ~/.karajan/kj.config.yml under sonarqube.token."
-    };
-  }
-
-  if (lower.includes("config") && (lower.includes("missing") || lower.includes("not found") || lower.includes("invalid"))) {
-    return {
-      category: "config_error",
-      suggestion: "Configuration issue detected. Run kj_doctor to diagnose, or kj_init to create a fresh config."
-    };
-  }
-
-  if (lower.includes("missing provider") || lower.includes("not found") && (lower.includes("claude") || lower.includes("codex") || lower.includes("gemini") || lower.includes("aider"))) {
-    return {
-      category: "agent_missing",
-      suggestion: "Required agent CLI not found. Run kj_doctor to check which agents are installed and get installation instructions."
-    };
-  }
-
-  if (lower.includes("timed out") || lower.includes("timeout")) {
-    return {
-      category: "timeout",
-      suggestion: "The agent did not complete in time. Try: (1) increase --max-iteration-minutes (default: 5), (2) split the task into smaller pieces, (3) use kj_code for single-agent tasks. If a SonarQube scan timed out, check Docker health."
-    };
-  }
-
-  if (lower.includes("you are on the base branch")) {
-    return {
-      category: "branch_error",
-      suggestion: "Create a feature branch before running Karajan. Use 'git checkout -b feat/<task-description>' and then retry. Do NOT run kj_code directly on the base branch."
-    };
-  }
-
-  if (lower.includes("not a git repository")) {
-    return {
-      category: "git_error",
-      suggestion: "Current directory is not a git repository. Navigate to your project root or initialize git with 'git init'."
-    };
-  }
-
   return { category: "unknown", suggestion: null };
 }
 
@@ -254,9 +240,9 @@ function buildDirectEmitter(server, runLog, extra) {
   const emitter = new EventEmitter();
   emitter.on("progress", (event) => {
     try {
-      const level = event.type === "agent:stall" ? "warning"
-        : event.type === "agent:heartbeat" ? "info"
-        : "debug";
+      let level = "debug";
+      if (event.type === "agent:stall") level = "warning";
+      else if (event.type === "agent:heartbeat") level = "info";
       server.sendLoggingMessage({ level, logger: "karajan", data: event });
     } catch { /* best-effort */ }
     if (runLog) runLog.logEvent(event);
@@ -282,8 +268,10 @@ export async function handlePlanDirect(a, server, extra) {
   const plannerTimeoutMs = Number(config?.session?.max_planner_minutes) > 0
     ? Math.round(Number(config.session.max_planner_minutes) * 60 * 1000)
     : undefined;
+  const silenceLabel = silenceTimeoutMs ? `${Math.round(silenceTimeoutMs / 1000)}s` : "disabled";
+  const runtimeLabel = plannerTimeoutMs ? `${Math.round(plannerTimeoutMs / 1000)}s` : "disabled";
   runLog.logText(
-    `[kj_plan] started — provider=${plannerRole.provider}, max_silence=${silenceTimeoutMs ? `${Math.round(silenceTimeoutMs / 1000)}s` : "disabled"}, max_runtime=${plannerTimeoutMs ? `${Math.round(plannerTimeoutMs / 1000)}s` : "disabled"}`
+    `[kj_plan] started — provider=${plannerRole.provider}, max_silence=${silenceLabel}, max_runtime=${runtimeLabel}`
   );
   const emitter = buildDirectEmitter(server, runLog, extra);
   const eventBase = { sessionId: null, iteration: 0, startedAt: Date.now() };
@@ -481,223 +469,224 @@ export async function handleDiscoverDirect(a, server, extra) {
   return { ok: true, ...result.result, summary: result.summary };
 }
 
+/* ── Preflight helpers ─────────────────────────────────────────────── */
+
+const AGENT_ROLES = new Set(["coder", "reviewer", "tester", "security", "solomon"]);
+
+async function buildPreflightRequiredResponse(toolName) {
+  const { config } = await loadConfig();
+  const { listAgents } = await import("../commands/agents.js");
+  const agents = listAgents(config);
+  const agentSummary = agents
+    .filter(ag => ag.provider !== "-")
+    .map(ag => {
+      const modelSuffix = ag.model === "-" ? "" : ` (${ag.model})`;
+      return `  ${ag.role}: ${ag.provider}${modelSuffix}`;
+    })
+    .join("\n");
+  return responseText({
+    ok: false,
+    preflightRequired: true,
+    message: `PREFLIGHT REQUIRED\n\nCurrent agent configuration:\n${agentSummary}\n\nAsk the human to confirm or adjust this configuration, then call kj_preflight with their response.\n\nDo NOT pass coder/reviewer parameters to ${toolName} — use kj_preflight to set them.`
+  });
+}
+
+function applySessionOverrides(a, roleKeys) {
+  const sessionOvr = getSessionOverrides();
+  for (const key of roleKeys) {
+    if (sessionOvr[key] !== undefined) { a[key] = sessionOvr[key]; }
+  }
+}
+
+function parseHumanResponseOverrides(humanResponse, overrides) {
+  for (const role of AGENT_ROLES) {
+    const patterns = [
+      new RegExp(String.raw`use\s+(\w+)\s+(?:as|for)\s+${role}`, "i"),
+      new RegExp(String.raw`${role}\s*[:=]\s*(\w+)`, "i"),
+      new RegExp(String.raw`set\s+${role}\s+(?:to|=)\s*(\w+)`, "i")
+    ];
+    for (const pat of patterns) {
+      const m = pat.exec(humanResponse);
+      if (m && !overrides[role]) {
+        overrides[role] = m[1];
+        break;
+      }
+    }
+  }
+}
+
+function buildPreflightOverrides(a) {
+  const overrides = {};
+  for (const role of AGENT_ROLES) {
+    if (a[role]) overrides[role] = a[role];
+  }
+  if (a.enableTester !== undefined) overrides.enableTester = a.enableTester;
+  if (a.enableSecurity !== undefined) overrides.enableSecurity = a.enableSecurity;
+
+  const resp = (a.humanResponse || "").toLowerCase();
+  if (resp !== "ok") {
+    parseHumanResponseOverrides(a.humanResponse || "", overrides);
+  }
+  return overrides;
+}
+
+function formatPreflightConfig(agents, overrides) {
+  const lines = agents
+    .filter(ag => ag.provider !== "-")
+    .map(ag => {
+      const ovr = overrides[ag.role] ? ` -> ${overrides[ag.role]} (session override)` : "";
+      const modelSuffix = ag.model === "-" ? "" : ` (${ag.model})`;
+      return `  ${ag.role}: ${ag.provider}${modelSuffix}${ovr}`;
+    });
+  const overrideLines = Object.entries(overrides)
+    .filter(([k]) => !AGENT_ROLES.has(k))
+    .map(([k, v]) => `  ${k}: ${v}`);
+  return [...lines, ...overrideLines].join("\n");
+}
+
+function buildReportArgs(a) {
+  const commandArgs = [];
+  if (a.list) commandArgs.push("--list");
+  if (a.sessionId) commandArgs.push("--session-id", String(a.sessionId));
+  if (a.format) commandArgs.push("--format", String(a.format));
+  if (a.trace) commandArgs.push("--trace");
+  if (a.currency) commandArgs.push("--currency", String(a.currency));
+  if (a.pgTask) commandArgs.push("--pg-task", String(a.pgTask));
+  return commandArgs;
+}
+
+/* ── Individual tool handlers ─────────────────────────────────────── */
+
+async function handleStatus(a, server) {
+  const maxLines = a.lines || 50;
+  const projectDir = await resolveProjectDir(server);
+  return readRunLog(projectDir, maxLines);
+}
+
+async function handleAgents(a) {
+  const action = a.action || "list";
+  if (action === "set") {
+    if (!a.role || !a.provider) {
+      return failPayload("Missing required fields: role and provider");
+    }
+    const { setAgent } = await import("../commands/agents.js");
+    const result = await setAgent(a.role, a.provider, { global: false });
+    return { ok: true, ...result, message: `${result.role} now uses ${result.provider} (scope: ${result.scope})` };
+  }
+  const config = await buildConfig(a);
+  const { listAgents } = await import("../commands/agents.js");
+  const sessionOvr = getSessionOverrides();
+  return { ok: true, agents: listAgents(config, sessionOvr) };
+}
+
+async function handlePreflight(a) {
+  const overrides = buildPreflightOverrides(a);
+  ackPreflight(overrides);
+
+  const config = await buildConfig(a);
+  const { listAgents } = await import("../commands/agents.js");
+  const agents = listAgents(config);
+
+  return {
+    ok: true,
+    message: `Preflight acknowledged. Agent configuration confirmed.`,
+    config: formatPreflightConfig(agents, overrides),
+    overrides
+  };
+}
+
+function handleRoles(a) {
+  const action = a.action || "list";
+  const commandArgs = [action];
+  if (action === "show" && a.roleName) commandArgs.push(a.roleName);
+  return runKjCommand({ command: "roles", commandArgs, options: a });
+}
+
+async function handleResume(a, server, extra) {
+  if (!a.sessionId) {
+    return failPayload("Missing required field: sessionId");
+  }
+  return handleResumeDirect(a, server, extra);
+}
+
+async function handleRun(a, server, extra) {
+  if (!a.task) {
+    return failPayload("Missing required field: task");
+  }
+  if (a.taskType) {
+    const validTypes = new Set(["sw", "infra", "doc", "add-tests", "refactor"]);
+    if (!validTypes.has(a.taskType)) {
+      return failPayload(`Invalid taskType "${a.taskType}". Valid values: ${[...validTypes].join(", ")}`);
+    }
+  }
+  if (!isPreflightAcked()) {
+    return buildPreflightRequiredResponse("kj_run");
+  }
+  applySessionOverrides(a, ["coder", "reviewer", "tester", "security", "solomon", "enableTester", "enableSecurity"]);
+  return handleRunDirect(a, server, extra);
+}
+
+async function handleCode(a, server, extra) {
+  if (!a.task) {
+    return failPayload("Missing required field: task");
+  }
+  if (!isPreflightAcked()) {
+    return buildPreflightRequiredResponse("kj_code");
+  }
+  applySessionOverrides(a, ["coder"]);
+  return handleCodeDirect(a, server, extra);
+}
+
+async function handleReview(a, server, extra) {
+  if (!a.task) {
+    return failPayload("Missing required field: task");
+  }
+  return handleReviewDirect(a, server, extra);
+}
+
+async function handlePlan(a, server, extra) {
+  if (!a.task) {
+    return failPayload("Missing required field: task");
+  }
+  return handlePlanDirect(a, server, extra);
+}
+
+async function handleDiscover(a, server, extra) {
+  if (!a.task) {
+    return failPayload("Missing required field: task");
+  }
+  const validModes = new Set(["gaps", "momtest", "wendel", "classify", "jtbd"]);
+  if (a.mode && !validModes.has(a.mode)) {
+    return failPayload(`Invalid mode "${a.mode}". Valid values: ${[...validModes].join(", ")}`);
+  }
+  return handleDiscoverDirect(a, server, extra);
+}
+
+/* ── Handler dispatch map ─────────────────────────────────────────── */
+
+const toolHandlers = {
+  kj_status:    (a, server) => handleStatus(a, server),
+  kj_init:      (a) => runKjCommand({ command: "init", options: a }),
+  kj_doctor:    (a) => runKjCommand({ command: "doctor", options: a }),
+  kj_agents:    (a) => handleAgents(a),
+  kj_preflight: (a) => handlePreflight(a),
+  kj_config:    (a) => runKjCommand({ command: "config", commandArgs: a.json ? ["--json"] : [], options: a }),
+  kj_scan:      (a) => runKjCommand({ command: "scan", options: a }),
+  kj_roles:     (a) => handleRoles(a),
+  kj_report:    (a) => runKjCommand({ command: "report", commandArgs: buildReportArgs(a), options: a }),
+  kj_resume:    (a, server, extra) => handleResume(a, server, extra),
+  kj_run:       (a, server, extra) => handleRun(a, server, extra),
+  kj_code:      (a, server, extra) => handleCode(a, server, extra),
+  kj_review:    (a, server, extra) => handleReview(a, server, extra),
+  kj_plan:      (a, server, extra) => handlePlan(a, server, extra),
+  kj_discover:  (a, server, extra) => handleDiscover(a, server, extra)
+};
+
 export async function handleToolCall(name, args, server, extra) {
   const a = asObject(args);
-
-  if (name === "kj_status") {
-    const maxLines = a.lines || 50;
-    const projectDir = await resolveProjectDir(server);
-    return readRunLog(maxLines, projectDir);
+  const handler = toolHandlers[name];
+  if (handler) {
+    return handler(a, server, extra);
   }
-
-  if (name === "kj_init") {
-    return runKjCommand({ command: "init", options: a });
-  }
-
-  if (name === "kj_doctor") {
-    return runKjCommand({ command: "doctor", options: a });
-  }
-
-  if (name === "kj_agents") {
-    const action = a.action || "list";
-    if (action === "set") {
-      if (!a.role || !a.provider) {
-        return failPayload("Missing required fields: role and provider");
-      }
-      const { setAgent } = await import("../commands/agents.js");
-      const result = await setAgent(a.role, a.provider, { global: false });
-      return { ok: true, ...result, message: `${result.role} now uses ${result.provider} (scope: ${result.scope})` };
-    }
-    const config = await buildConfig(a);
-    const { listAgents } = await import("../commands/agents.js");
-    const sessionOvr = getSessionOverrides();
-    return { ok: true, agents: listAgents(config, sessionOvr) };
-  }
-
-  if (name === "kj_preflight") {
-    const overrides = {};
-    const AGENT_ROLES = ["coder", "reviewer", "tester", "security", "solomon"];
-
-    // Apply explicit param overrides
-    for (const role of AGENT_ROLES) {
-      if (a[role]) overrides[role] = a[role];
-    }
-    if (a.enableTester !== undefined) overrides.enableTester = a.enableTester;
-    if (a.enableSecurity !== undefined) overrides.enableSecurity = a.enableSecurity;
-
-    // Parse natural-language humanResponse for agent changes
-    const resp = (a.humanResponse || "").toLowerCase();
-    if (resp !== "ok") {
-      // Match patterns like "use gemini as coder", "coder: claude", "set reviewer to codex"
-      for (const role of AGENT_ROLES) {
-        const patterns = [
-          new RegExp(`use\\s+(\\w+)\\s+(?:as|for)\\s+${role}`, "i"),
-          new RegExp(`${role}\\s*[:=]\\s*(\\w+)`, "i"),
-          new RegExp(`set\\s+${role}\\s+(?:to|=)\\s*(\\w+)`, "i")
-        ];
-        for (const pat of patterns) {
-          const m = (a.humanResponse || "").match(pat);
-          if (m && !overrides[role]) {
-            overrides[role] = m[1];
-            break;
-          }
-        }
-      }
-    }
-
-    ackPreflight(overrides);
-
-    const config = await buildConfig(a);
-    const { listAgents } = await import("../commands/agents.js");
-    const agents = listAgents(config);
-    const lines = agents
-      .filter(ag => ag.provider !== "-")
-      .map(ag => {
-        const ovr = overrides[ag.role] ? ` -> ${overrides[ag.role]} (session override)` : "";
-        return `  ${ag.role}: ${ag.provider}${ag.model !== "-" ? ` (${ag.model})` : ""}${ovr}`;
-      });
-    const overrideLines = Object.entries(overrides)
-      .filter(([k]) => !AGENT_ROLES.includes(k))
-      .map(([k, v]) => `  ${k}: ${v}`);
-    const allLines = [...lines, ...overrideLines];
-
-    return {
-      ok: true,
-      message: `Preflight acknowledged. Agent configuration confirmed.`,
-      config: allLines.join("\n"),
-      overrides
-    };
-  }
-
-  if (name === "kj_config") {
-    return runKjCommand({
-      command: "config",
-      commandArgs: a.json ? ["--json"] : [],
-      options: a
-    });
-  }
-
-  if (name === "kj_scan") {
-    return runKjCommand({ command: "scan", options: a });
-  }
-
-  if (name === "kj_roles") {
-    const action = a.action || "list";
-    const commandArgs = [action];
-    if (action === "show" && a.roleName) commandArgs.push(a.roleName);
-    return runKjCommand({
-      command: "roles",
-      commandArgs,
-      options: a
-    });
-  }
-
-  if (name === "kj_report") {
-    const commandArgs = [];
-    if (a.list) commandArgs.push("--list");
-    if (a.sessionId) commandArgs.push("--session-id", String(a.sessionId));
-    if (a.format) commandArgs.push("--format", String(a.format));
-    if (a.trace) commandArgs.push("--trace");
-    if (a.currency) commandArgs.push("--currency", String(a.currency));
-    if (a.pgTask) commandArgs.push("--pg-task", String(a.pgTask));
-    return runKjCommand({
-      command: "report",
-      commandArgs,
-      options: a
-    });
-  }
-
-  if (name === "kj_resume") {
-    if (!a.sessionId) {
-      return failPayload("Missing required field: sessionId");
-    }
-    return handleResumeDirect(a, server, extra);
-  }
-
-  if (name === "kj_run") {
-    if (!a.task) {
-      return failPayload("Missing required field: task");
-    }
-    if (a.taskType) {
-      const validTypes = ["sw", "infra", "doc", "add-tests", "refactor"];
-      if (!validTypes.includes(a.taskType)) {
-        return failPayload(`Invalid taskType "${a.taskType}". Valid values: ${validTypes.join(", ")}`);
-      }
-    }
-    if (!isPreflightAcked()) {
-      const { config } = await loadConfig();
-      const { listAgents } = await import("../commands/agents.js");
-      const agents = listAgents(config);
-      const agentSummary = agents
-        .filter(ag => ag.provider !== "-")
-        .map(ag => `  ${ag.role}: ${ag.provider}${ag.model !== "-" ? ` (${ag.model})` : ""}`)
-        .join("\n");
-      return responseText({
-        ok: false,
-        preflightRequired: true,
-        message: `PREFLIGHT REQUIRED\n\nCurrent agent configuration:\n${agentSummary}\n\nAsk the human to confirm or adjust this configuration, then call kj_preflight with their response.\n\nDo NOT pass coder/reviewer parameters to kj_run — use kj_preflight to set them.`
-      });
-    }
-    // Apply session overrides, ignoring agent params from tool call
-    const sessionOvr = getSessionOverrides();
-    if (sessionOvr.coder) { a.coder = sessionOvr.coder; }
-    if (sessionOvr.reviewer) { a.reviewer = sessionOvr.reviewer; }
-    if (sessionOvr.tester) { a.tester = sessionOvr.tester; }
-    if (sessionOvr.security) { a.security = sessionOvr.security; }
-    if (sessionOvr.solomon) { a.solomon = sessionOvr.solomon; }
-    if (sessionOvr.enableTester !== undefined) { a.enableTester = sessionOvr.enableTester; }
-    if (sessionOvr.enableSecurity !== undefined) { a.enableSecurity = sessionOvr.enableSecurity; }
-    return handleRunDirect(a, server, extra);
-  }
-
-  if (name === "kj_code") {
-    if (!a.task) {
-      return failPayload("Missing required field: task");
-    }
-    if (!isPreflightAcked()) {
-      const { config } = await loadConfig();
-      const { listAgents } = await import("../commands/agents.js");
-      const agents = listAgents(config);
-      const agentSummary = agents
-        .filter(ag => ag.provider !== "-")
-        .map(ag => `  ${ag.role}: ${ag.provider}${ag.model !== "-" ? ` (${ag.model})` : ""}`)
-        .join("\n");
-      return responseText({
-        ok: false,
-        preflightRequired: true,
-        message: `PREFLIGHT REQUIRED\n\nCurrent agent configuration:\n${agentSummary}\n\nAsk the human to confirm or adjust this configuration, then call kj_preflight with their response.\n\nDo NOT pass coder/reviewer parameters to kj_code — use kj_preflight to set them.`
-      });
-    }
-    // Apply session overrides, ignoring agent params from tool call
-    const sessionOvr = getSessionOverrides();
-    if (sessionOvr.coder) { a.coder = sessionOvr.coder; }
-    return handleCodeDirect(a, server, extra);
-  }
-
-  if (name === "kj_review") {
-    if (!a.task) {
-      return failPayload("Missing required field: task");
-    }
-    return handleReviewDirect(a, server, extra);
-  }
-
-  if (name === "kj_plan") {
-    if (!a.task) {
-      return failPayload("Missing required field: task");
-    }
-    return handlePlanDirect(a, server, extra);
-  }
-
-  if (name === "kj_discover") {
-    if (!a.task) {
-      return failPayload("Missing required field: task");
-    }
-    const validModes = ["gaps", "momtest", "wendel", "classify", "jtbd"];
-    if (a.mode && !validModes.includes(a.mode)) {
-      return failPayload(`Invalid mode "${a.mode}". Valid values: ${validModes.join(", ")}`);
-    }
-    return handleDiscoverDirect(a, server, extra);
-  }
-
   return failPayload(`Unknown tool: ${name}`);
 }

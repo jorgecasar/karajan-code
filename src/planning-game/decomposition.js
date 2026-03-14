@@ -74,10 +74,12 @@ export function buildDecompositionQuestion(subtasks, parentCardId) {
   for (let i = 0; i < subtasks.length; i++) {
     lines.push(`${i + 1}. ${subtasks[i]}`);
   }
-  lines.push("");
-  lines.push(`Create these as linked cards in Planning Game (parent: ${parentCardId})?`);
-  lines.push("Each subtask will block the next one (sequential chain).");
-  lines.push("");
-  lines.push("Reply: yes / no");
+  lines.push(
+    "",
+    `Create these as linked cards in Planning Game (parent: ${parentCardId})?`,
+    "Each subtask will block the next one (sequential chain).",
+    "",
+    "Reply: yes / no"
+  );
   return lines.join("\n");
 }

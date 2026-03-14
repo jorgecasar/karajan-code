@@ -10,7 +10,7 @@ import path from "node:path";
 import { loadFirstExisting } from "../roles/base-role.js";
 import { getKarajanHome } from "../utils/paths.js";
 
-const KNOWN_MODES = ["paranoid", "strict", "standard", "relaxed"];
+const KNOWN_MODES = new Set(["paranoid", "strict", "standard", "relaxed"]);
 
 const DEFAULT_RULES = "Focus on critical issues: security vulnerabilities, logic errors, and broken tests.";
 
@@ -38,7 +38,7 @@ function buildCandidates(fileName, projectDir) {
 
 export async function resolveReviewProfile({ mode = "standard", projectDir } = {}) {
   // Known modes: try mode-specific file first, then base reviewer.md
-  if (KNOWN_MODES.includes(mode)) {
+  if (KNOWN_MODES.has(mode)) {
     const modePaths = buildCandidates(`reviewer-${mode}.md`, projectDir);
     const modeRules = await loadFirstExisting(modePaths);
     if (modeRules) {

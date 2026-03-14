@@ -10,7 +10,8 @@ const ROLE_DESCRIPTIONS = [
   { role: "tester", description: "Runs dedicated testing pass after coding. Ensures tests exist and pass." },
   { role: "security", description: "Audits code for security vulnerabilities. Checks auth, input validation, injection risks." },
   { role: "refactorer", description: "Cleans up and refactors code after the main implementation." },
-  { role: "reviewer", description: "Reviews the code diff for quality issues. Standard quality gate." }
+  { role: "reviewer", description: "Reviews the code diff for quality issues. Standard quality gate." },
+  { role: "architect", description: "Designs solution architecture — layers, patterns, data model, API contracts, tradeoffs. Activate when task creates new module/app, affects data model/APIs, complexity is medium/complex, or design is ambiguous." }
 ];
 
 export function buildTriagePrompt({ task, instructions, availableRoles }) {
@@ -24,15 +25,9 @@ export function buildTriagePrompt({ task, instructions, availableRoles }) {
 
   sections.push(
     "You are a task triage agent for Karajan Code, a multi-agent coding orchestrator.",
-    "Analyze the following task and determine which pipeline roles should be activated."
-  );
-
-  sections.push(
+    "Analyze the following task and determine which pipeline roles should be activated.",
     "## Available Roles",
-    roles.map((r) => `- **${r.role}**: ${r.description}`).join("\n")
-  );
-
-  sections.push(
+    roles.map((r) => `- **${r.role}**: ${r.description}`).join("\n"),
     "## Decision Guidelines",
     [
       "- **planner**: Enable for complex tasks (multi-file, architectural changes, data model changes). Disable for simple fixes.",
@@ -41,19 +36,16 @@ export function buildTriagePrompt({ task, instructions, availableRoles }) {
       "- **security**: Enable for authentication, APIs, user input handling, data access, external integrations. Disable for UI-only or doc changes.",
       "- **refactorer**: Enable only when explicitly requested or when the task is a refactoring task.",
       "- **reviewer**: Enable for most tasks as a quality gate. Disable only for trivial, single-line changes.",
+      "- **architect**: Enable when creating new modules/apps, changing data models or APIs, medium/complex tasks, or when design approach is ambiguous. Disable for simple fixes, doc-only, or CSS-only changes.",
       "",
       "Note: coder is ALWAYS active — you don't need to decide on it."
-    ].join("\n")
-  );
-
-  sections.push(
+    ].join("\n"),
     "Classify the task complexity, determine its taskType, recommend only the necessary pipeline roles, and assess whether the task should be decomposed into smaller subtasks.",
     "Keep the reasoning short and practical.",
     "Return a single valid JSON object and nothing else.",
-    'JSON schema: {"level":"trivial|simple|medium|complex","roles":["planner|researcher|refactorer|reviewer|tester|security"],"taskType":"sw|infra|doc|add-tests|refactor","reasoning":string,"shouldDecompose":boolean,"subtasks":string[]}'
+    'JSON schema: {"level":"trivial|simple|medium|complex","roles":["planner|researcher|refactorer|reviewer|tester|security|architect"],"taskType":"sw|infra|doc|add-tests|refactor","reasoning":string,"shouldDecompose":boolean,"subtasks":string[]}',
+    `## Task\n${task}`
   );
-
-  sections.push(`## Task\n${task}`);
 
   return sections.join("\n\n");
 }

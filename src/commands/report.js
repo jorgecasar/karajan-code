@@ -9,7 +9,7 @@ function parseBudgetFromActivityLog(logText) {
     return { consumed_usd: null, limit_usd: null };
   }
 
-  const regex = /Budget:\s*\$([0-9]+(?:\.[0-9]+)?)\s*\/\s*\$([0-9]+(?:\.[0-9]+)?)/g;
+  const regex = /Budget:\s*\$(\d+(?:\.\d+)?)\s*\/\s*\$(\d+(?:\.\d+)?)/g;
   let match;
   let last = null;
   while ((match = regex.exec(logText)) !== null) {
@@ -61,7 +61,7 @@ function summarizePlan(checkpoints = []) {
 
   const uniqueOrdered = [];
   for (const stage of stages) {
-    if (uniqueOrdered[uniqueOrdered.length - 1] !== stage) {
+    if (uniqueOrdered.at(-1) !== stage) {
       uniqueOrdered.push(stage);
     }
   }
@@ -79,7 +79,7 @@ function summarizeSonar(checkpoints = []) {
   }
 
   const initial = sonarPoints[0];
-  const final = sonarPoints[sonarPoints.length - 1];
+  const final = sonarPoints.at(-1);
   return {
     initial,
     final,
@@ -156,14 +156,13 @@ async function buildReport(dir, sessionId) {
 }
 
 function printTextReport(report) {
-  const budgetText =
-    typeof report.budget_consumed?.consumed_usd === "number"
-      ? `$${report.budget_consumed.consumed_usd.toFixed(2)}${
-          typeof report.budget_consumed?.limit_usd === "number"
-            ? ` / $${report.budget_consumed.limit_usd.toFixed(2)}`
-            : ""
-        }`
-      : "N/A";
+  let budgetText = "N/A";
+  if (typeof report.budget_consumed?.consumed_usd === "number") {
+    const limitSuffix = typeof report.budget_consumed?.limit_usd === "number"
+      ? ` / $${report.budget_consumed.limit_usd.toFixed(2)}`
+      : "";
+    budgetText = `$${report.budget_consumed.consumed_usd.toFixed(2)}${limitSuffix}`;
+  }
 
   const planText = report.plan_executed.length > 0 ? report.plan_executed.join(" -> ") : "N/A";
   const iterationText =
@@ -318,62 +317,60 @@ async function findSessionsByPgTask(dir, pgTask) {
       // skip malformed sessions
     }
   }
-  return matches.sort();
+  return matches.sort((a, b) => a.localeCompare(b));
 }
 
-export async function reportCommand({ list = false, sessionId = null, format = "text", trace = false, currency = "usd", pgTask = null }) {
-  const dir = getSessionRoot();
-  if (!(await exists(dir))) {
-    console.log("No reports yet");
+async function resolveTraceOptions(currency) {
+  const { config } = await loadConfig();
+  const cur = currency?.toLowerCase() || config?.budget?.currency || "usd";
+  const rate = config?.budget?.exchange_rate_eur ?? 0.92;
+  return { cur, rate };
+}
+
+function printTraceReport(report, currency, exchangeRate) {
+  console.log(`Session: ${report.session_id}`);
+  if (report.pg_task_id) {
+    const projectLabel = report.pg_project_id ? ` (${report.pg_project_id})` : "";
+    console.log(`Planning Game Card: ${report.pg_task_id}${projectLabel}`);
+  }
+  console.log(`Status: ${report.status}`);
+  console.log(`Task: ${report.task_description || "N/A"}`);
+  console.log("");
+  printTraceTable(report.budget_trace, { currency, exchangeRate });
+}
+
+async function handlePgTaskReport({ dir, pgTask, list, sessionId, format, trace, currency }) {
+  const matches = await findSessionsByPgTask(dir, pgTask);
+  if (matches.length === 0) {
+    console.log(`No sessions found for card: ${pgTask}`);
     return;
   }
-
-  const entries = await fs.readdir(dir);
-
-  if (pgTask) {
-    const matches = await findSessionsByPgTask(dir, pgTask);
-    if (matches.length === 0) {
-      console.log(`No sessions found for card: ${pgTask}`);
-      return;
-    }
-    if (list) {
-      for (const item of matches) console.log(item);
-      return;
-    }
-    // Show all reports for this card, or the latest if no list flag
-    const targetId = sessionId || matches.at(-1);
-    const report = await buildReport(dir, targetId);
-    if (format === "json") {
-      console.log(JSON.stringify({ card: pgTask, sessions: matches, report }, null, 2));
-      return;
-    }
-    console.log(`Card ${pgTask}: ${matches.length} session${matches.length === 1 ? "" : "s"}`);
-    for (const m of matches) {
-      const marker = m === targetId ? " <--" : "";
-      console.log(`  ${m}${marker}`);
-    }
-    console.log("");
-    if (trace) {
-      const { config } = await loadConfig();
-      const cur = currency?.toLowerCase() || config?.budget?.currency || "usd";
-      const rate = config?.budget?.exchange_rate_eur ?? 0.92;
-      console.log(`Session: ${report.session_id}`);
-      console.log(`Status: ${report.status}`);
-      console.log(`Task: ${report.task_description || "N/A"}`);
-      console.log("");
-      printTraceTable(report.budget_trace, { currency: cur, exchangeRate: rate });
-    } else {
-      printTextReport(report);
-    }
-    return;
-  }
-
   if (list) {
-    for (const item of entries) console.log(item);
+    for (const item of matches) console.log(item);
     return;
   }
+  const targetId = sessionId || matches.at(-1);
+  const report = await buildReport(dir, targetId);
+  if (format === "json") {
+    console.log(JSON.stringify({ card: pgTask, sessions: matches, report }, null, 2));
+    return;
+  }
+  console.log(`Card ${pgTask}: ${matches.length} session${matches.length === 1 ? "" : "s"}`);
+  for (const m of matches) {
+    const marker = m === targetId ? " <--" : "";
+    console.log(`  ${m}${marker}`);
+  }
+  console.log("");
+  if (trace) {
+    const { cur, rate } = await resolveTraceOptions(currency);
+    printTraceReport(report, cur, rate);
+  } else {
+    printTextReport(report);
+  }
+}
 
-  const ids = [...entries].sort();
+async function handleSingleSessionReport({ dir, entries, sessionId, format, trace, currency }) {
+  const ids = [...entries].sort((a, b) => a.localeCompare(b));
   const selectedSessionId = sessionId || ids.at(-1);
   if (!selectedSessionId) {
     console.log("No reports yet");
@@ -388,24 +385,33 @@ export async function reportCommand({ list = false, sessionId = null, format = "
     console.log(JSON.stringify(report, null, 2));
     return;
   }
-
   if (trace) {
-    const { config } = await loadConfig();
-    const cur = currency?.toLowerCase() || config?.budget?.currency || "usd";
-    const rate = config?.budget?.exchange_rate_eur ?? 0.92;
-    console.log(`Session: ${report.session_id}`);
-    if (report.pg_task_id) {
-      const projectLabel = report.pg_project_id ? ` (${report.pg_project_id})` : "";
-      console.log(`Planning Game Card: ${report.pg_task_id}${projectLabel}`);
-    }
-    console.log(`Status: ${report.status}`);
-    console.log(`Task: ${report.task_description || "N/A"}`);
-    console.log("");
-    printTraceTable(report.budget_trace, { currency: cur, exchangeRate: rate });
+    const { cur, rate } = await resolveTraceOptions(currency);
+    printTraceReport(report, cur, rate);
+    return;
+  }
+  printTextReport(report);
+}
+
+export async function reportCommand({ list = false, sessionId = null, format = "text", trace = false, currency = "usd", pgTask = null }) {
+  const dir = getSessionRoot();
+  if (!(await exists(dir))) {
+    console.log("No reports yet");
     return;
   }
 
-  printTextReport(report);
+  const entries = await fs.readdir(dir);
+
+  if (pgTask) {
+    return handlePgTaskReport({ dir, pgTask, list, sessionId, format, trace, currency });
+  }
+
+  if (list) {
+    for (const item of entries) console.log(item);
+    return;
+  }
+
+  return handleSingleSessionReport({ dir, entries, sessionId, format, trace, currency });
 }
 
 export { formatDuration, convertCost, formatCost, printTraceTable, buildReport, findSessionsByPgTask };

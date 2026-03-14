@@ -2,7 +2,7 @@
 import path from "node:path";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { tools } from "./tools.js";
@@ -17,7 +17,7 @@ function readVersion() {
 
 const LOADED_VERSION = readVersion();
 
-const server = new Server(
+const mcpServer = new McpServer(
   {
     name: "karajan-mcp",
     version: LOADED_VERSION
@@ -30,6 +30,7 @@ const server = new Server(
     }
   }
 );
+const server = mcpServer.server;
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
 
@@ -54,4 +55,4 @@ setupOrphanGuard();
 setupVersionWatcher({ pkgPath: PKG_PATH, currentVersion: LOADED_VERSION });
 
 const transport = new StdioServerTransport();
-await server.connect(transport);
+await mcpServer.connect(transport);

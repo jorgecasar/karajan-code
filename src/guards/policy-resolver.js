@@ -1,4 +1,4 @@
-export const VALID_TASK_TYPES = ["sw", "infra", "doc", "add-tests", "refactor"];
+export const VALID_TASK_TYPES = new Set(["sw", "infra", "doc", "add-tests", "refactor"]);
 
 export const DEFAULT_POLICIES = {
   sw:        { tdd: true,  sonar: true,  reviewer: true, testsRequired: true  },
@@ -16,7 +16,7 @@ const FALLBACK_TYPE = "sw";
  * configOverrides optionally merges over defaults per taskType.
  */
 export function resolvePolicies(taskType, configOverrides) {
-  const resolvedType = VALID_TASK_TYPES.includes(taskType) ? taskType : FALLBACK_TYPE;
+  const resolvedType = VALID_TASK_TYPES.has(taskType) ? taskType : FALLBACK_TYPE;
   const base = { ...DEFAULT_POLICIES[resolvedType] };
   const overrides = configOverrides?.[resolvedType];
   if (overrides && typeof overrides === "object") {
@@ -31,7 +31,7 @@ export function resolvePolicies(taskType, configOverrides) {
  * orchestrator to determine which pipeline stages to enable/disable.
  */
 export function applyPolicies({ taskType, policies } = {}) {
-  const resolvedType = VALID_TASK_TYPES.includes(taskType) ? taskType : FALLBACK_TYPE;
+  const resolvedType = VALID_TASK_TYPES.has(taskType) ? taskType : FALLBACK_TYPE;
   const resolved = resolvePolicies(taskType, policies);
   return { taskType: resolvedType, ...resolved };
 }

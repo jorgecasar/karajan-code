@@ -3,6 +3,39 @@ import { runCommand } from "../utils/process.js";
 import { resolveBin } from "./resolve-bin.js";
 
 /**
+ * Safely parse a JSON line, returning null on failure.
+ */
+function tryParseJson(line) {
+  try {
+    return JSON.parse(line);
+  } catch { return null; }
+}
+
+/**
+ * Try to extract a result string from a parsed JSON object.
+ * Returns the result string or null if the object is not a result message.
+ */
+function extractResultText(obj) {
+  if (obj.type === "result" && obj.result) {
+    return typeof obj.result === "string" ? obj.result : JSON.stringify(obj.result);
+  }
+  if (obj.result && typeof obj.result === "string") {
+    return obj.result;
+  }
+  return null;
+}
+
+/**
+ * Collect text parts from an assistant message's content blocks.
+ */
+function collectAssistantText(obj) {
+  if (obj.type !== "assistant" || !obj.message?.content) return [];
+  return obj.message.content
+    .filter(block => block.type === "text" && block.text)
+    .map(block => block.text);
+}
+
+/**
  * Extract the final text result from stream-json NDJSON output.
  * Each line is a JSON object. We collect assistant text content from
  * "result" messages and fall back to accumulating "content_block_delta" text.
@@ -11,28 +44,16 @@ function extractTextFromStreamJson(raw) {
   const lines = (raw || "").split("\n").filter(Boolean);
   // Try to find a "result" message with the final text
   for (let i = lines.length - 1; i >= 0; i--) {
-    try {
-      const obj = JSON.parse(lines[i]);
-      if (obj.type === "result" && obj.result) {
-        return typeof obj.result === "string" ? obj.result : JSON.stringify(obj.result);
-      }
-      // Claude Code stream-json final message
-      if (obj.result && typeof obj.result === "string") {
-        return obj.result;
-      }
-    } catch { /* skip unparseable lines */ }
+    const obj = tryParseJson(lines[i]);
+    if (!obj) continue;
+    const result = extractResultText(obj);
+    if (result) return result;
   }
   // Fallback: accumulate all assistant text deltas
   const parts = [];
   for (const line of lines) {
-    try {
-      const obj = JSON.parse(line);
-      if (obj.type === "assistant" && obj.message?.content) {
-        for (const block of obj.message.content) {
-          if (block.type === "text" && block.text) parts.push(block.text);
-        }
-      }
-    } catch { /* skip */ }
+    const obj = tryParseJson(line);
+    if (obj) parts.push(...collectAssistantText(obj));
   }
   return parts.join("") || raw;
 }
@@ -129,7 +150,7 @@ export class ClaudeAgent extends BaseAgent {
       }));
       const raw = pickOutput(res);
       const output = extractTextFromStreamJson(raw);
-      return { ok: res.exitCode === 0, output, error: res.exitCode !== 0 ? raw : "", exitCode: res.exitCode };
+      return { ok: res.exitCode === 0, output, error: res.exitCode === 0 ? "" : raw, exitCode: res.exitCode };
     }
 
     // Without streaming, use json output to get structured response via stderr
@@ -137,7 +158,7 @@ export class ClaudeAgent extends BaseAgent {
     const res = await runCommand(resolveBin("claude"), args, cleanExecaOpts());
     const raw = pickOutput(res);
     const output = extractTextFromStreamJson(raw);
-    return { ok: res.exitCode === 0, output, error: res.exitCode !== 0 ? raw : "", exitCode: res.exitCode };
+    return { ok: res.exitCode === 0, output, error: res.exitCode === 0 ? "" : raw, exitCode: res.exitCode };
   }
 
   async reviewTask(task) {
@@ -150,6 +171,6 @@ export class ClaudeAgent extends BaseAgent {
       timeout: task.timeoutMs
     }));
     const raw = pickOutput(res);
-    return { ok: res.exitCode === 0, output: raw, error: res.exitCode !== 0 ? raw : "", exitCode: res.exitCode };
+    return { ok: res.exitCode === 0, output: raw, error: res.exitCode === 0 ? "" : raw, exitCode: res.exitCode };
   }
 }

@@ -26,10 +26,9 @@ function buildPrompt({ task, diff, sonarIssues, instructions }) {
     "You are a test quality gate. You do NOT write tests — you evaluate them.",
     "Run the test suite, check coverage, identify missing scenarios, and evaluate assertion quality.",
     "Return a single valid JSON object with your findings and nothing else.",
-    'JSON schema: {"tests_pass":boolean,"coverage":{"overall":number,"services":number,"utilities":number},"missing_scenarios":[string],"quality_issues":[string],"verdict":"pass"|"fail"}'
+    'JSON schema: {"tests_pass":boolean,"coverage":{"overall":number,"services":number,"utilities":number},"missing_scenarios":[string],"quality_issues":[string],"verdict":"pass"|"fail"}',
+    `## Task\n${task}`
   );
-
-  sections.push(`## Task\n${task}`);
 
   if (diff) {
     sections.push(`## Git diff\n${diff}`);
@@ -44,7 +43,7 @@ function buildPrompt({ task, diff, sonarIssues, instructions }) {
 
 function parseTesterOutput(raw) {
   const text = raw?.trim() || "";
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  const jsonMatch = /\{[\s\S]*\}/.exec(text);
   if (!jsonMatch) return null;
   return JSON.parse(jsonMatch[0]);
 }
@@ -101,7 +100,11 @@ export class TesterRole extends BaseRole {
           verdict,
           provider
         },
-        summary: `Verdict: ${verdict}; Coverage: ${coverage.overall ?? "?"}%${parsed.missing_scenarios?.length ? `; ${parsed.missing_scenarios.length} missing scenario(s)` : ""}${parsed.quality_issues?.length ? `; ${parsed.quality_issues.length} quality issue(s)` : ""}`
+        summary: (() => {
+          const missingPart = parsed.missing_scenarios?.length ? `; ${parsed.missing_scenarios.length} missing scenario(s)` : "";
+          const qualityPart = parsed.quality_issues?.length ? `; ${parsed.quality_issues.length} quality issue(s)` : "";
+          return `Verdict: ${verdict}; Coverage: ${coverage.overall ?? "?"}%${missingPart}${qualityPart}`;
+        })()
       };
     } catch (err) {
       return {
