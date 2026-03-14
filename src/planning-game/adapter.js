@@ -11,9 +11,7 @@ export function parseCardId(text) {
   return match ? match[0] : null;
 }
 
-export function buildTaskFromCard(card) {
-  const parts = [`## ${card.cardId}: ${card.title}`];
-
+function appendDescriptionSection(parts, card) {
   if (card.descriptionStructured?.length) {
     parts.push("", "### User Story");
     for (const s of card.descriptionStructured) {
@@ -24,7 +22,9 @@ export function buildTaskFromCard(card) {
   } else if (card.description) {
     parts.push("", "### Description", card.description);
   }
+}
 
+function appendAcceptanceCriteriaSection(parts, card) {
   if (card.acceptanceCriteriaStructured?.length) {
     parts.push("", "### Acceptance Criteria");
     for (const ac of card.acceptanceCriteriaStructured) {
@@ -39,19 +39,26 @@ export function buildTaskFromCard(card) {
   } else if (card.acceptanceCriteria) {
     parts.push("", "### Acceptance Criteria", card.acceptanceCriteria);
   }
+}
 
-  if (card.implementationPlan) {
-    const plan = card.implementationPlan;
-    parts.push("", "### Implementation Plan");
-    if (plan.approach) parts.push(`**Approach:** ${plan.approach}`);
-    if (plan.steps?.length) {
-      parts.push("**Steps:**");
-      for (const step of plan.steps) {
-        parts.push(`1. ${step.description}`);
-      }
+function appendImplementationPlanSection(parts, card) {
+  if (!card.implementationPlan) return;
+  const plan = card.implementationPlan;
+  parts.push("", "### Implementation Plan");
+  if (plan.approach) parts.push(`**Approach:** ${plan.approach}`);
+  if (plan.steps?.length) {
+    parts.push("**Steps:**");
+    for (const step of plan.steps) {
+      parts.push(`1. ${step.description}`);
     }
   }
+}
 
+export function buildTaskFromCard(card) {
+  const parts = [`## ${card.cardId}: ${card.title}`];
+  appendDescriptionSection(parts, card);
+  appendAcceptanceCriteriaSection(parts, card);
+  appendImplementationPlanSection(parts, card);
   return parts.join("\n");
 }
 
