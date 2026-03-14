@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-03-14
+
+### Added
+- **Output guard**: scans git diffs for destructive operations (rm -rf, DROP TABLE, git push --force), exposed credentials (AWS keys, private keys, tokens), and protected file modifications. Blocks pipeline on critical violations.
+- **Perf guard**: scans frontend file diffs for performance anti-patterns (images without dimensions/lazy, render-blocking scripts, missing font-display, document.write, heavy deps). Advisory by default, configurable to block.
+- **Intent classifier**: keyword-based deterministic pre-triage classification. Classifies obvious task types (doc, add-tests, refactor, infra, trivial-fix) without LLM call when enabled.
+- **Guards config schema**: `guards.output`, `guards.perf`, `guards.intent` in kj.config.yml with custom patterns, protected files, and confidence thresholds
+- **Pipeline guard integration**: guards run between coder+refactorer and quality gates; intent classifier runs before discover/triage in pre-loop
+
 ## [1.17.0] - 2026-03-14
 
 ### Added
