@@ -13,15 +13,16 @@ function buildPrompt({ task, instructions }) {
   const sections = [];
 
   if (instructions) {
-    sections.push(instructions);
-    sections.push("");
+    sections.push(instructions, "");
   }
 
-  sections.push("Refactor the current changes for clarity and maintainability without changing behavior.");
-  sections.push("Do not expand scope and keep tests green.");
-  sections.push("");
-  sections.push("## Task context");
-  sections.push(task);
+  sections.push(
+    "Refactor the current changes for clarity and maintainability without changing behavior.",
+    "Do not expand scope and keep tests green.",
+    "",
+    "## Task context",
+    task
+  );
 
   return sections.join("\n");
 }

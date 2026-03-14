@@ -16,8 +16,8 @@ export function parseCooldown(message) {
 
   // 1. ISO timestamp: "try again after 2026-03-07T15:30:00Z"
   //    Also: "resets at 2026-03-07T15:30:00Z"
-  const isoMatch = message.match(
-    /(?:after|at)\s+(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)/i
+  const isoMatch = /(?:after|at)\s+(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)/i.exec(
+    message
   );
   if (isoMatch) {
     const target = new Date(isoMatch[1]);
@@ -28,8 +28,8 @@ export function parseCooldown(message) {
   }
 
   // 4. Claude specific: "resets at 2026-03-07 15:30 UTC" (space-separated date/time)
-  const resetMatch = message.match(
-    /resets?\s+at\s+(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})\s*UTC/i
+  const resetMatch = /resets?\s+at\s+(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})\s*UTC/i.exec(
+    message
   );
   if (resetMatch) {
     const target = new Date(`${resetMatch[1]}T${resetMatch[2]}:00Z`);
@@ -40,22 +40,22 @@ export function parseCooldown(message) {
   }
 
   // 2. Relative seconds: "retry after 120 seconds" / "retry in 120s" / "Retry-After: 120"
-  const secMatch = message.match(
-    /(?:retry[\s-]*after|retry\s+in|wait)\s*:?\s*(\d+)\s*(?:seconds?|secs?|s\b)/i
-  ) || message.match(/Retry-After:\s*(\d+)/i);
+  const secMatch = /(?:retry[\s-]*after|retry\s+in|wait)\s*:?\s*(\d+)\s*(?:seconds?|secs?|s\b)/i.exec(
+    message
+  ) || /Retry-After:\s*(\d+)/i.exec(message);
   if (secMatch) {
-    const seconds = parseInt(secMatch[1], 10);
+    const seconds = Number.parseInt(secMatch[1], 10);
     const ms = seconds * 1000;
     const target = new Date(Date.now() + ms);
     return { cooldownUntil: target.toISOString(), cooldownMs: ms };
   }
 
   // 3. Relative minutes: "retry in 5 minutes" / "wait 5 min"
-  const minMatch = message.match(
-    /(?:retry\s+in|wait|after)\s+(\d+)\s*(?:minutes?|mins?)/i
+  const minMatch = /(?:retry\s+in|wait|after)\s+(\d+)\s*(?:minutes?|mins?)/i.exec(
+    message
   );
   if (minMatch) {
-    const minutes = parseInt(minMatch[1], 10);
+    const minutes = Number.parseInt(minMatch[1], 10);
     const ms = minutes * 60 * 1000;
     const target = new Date(Date.now() + ms);
     return { cooldownUntil: target.toISOString(), cooldownMs: ms };

@@ -108,11 +108,11 @@ function roleEnd(status, label, elapsed) {
 /* ── Helper: pass/fail stage result ─────────────────────────── */
 
 function passFailStage(detail, label, failDefault, elapsed) {
-  if (detail?.ok !== false) {
-    console.log(`  \u251c\u2500 ${ANSI.green}\u2705 ${label}: passed${ANSI.reset}  ${elapsed}`);
-  } else {
+  if (detail?.ok === false) {
     const summary = detail?.summary || failDefault;
     console.log(`  \u251c\u2500 ${ANSI.red}\u274c ${label}: ${summary}${ANSI.reset}  ${elapsed}`);
+  } else {
+    console.log(`  \u251c\u2500 ${ANSI.green}\u2705 ${label}: passed${ANSI.reset}  ${elapsed}`);
   }
 }
 
@@ -126,7 +126,7 @@ const SOLOMON_RULING_HANDLERS = {
   },
   approve_with_conditions(detail, elapsed) {
     const condCount = detail?.conditions?.length || 0;
-    console.log(`  \u251c\u2500 ${ANSI.yellow}\u2696\ufe0f Solomon: ${condCount} condition${condCount !== 1 ? "s" : ""}${ANSI.reset}  ${elapsed}`);
+    console.log(`  \u251c\u2500 ${ANSI.yellow}\u2696\ufe0f Solomon: ${condCount} condition${condCount === 1 ? "" : "s"}${ANSI.reset}  ${elapsed}`);
     if (detail?.conditions) {
       for (const cond of detail.conditions) {
         console.log(`  \u2502   ${ANSI.dim}${cond}${ANSI.reset}`);
@@ -149,7 +149,7 @@ function printSolomonRuling(detail, elapsed) {
   if (handler) {
     handler(detail, elapsed);
   } else {
-    const rulingUpper = ruling.toUpperCase().replace(/_/g, " ");
+    const rulingUpper = ruling.toUpperCase().replaceAll("_", " ");
     console.log(`  \u251c\u2500 \u2696\ufe0f Solomon: ${rulingUpper}  ${elapsed}`);
   }
 }
@@ -277,7 +277,7 @@ const EVENT_HANDLERS = {
   "tdd:result": (event, icon) => {
     const tdd = event.detail || {};
     const label = tdd.ok ? `${ANSI.green}PASS${ANSI.reset}` : `${ANSI.red}FAIL${ANSI.reset}`;
-    const files = tdd.sourceFiles !== undefined ? ` (${tdd.sourceFiles} src, ${tdd.testFiles} test)` : "";
+    const files = tdd.sourceFiles === undefined ? "" : ` (${tdd.sourceFiles} src, ${tdd.testFiles} test)`;
     console.log(`  \u251c\u2500 ${icon} TDD policy: ${label}${files}`);
   },
 
@@ -357,7 +357,7 @@ const EVENT_HANDLERS = {
   },
 
   "coder:standby_heartbeat": (event, icon) => {
-    const remaining = event.detail?.remainingMs !== undefined ? Math.round(event.detail.remainingMs / 1000) : "?";
+    const remaining = event.detail?.remainingMs === undefined ? "?" : Math.round(event.detail.remainingMs / 1000);
     console.log(`  \u251c\u2500 ${ANSI.yellow}${icon} Standby: ${remaining}s remaining${ANSI.reset}`);
   },
 
@@ -422,7 +422,7 @@ const EVENT_HANDLERS = {
 
 export function printEvent(event) {
   const icon = ICONS[event.type] || "\u2022";
-  const elapsed = event.elapsed !== undefined ? `${ANSI.dim}[${formatElapsed(event.elapsed)}]${ANSI.reset}` : "";
+  const elapsed = event.elapsed === undefined ? "" : `${ANSI.dim}[${formatElapsed(event.elapsed)}]${ANSI.reset}`;
   const status = event.status ? STATUS_ICON[event.status] || "" : "";
 
   const handler = EVENT_HANDLERS[event.type];

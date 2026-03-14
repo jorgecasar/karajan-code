@@ -6,11 +6,11 @@ const SUBAGENT_PREAMBLE = [
 
 export const DISCOVER_MODES = ["gaps", "momtest", "wendel", "classify", "jtbd"];
 
-const VALID_VERDICTS = ["ready", "needs_validation"];
-const VALID_SEVERITIES = ["critical", "major", "minor"];
-const VALID_WENDEL_STATUSES = ["pass", "fail", "unknown", "not_applicable"];
-const VALID_CLASSIFY_TYPES = ["START", "STOP", "DIFFERENT", "not_applicable"];
-const VALID_ADOPTION_RISKS = ["none", "low", "medium", "high"];
+const VALID_VERDICTS = new Set(["ready", "needs_validation"]);
+const VALID_SEVERITIES = new Set(["critical", "major", "minor"]);
+const VALID_WENDEL_STATUSES = new Set(["pass", "fail", "unknown", "not_applicable"]);
+const VALID_CLASSIFY_TYPES = new Set(["START", "STOP", "DIFFERENT", "not_applicable"]);
+const VALID_ADOPTION_RISKS = new Set(["none", "low", "medium", "high"]);
 
 export function buildDiscoverPrompt({ task, instructions, mode = "gaps", context = null }) {
   const sections = [SUBAGENT_PREAMBLE];
@@ -148,12 +148,12 @@ function parseClassification(raw) {
   const rawType = String(raw.type || "").toUpperCase();
   let type;
   if (rawType === "NOT_APPLICABLE") type = "not_applicable";
-  else if (VALID_CLASSIFY_TYPES.includes(rawType)) type = rawType;
+  else if (VALID_CLASSIFY_TYPES.has(rawType)) type = rawType;
   else type = "not_applicable";
   const rawRisk = String(raw.adoptionRisk || "").toLowerCase();
   return {
     type,
-    adoptionRisk: VALID_ADOPTION_RISKS.includes(rawRisk) ? rawRisk : "medium",
+    adoptionRisk: VALID_ADOPTION_RISKS.has(rawRisk) ? rawRisk : "medium",
     frictionEstimate: raw.frictionEstimate || ""
   };
 }
@@ -164,7 +164,7 @@ function parseGaps(rawGaps) {
     .map((g) => ({
       id: g.id,
       description: g.description,
-      severity: VALID_SEVERITIES.includes(String(g.severity).toLowerCase())
+      severity: VALID_SEVERITIES.has(String(g.severity).toLowerCase())
         ? String(g.severity).toLowerCase()
         : "major",
       suggestedQuestion: g.suggestedQuestion
@@ -187,7 +187,7 @@ function parseWendelChecklist(rawChecklist) {
     .filter((c) => c?.condition && c.justification && c.status)
     .map((c) => ({
       condition: c.condition,
-      status: VALID_WENDEL_STATUSES.includes(String(c.status).toLowerCase())
+      status: VALID_WENDEL_STATUSES.has(String(c.status).toLowerCase())
         ? String(c.status).toLowerCase()
         : "unknown",
       justification: c.justification
@@ -209,7 +209,7 @@ function parseJtbds(rawJtbds) {
 
 export function parseDiscoverOutput(raw) {
   const text = raw?.trim() || "";
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  const jsonMatch = /\{[\s\S]*\}/.exec(text);
   if (!jsonMatch) return null;
 
   let parsed;
@@ -220,7 +220,7 @@ export function parseDiscoverOutput(raw) {
   }
 
   return {
-    verdict: VALID_VERDICTS.includes(parsed.verdict) ? parsed.verdict : "ready",
+    verdict: VALID_VERDICTS.has(parsed.verdict) ? parsed.verdict : "ready",
     gaps: parseGaps(parsed.gaps),
     momTestQuestions: parseMomTestQuestions(parsed.momTestQuestions),
     wendelChecklist: parseWendelChecklist(parsed.wendelChecklist),

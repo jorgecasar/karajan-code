@@ -14,9 +14,11 @@ export function buildScannerOpts(projectKey, scanner = {}) {
   }
   const rules = scanner.disabled_rules || [];
   rules.forEach((rule, i) => {
-    opts.push(`-Dsonar.issue.ignore.multicriteria=e${i + 1}`);
-    opts.push(`-Dsonar.issue.ignore.multicriteria.e${i + 1}.ruleKey=${rule}`);
-    opts.push(`-Dsonar.issue.ignore.multicriteria.e${i + 1}.resourceKey=**/*`);
+    opts.push(
+      `-Dsonar.issue.ignore.multicriteria=e${i + 1}`,
+      `-Dsonar.issue.ignore.multicriteria.e${i + 1}.ruleKey=${rule}`,
+      `-Dsonar.issue.ignore.multicriteria.e${i + 1}.resourceKey=**/*`
+    );
   });
   return opts.join(" ");
 }
@@ -46,7 +48,7 @@ function parseJsonSafe(text) {
 }
 
 function normalizeApiHost(rawHost) {
-  return String(rawHost || "http://localhost:9000").replace(/host\.docker\.internal/g, "localhost");
+  return String(rawHost || "http://localhost:9000").replaceAll("host.docker.internal", "localhost");
 }
 
 async function validateAdminCredentials(host, user, password) {
@@ -139,7 +141,7 @@ async function resolveSonarToken(config, apiHost) {
     "admin"
   ].filter(Boolean);
 
-  for (const password of [...new Set(candidates)]) {
+  for (const password of new Set(candidates)) {
     const valid = await validateAdminCredentials(apiHost, adminUser, password);
     if (!valid) continue;
     const token = await generateUserToken(apiHost, adminUser, password);
@@ -171,7 +173,7 @@ export async function runSonarScan(config, projectKey = null) {
   const sonarNetwork = sonarConfig.network || "karajan_sonar_net";
   const apiHost = normalizeApiHost(rawHost);
   const isLocalHost = /localhost|127\.0\.0\.1/.test(rawHost);
-  const host = isLocalHost ? rawHost.replace(/localhost|127\.0\.0\.1/g, "host.docker.internal") : rawHost;
+  const host = isLocalHost ? rawHost.replaceAll(/localhost|127\.0\.0\.1/g, "host.docker.internal") : rawHost;
 
   const start = await sonarUp(rawHost);
   if (start.exitCode !== 0) {
@@ -213,7 +215,7 @@ export async function runSonarScan(config, projectKey = null) {
     "-v",
     `${process.cwd()}:/usr/src`,
     ...(isLocalHost ? ["--add-host", "host.docker.internal:host-gateway"] : []),
-    ...(!isLocalHost && !isExternalSonar ? ["--network", sonarNetwork] : []),
+    ...(isLocalHost || isExternalSonar ? [] : ["--network", sonarNetwork]),
     "-e",
     `SONAR_HOST_URL=${host}`,
     "-e",

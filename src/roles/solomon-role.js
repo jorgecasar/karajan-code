@@ -36,36 +36,24 @@ function buildPrompt({ conflict, task, instructions }) {
 
   sections.push(
     "You are Solomon, the conflict resolver in a multi-role AI pipeline.",
-    "You are activated when agents cannot reach agreement after their iteration limit."
-  );
-
-  sections.push(
+    "You are activated when agents cannot reach agreement after their iteration limit.",
     "## Decision hierarchy",
     "Security > Correctness > Tests > Architecture > Maintainability > Style",
     "- Green tests are sacred. Never dismiss a failing test.",
     "- Style preferences NEVER block approval.",
     "- Hardcoded values that will come from DB later are acceptable (contextual false positive).",
     "- Sonar INFO/MINOR issues are always dismissable.",
-    "- Sonar BLOCKER/CRITICAL must be fixed unless they are proven false positives."
-  );
-
-  sections.push(
+    "- Sonar BLOCKER/CRITICAL must be fixed unless they are proven false positives.",
     "## Classification rules",
     "For each issue, classify as:",
     "1. **critical** (security, correctness, tests broken) — action: must_fix",
     "2. **important** (architecture, maintainability) — action: should_fix",
-    "3. **style** (naming, formatting, preferences, false positives) — action: dismiss"
-  );
-
-  sections.push(
+    "3. **style** (naming, formatting, preferences, false positives) — action: dismiss",
     "## Your decision options",
     '1. **approve** — All pending issues are style/false positives. Pipeline continues.',
     '2. **approve_with_conditions** — Important issues exist but are fixable. Give exact instructions to Coder for one more attempt.',
     '3. **escalate_human** — Critical issues that cannot be resolved, ambiguous requirements, architecture decisions, or business logic decisions.',
-    '4. **create_subtask** — A prerequisite task must be completed first to resolve the conflict. The current task will pause, the subtask runs, then the current task resumes.'
-  );
-
-  sections.push(
+    '4. **create_subtask** — A prerequisite task must be completed first to resolve the conflict. The current task will pause, the subtask runs, then the current task resumes.',
     "Return a single valid JSON object with your ruling and nothing else.",
     'JSON schema: {"ruling":"approve"|"approve_with_conditions"|"escalate_human"|"create_subtask","classification":[{"issue":string,"category":"critical"|"important"|"style","action":"must_fix"|"should_fix"|"dismiss"}],"conditions":[string],"dismissed":[string],"escalate":boolean,"escalate_reason":string|null,"subtask":{"title":string,"description":string,"reason":string}|null}'
   );
@@ -95,7 +83,7 @@ function buildPrompt({ conflict, task, instructions }) {
 
 function parseSolomonOutput(raw) {
   const text = raw?.trim() || "";
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  const jsonMatch = /\{[\s\S]*\}/.exec(text);
   if (!jsonMatch) return null;
   return JSON.parse(jsonMatch[0]);
 }
@@ -113,7 +101,7 @@ function buildSummary(parsed) {
   }
 
   if (ruling === "approve_with_conditions") {
-    const parts = [`Approved with ${conditions.length} condition${conditions.length !== 1 ? "s" : ""}`];
+    const parts = [`Approved with ${conditions.length} condition${conditions.length === 1 ? "" : "s"}`];
     if (dismissed.length > 0) parts.push(`${dismissed.length} dismissed`);
     return parts.join("; ");
   }

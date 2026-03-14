@@ -66,7 +66,7 @@ export async function dispatchComment({ repo, prNumber, agent, body, becariaConf
   validateAgent(agent);
   if (!body) throw new Error("body is required (comment text)");
 
-  const prefix = becariaConfig?.comment_prefix !== false ? `[${agent}] ` : "";
+  const prefix = becariaConfig?.comment_prefix === false ? "" : `[${agent}] `;
   const eventType = becariaConfig?.comment_event || "becaria-comment";
 
   await sendDispatch(repo, {

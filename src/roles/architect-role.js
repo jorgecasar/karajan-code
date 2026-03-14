@@ -17,16 +17,16 @@ function buildSummary(parsed) {
   if (arch.type) parts.push(arch.type);
 
   const layers = arch.layers?.length || 0;
-  if (layers) parts.push(`${layers} layer${layers !== 1 ? "s" : ""}`);
+  if (layers) parts.push(`${layers} layer${layers === 1 ? "" : "s"}`);
 
   const patterns = arch.patterns?.length || 0;
-  if (patterns) parts.push(`${patterns} pattern${patterns !== 1 ? "s" : ""}`);
+  if (patterns) parts.push(`${patterns} pattern${patterns === 1 ? "" : "s"}`);
 
   const entities = arch.dataModel?.entities?.length || 0;
-  if (entities) parts.push(`${entities} entit${entities !== 1 ? "ies" : "y"}`);
+  if (entities) parts.push(`${entities} entit${entities === 1 ? "y" : "ies"}`);
 
   const questions = parsed.questions?.length || 0;
-  if (questions) parts.push(`${questions} question${questions !== 1 ? "s" : ""}`);
+  if (questions) parts.push(`${questions} question${questions === 1 ? "" : "s"}`);
 
   return parts.length
     ? `Architecture complete: ${parts.join(", ")} (verdict: ${parsed.verdict})`

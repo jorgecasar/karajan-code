@@ -7,7 +7,7 @@ const SESSION_ROOT = getSessionRoot();
 
 export function newSessionId() {
   const now = new Date();
-  const stamp = now.toISOString().replace(/[:.]/g, "-");
+  const stamp = now.toISOString().replaceAll(/[:.]/g, "-");
   return `s_${stamp}`;
 }
 

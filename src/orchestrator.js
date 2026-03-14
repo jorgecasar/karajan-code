@@ -409,7 +409,7 @@ function parseCheckpointAnswer({ trimmedAnswer, checkpointDisabled, config }) {
   if (trimmedAnswer === "1" || trimmedAnswer.toLowerCase().includes("5 m")) {
     return { action: "continue_loop", checkpointDisabled, lastCheckpointAt: Date.now() };
   }
-  const customMinutes = parseInt(trimmedAnswer.replace(/\D/g, ""), 10);
+  const customMinutes = Number.parseInt(trimmedAnswer.replaceAll(/\D/g, ""), 10);
   if (customMinutes > 0) {
     config.session.checkpoint_interval_minutes = customMinutes;
     return { action: "continue_loop", checkpointDisabled, lastCheckpointAt: Date.now() };
@@ -485,7 +485,23 @@ async function handleBecariaEarlyPrOrPush({ becariaEnabled, config, session, emi
     const { detectRepo } = await import("./becaria/repo.js");
     const repo = await detectRepo();
 
-    if (!session.becaria_pr_number) {
+    if (session.becaria_pr_number) {
+      const pushResult = await incrementalPush({ gitCtx, task, logger, session });
+      if (pushResult) {
+        session.becaria_commits = [...(session.becaria_commits ?? []), ...pushResult.commits];
+        await saveSession(session);
+
+        if (repo) {
+          const feedback = session.last_reviewer_feedback || "N/A";
+          const commitList = pushResult.commits.map((c) => `- \`${c.hash.slice(0, 7)}\` ${c.message}`).join("\n");
+          await dispatchComment({
+            repo, prNumber: session.becaria_pr_number, agent: "Coder",
+            body: `Issues corregidos:\n${feedback}\n\nCommits:\n${commitList}`,
+            becariaConfig: config.becaria
+          });
+        }
+      }
+    } else {
       const earlyPr = await earlyPrCreation({ gitCtx, task, logger, session, stageResults });
       if (earlyPr) {
         session.becaria_pr_number = earlyPr.prNumber;
@@ -502,22 +518,6 @@ async function handleBecariaEarlyPrOrPush({ becariaEnabled, config, session, emi
           await dispatchComment({
             repo, prNumber: earlyPr.prNumber, agent: "Coder",
             body: `Iteración ${i} completada.\n\nCommits:\n${commitList}`,
-            becariaConfig: config.becaria
-          });
-        }
-      }
-    } else {
-      const pushResult = await incrementalPush({ gitCtx, task, logger, session });
-      if (pushResult) {
-        session.becaria_commits = [...(session.becaria_commits || []), ...pushResult.commits];
-        await saveSession(session);
-
-        if (repo) {
-          const feedback = session.last_reviewer_feedback || "N/A";
-          const commitList = pushResult.commits.map((c) => `- \`${c.hash.slice(0, 7)}\` ${c.message}`).join("\n");
-          await dispatchComment({
-            repo, prNumber: session.becaria_pr_number, agent: "Coder",
-            body: `Issues corregidos:\n${feedback}\n\nCommits:\n${commitList}`,
             becariaConfig: config.becaria
           });
         }
@@ -669,7 +669,7 @@ async function handlePostLoopStages({ config, session, emitter, eventBase, coder
 async function finalizeApprovedSession({ config, gitCtx, task, logger, session, stageResults, emitter, eventBase, budgetSummary, pgCard, pgProject, review, i }) {
   const gitResult = await finalizeGitAutomation({ config, gitCtx, task, logger, session, stageResults });
   if (stageResults.planner?.ok) {
-    stageResults.planner.completedSteps = [...(stageResults.planner.steps || [])];
+    stageResults.planner.completedSteps = [...(stageResults.planner.steps ?? [])];
   }
   session.budget = budgetSummary();
   await markSessionStatus(session, "approved");
@@ -963,7 +963,6 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
 
     const retryResult = await handleReviewerRetryAndSolomon({ config, session, emitter, eventBase, logger, review, task, i, askQuestion });
     if (retryResult.action === "return") return retryResult.result;
-    if (retryResult.action === "continue") continue;
   }
 
   session.budget = budgetSummary();
@@ -990,8 +989,8 @@ export async function resumeFlow({ sessionId, answer, config, logger, flags = {}
   }
 
   // Allow resuming "stopped" sessions (checkpoint stop) and "failed" sessions
-  const resumableStatuses = ["running", "stopped", "failed"];
-  if (!resumableStatuses.includes(session.status)) {
+  const resumableStatuses = new Set(["running", "stopped", "failed"]);
+  if (!resumableStatuses.has(session.status)) {
     logger.info(`Session ${sessionId} has status ${session.status} — not resumable`);
     return session;
   }

@@ -229,13 +229,15 @@ async function checkRuleFiles(config) {
 export async function runChecks({ config }) {
   const checks = [];
 
-  checks.push(checkKarajanVersion());
-  checks.push(await checkConfigFile());
-  checks.push(await checkGitRepo());
-  checks.push(await checkDocker());
-  checks.push(await checkSonarQube(config));
-  checks.push(...await checkAgentCLIs());
-  checks.push(...await checkCoreBinaries());
+  checks.push(
+    checkKarajanVersion(),
+    await checkConfigFile(),
+    await checkGitRepo(),
+    await checkDocker(),
+    await checkSonarQube(config),
+    ...await checkAgentCLIs(),
+    ...await checkCoreBinaries()
+  );
 
   if (config.serena?.enabled) {
     checks.push(await checkSerena());

@@ -129,7 +129,7 @@ export class ClaudeAgent extends BaseAgent {
       }));
       const raw = pickOutput(res);
       const output = extractTextFromStreamJson(raw);
-      return { ok: res.exitCode === 0, output, error: res.exitCode !== 0 ? raw : "", exitCode: res.exitCode };
+      return { ok: res.exitCode === 0, output, error: res.exitCode === 0 ? "" : raw, exitCode: res.exitCode };
     }
 
     // Without streaming, use json output to get structured response via stderr
@@ -137,7 +137,7 @@ export class ClaudeAgent extends BaseAgent {
     const res = await runCommand(resolveBin("claude"), args, cleanExecaOpts());
     const raw = pickOutput(res);
     const output = extractTextFromStreamJson(raw);
-    return { ok: res.exitCode === 0, output, error: res.exitCode !== 0 ? raw : "", exitCode: res.exitCode };
+    return { ok: res.exitCode === 0, output, error: res.exitCode === 0 ? "" : raw, exitCode: res.exitCode };
   }
 
   async reviewTask(task) {
@@ -150,6 +150,6 @@ export class ClaudeAgent extends BaseAgent {
       timeout: task.timeoutMs
     }));
     const raw = pickOutput(res);
-    return { ok: res.exitCode === 0, output: raw, error: res.exitCode !== 0 ? raw : "", exitCode: res.exitCode };
+    return { ok: res.exitCode === 0, output: raw, error: res.exitCode === 0 ? "" : raw, exitCode: res.exitCode };
   }
 }

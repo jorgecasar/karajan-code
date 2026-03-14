@@ -9,7 +9,7 @@ function parseBudgetFromActivityLog(logText) {
     return { consumed_usd: null, limit_usd: null };
   }
 
-  const regex = /Budget:\s*\$([0-9]+(?:\.[0-9]+)?)\s*\/\s*\$([0-9]+(?:\.[0-9]+)?)/g;
+  const regex = /Budget:\s*\$(\d+(?:\.\d+)?)\s*\/\s*\$(\d+(?:\.\d+)?)/g;
   let match;
   let last = null;
   while ((match = regex.exec(logText)) !== null) {
@@ -61,7 +61,7 @@ function summarizePlan(checkpoints = []) {
 
   const uniqueOrdered = [];
   for (const stage of stages) {
-    if (uniqueOrdered[uniqueOrdered.length - 1] !== stage) {
+    if (uniqueOrdered.at(-1) !== stage) {
       uniqueOrdered.push(stage);
     }
   }
@@ -79,7 +79,7 @@ function summarizeSonar(checkpoints = []) {
   }
 
   const initial = sonarPoints[0];
-  const final = sonarPoints[sonarPoints.length - 1];
+  const final = sonarPoints.at(-1);
   return {
     initial,
     final,

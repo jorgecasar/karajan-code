@@ -9,7 +9,7 @@
  * Requires planning_game.api_url in config or PG_API_URL env var.
  */
 
-import { withRetry, isTransientError } from "../utils/retry.js";
+import { withRetry } from "../utils/retry.js";
 
 const DEFAULT_API_URL = "http://localhost:3000/api";
 const DEFAULT_TIMEOUT_MS = 10000;

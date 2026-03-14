@@ -57,7 +57,7 @@ export function buildPipelineTracker(config, emitter) {
   };
 
   emitter.on("progress", (event) => {
-    const match = event.type?.match(/^(\w+):(start|end)$/);
+    const match = /^(\w+):(start|end)$/.exec(event.type ?? "");
     if (!match) return;
 
     const [, name, phase] = match;

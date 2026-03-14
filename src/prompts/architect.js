@@ -4,7 +4,7 @@ const SUBAGENT_PREAMBLE = [
   "Do NOT use any MCP tools. Focus only on designing the architecture for the task."
 ].join(" ");
 
-export const VALID_VERDICTS = ["ready", "needs_clarification"];
+export const VALID_VERDICTS = new Set(["ready", "needs_clarification"]);
 
 export function buildArchitectPrompt({ task, instructions, researchContext = null }) {
   const sections = [SUBAGENT_PREAMBLE];
@@ -53,7 +53,7 @@ function filterStrings(arr) {
 
 export function parseArchitectOutput(raw) {
   const text = raw?.trim() || "";
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  const jsonMatch = /\{[\s\S]*\}/.exec(text);
   if (!jsonMatch) return null;
 
   let parsed;
@@ -63,7 +63,7 @@ export function parseArchitectOutput(raw) {
     return null;
   }
 
-  const verdict = VALID_VERDICTS.includes(parsed.verdict)
+  const verdict = VALID_VERDICTS.has(parsed.verdict)
     ? parsed.verdict
     : "needs_clarification";
 

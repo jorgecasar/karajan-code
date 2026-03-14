@@ -13,7 +13,7 @@ import {
 
 function buildCommitMessage(task) {
   const clean = String(task || "")
-    .replace(/\s+/g, " ")
+    .replaceAll(/\s+/g, " ")
     .trim();
   const prefix = "feat: ";
   const maxBody = 72 - prefix.length;
@@ -22,7 +22,7 @@ function buildCommitMessage(task) {
 
 function buildPrTitle(task) {
   const clean = String(task || "")
-    .replace(/\s+/g, " ")
+    .replaceAll(/\s+/g, " ")
     .trim();
   return clean.slice(0, 70) || "Karajan update";
 }

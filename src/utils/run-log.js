@@ -107,7 +107,7 @@ function detectRunStart(line, status) {
   if (!started) return;
   status.isRunning = true;
   status.currentStage = KJ_TOOLS.find(t => line.includes(t));
-  const tsMatch = line.match(/^(\d{2}:\d{2}:\d{2}\.\d{3})/);
+  const tsMatch = /^(\d{2}:\d{2}:\d{2}\.\d{3})/.exec(line);
   if (tsMatch) status.startedAt = tsMatch[1];
 }
 
@@ -119,10 +119,10 @@ function detectRunFinish(line, status) {
 }
 
 function detectStageTransitions(line, status) {
-  const stageStart = line.match(/\[(\w+):start\]/);
+  const stageStart = /\[(\w+):start\]/.exec(line);
   if (stageStart) status.currentStage = stageStart[1];
 
-  const stageDone = line.match(/\[(\w+):done\]|\[(\w+)\] finished/);
+  const stageDone = /\[(\w+):done\]|\[(\w+)\] finished/.exec(line);
   if (stageDone) {
     const doneName = stageDone[1] || stageDone[2];
     if (doneName === status.currentStage) status.currentStage = "idle";
@@ -130,13 +130,13 @@ function detectStageTransitions(line, status) {
 }
 
 function detectMetadata(line, status) {
-  const agentMatch = line.match(/agent=(\w+)/);
+  const agentMatch = /agent=(\w+)/.exec(line);
   if (agentMatch) status.currentAgent = agentMatch[1];
 
-  const iterMatch = line.match(/[Ii]teration\s+(\d+)/);
-  if (iterMatch) status.iteration = parseInt(iterMatch[1], 10);
+  const iterMatch = /[Ii]teration\s+(\d+)/.exec(line);
+  if (iterMatch) status.iteration = Number.parseInt(iterMatch[1], 10);
 
-  if (line.match(/\[.*:fail\]|\[.*error\]/i) || line.includes("ERROR")) {
+  if (/\[.*:fail\]|\[.*error\]/i.test(line) || line.includes("ERROR")) {
     status.errors.push(line.trim());
   }
 

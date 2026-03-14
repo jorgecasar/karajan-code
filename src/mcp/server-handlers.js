@@ -471,7 +471,7 @@ export async function handleDiscoverDirect(a, server, extra) {
 
 /* ── Preflight helpers ─────────────────────────────────────────────── */
 
-const AGENT_ROLES = ["coder", "reviewer", "tester", "security", "solomon"];
+const AGENT_ROLES = new Set(["coder", "reviewer", "tester", "security", "solomon"]);
 
 async function buildPreflightRequiredResponse(toolName) {
   const { config } = await loadConfig();
@@ -480,7 +480,7 @@ async function buildPreflightRequiredResponse(toolName) {
   const agentSummary = agents
     .filter(ag => ag.provider !== "-")
     .map(ag => {
-      const modelSuffix = ag.model !== "-" ? ` (${ag.model})` : "";
+      const modelSuffix = ag.model === "-" ? "" : ` (${ag.model})`;
       return `  ${ag.role}: ${ag.provider}${modelSuffix}`;
     })
     .join("\n");
@@ -501,12 +501,12 @@ function applySessionOverrides(a, roleKeys) {
 function parseHumanResponseOverrides(humanResponse, overrides) {
   for (const role of AGENT_ROLES) {
     const patterns = [
-      new RegExp(`use\\s+(\\w+)\\s+(?:as|for)\\s+${role}`, "i"),
-      new RegExp(`${role}\\s*[:=]\\s*(\\w+)`, "i"),
-      new RegExp(`set\\s+${role}\\s+(?:to|=)\\s*(\\w+)`, "i")
+      new RegExp(String.raw`use\s+(\w+)\s+(?:as|for)\s+${role}`, "i"),
+      new RegExp(String.raw`${role}\s*[:=]\s*(\w+)`, "i"),
+      new RegExp(String.raw`set\s+${role}\s+(?:to|=)\s*(\w+)`, "i")
     ];
     for (const pat of patterns) {
-      const m = humanResponse.match(pat);
+      const m = pat.exec(humanResponse);
       if (m && !overrides[role]) {
         overrides[role] = m[1];
         break;
@@ -535,11 +535,11 @@ function formatPreflightConfig(agents, overrides) {
     .filter(ag => ag.provider !== "-")
     .map(ag => {
       const ovr = overrides[ag.role] ? ` -> ${overrides[ag.role]} (session override)` : "";
-      const modelSuffix = ag.model !== "-" ? ` (${ag.model})` : "";
+      const modelSuffix = ag.model === "-" ? "" : ` (${ag.model})`;
       return `  ${ag.role}: ${ag.provider}${modelSuffix}${ovr}`;
     });
   const overrideLines = Object.entries(overrides)
-    .filter(([k]) => !AGENT_ROLES.includes(k))
+    .filter(([k]) => !AGENT_ROLES.has(k))
     .map(([k, v]) => `  ${k}: ${v}`);
   return [...lines, ...overrideLines].join("\n");
 }
@@ -614,9 +614,9 @@ async function handleRun(a, server, extra) {
     return failPayload("Missing required field: task");
   }
   if (a.taskType) {
-    const validTypes = ["sw", "infra", "doc", "add-tests", "refactor"];
-    if (!validTypes.includes(a.taskType)) {
-      return failPayload(`Invalid taskType "${a.taskType}". Valid values: ${validTypes.join(", ")}`);
+    const validTypes = new Set(["sw", "infra", "doc", "add-tests", "refactor"]);
+    if (!validTypes.has(a.taskType)) {
+      return failPayload(`Invalid taskType "${a.taskType}". Valid values: ${[...validTypes].join(", ")}`);
     }
   }
   if (!isPreflightAcked()) {
@@ -655,9 +655,9 @@ async function handleDiscover(a, server, extra) {
   if (!a.task) {
     return failPayload("Missing required field: task");
   }
-  const validModes = ["gaps", "momtest", "wendel", "classify", "jtbd"];
-  if (a.mode && !validModes.includes(a.mode)) {
-    return failPayload(`Invalid mode "${a.mode}". Valid values: ${validModes.join(", ")}`);
+  const validModes = new Set(["gaps", "momtest", "wendel", "classify", "jtbd"]);
+  if (a.mode && !validModes.has(a.mode)) {
+    return failPayload(`Invalid mode "${a.mode}". Valid values: ${[...validModes].join(", ")}`);
   }
   return handleDiscoverDirect(a, server, extra);
 }
