@@ -101,7 +101,11 @@ export class TesterRole extends BaseRole {
           verdict,
           provider
         },
-        summary: `Verdict: ${verdict}; Coverage: ${coverage.overall ?? "?"}%${parsed.missing_scenarios?.length ? `; ${parsed.missing_scenarios.length} missing scenario(s)` : ""}${parsed.quality_issues?.length ? `; ${parsed.quality_issues.length} quality issue(s)` : ""}`
+        summary: (() => {
+          const missingPart = parsed.missing_scenarios?.length ? `; ${parsed.missing_scenarios.length} missing scenario(s)` : "";
+          const qualityPart = parsed.quality_issues?.length ? `; ${parsed.quality_issues.length} quality issue(s)` : "";
+          return `Verdict: ${verdict}; Coverage: ${coverage.overall ?? "?"}%${missingPart}${qualityPart}`;
+        })()
       };
     } catch (err) {
       return {

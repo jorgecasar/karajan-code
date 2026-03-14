@@ -244,7 +244,9 @@ sonar
     console.log(`Opened ${result.url}`);
   });
 
-program.parseAsync().catch((error) => {
+try {
+  await program.parseAsync();
+} catch (error) {
   console.error(error.message);
   process.exit(1);
-});
+}

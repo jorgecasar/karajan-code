@@ -6,7 +6,7 @@ function slug(value) {
     .toLowerCase()
     .replace(/[^a-z0-9._:-]+/g, "-")
     .replace(/-{2,}/g, "-")
-    .replace(/^-+|-+$/g, "");
+    .replace(/(^-+)|(-+$)/g, "");
 }
 
 export function normalizeProjectKey(value) {
@@ -45,7 +45,7 @@ function canonicalRepoId(remoteUrl) {
   const host = String(parsed.host || "").trim().toLowerCase();
   const cleanPath = String(parsed.path || "")
     .trim()
-    .replace(/^\/+|\/+$/g, "")
+    .replace(/(^\/+)|(\/+$)/g, "")
     .replace(/\.git$/i, "")
     .toLowerCase();
   const segments = cleanPath.split("/").filter(Boolean);

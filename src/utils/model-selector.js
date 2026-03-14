@@ -31,7 +31,7 @@ export function resolveModelForRole({ role, provider, level, tierMap, roleOverri
   const roleOvr = overrides[role];
 
   let effectiveLevel = level;
-  if (roleOvr && roleOvr[level]) {
+  if (roleOvr?.[level]) {
     const mappedLevel = roleOvr[level];
     if (VALID_LEVELS.has(mappedLevel)) {
       effectiveLevel = mappedLevel;

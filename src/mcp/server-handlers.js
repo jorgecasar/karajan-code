@@ -254,9 +254,9 @@ function buildDirectEmitter(server, runLog, extra) {
   const emitter = new EventEmitter();
   emitter.on("progress", (event) => {
     try {
-      const level = event.type === "agent:stall" ? "warning"
-        : event.type === "agent:heartbeat" ? "info"
-        : "debug";
+      let level = "debug";
+      if (event.type === "agent:stall") level = "warning";
+      else if (event.type === "agent:heartbeat") level = "info";
       server.sendLoggingMessage({ level, logger: "karajan", data: event });
     } catch { /* best-effort */ }
     if (runLog) runLog.logEvent(event);
@@ -282,8 +282,10 @@ export async function handlePlanDirect(a, server, extra) {
   const plannerTimeoutMs = Number(config?.session?.max_planner_minutes) > 0
     ? Math.round(Number(config.session.max_planner_minutes) * 60 * 1000)
     : undefined;
+  const silenceLabel = silenceTimeoutMs ? `${Math.round(silenceTimeoutMs / 1000)}s` : "disabled";
+  const runtimeLabel = plannerTimeoutMs ? `${Math.round(plannerTimeoutMs / 1000)}s` : "disabled";
   runLog.logText(
-    `[kj_plan] started — provider=${plannerRole.provider}, max_silence=${silenceTimeoutMs ? `${Math.round(silenceTimeoutMs / 1000)}s` : "disabled"}, max_runtime=${plannerTimeoutMs ? `${Math.round(plannerTimeoutMs / 1000)}s` : "disabled"}`
+    `[kj_plan] started — provider=${plannerRole.provider}, max_silence=${silenceLabel}, max_runtime=${runtimeLabel}`
   );
   const emitter = buildDirectEmitter(server, runLog, extra);
   const eventBase = { sessionId: null, iteration: 0, startedAt: Date.now() };
@@ -487,7 +489,7 @@ export async function handleToolCall(name, args, server, extra) {
   if (name === "kj_status") {
     const maxLines = a.lines || 50;
     const projectDir = await resolveProjectDir(server);
-    return readRunLog(maxLines, projectDir);
+    return readRunLog(projectDir, maxLines);
   }
 
   if (name === "kj_init") {
@@ -554,7 +556,8 @@ export async function handleToolCall(name, args, server, extra) {
       .filter(ag => ag.provider !== "-")
       .map(ag => {
         const ovr = overrides[ag.role] ? ` -> ${overrides[ag.role]} (session override)` : "";
-        return `  ${ag.role}: ${ag.provider}${ag.model !== "-" ? ` (${ag.model})` : ""}${ovr}`;
+        const modelSuffix = ag.model !== "-" ? ` (${ag.model})` : "";
+        return `  ${ag.role}: ${ag.provider}${modelSuffix}${ovr}`;
       });
     const overrideLines = Object.entries(overrides)
       .filter(([k]) => !AGENT_ROLES.includes(k))
@@ -630,7 +633,10 @@ export async function handleToolCall(name, args, server, extra) {
       const agents = listAgents(config);
       const agentSummary = agents
         .filter(ag => ag.provider !== "-")
-        .map(ag => `  ${ag.role}: ${ag.provider}${ag.model !== "-" ? ` (${ag.model})` : ""}`)
+        .map(ag => {
+          const modelTag = ag.model !== "-" ? ` (${ag.model})` : "";
+          return `  ${ag.role}: ${ag.provider}${modelTag}`;
+        })
         .join("\n");
       return responseText({
         ok: false,
@@ -660,7 +666,10 @@ export async function handleToolCall(name, args, server, extra) {
       const agents = listAgents(config);
       const agentSummary = agents
         .filter(ag => ag.provider !== "-")
-        .map(ag => `  ${ag.role}: ${ag.provider}${ag.model !== "-" ? ` (${ag.model})` : ""}`)
+        .map(ag => {
+          const modelTag = ag.model !== "-" ? ` (${ag.model})` : "";
+          return `  ${ag.role}: ${ag.provider}${modelTag}`;
+        })
         .join("\n");
       return responseText({
         ok: false,

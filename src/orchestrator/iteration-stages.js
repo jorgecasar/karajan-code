@@ -447,7 +447,7 @@ export async function runReviewerStage({ reviewerRole, config, logger, emitter, 
     reviewerStall.stop();
   }
 
-  if (!reviewerExec.execResult || !reviewerExec.execResult.ok) {
+  if (!reviewerExec.execResult?.ok) {
     const lastAttempt = reviewerExec.attempts.at(-1);
     const details =
       lastAttempt?.result?.error ||

@@ -58,7 +58,12 @@ export function createLogger(level = "info", mode = "cli") {
     const ts = `${ANSI.dim}${timestamp()}${ANSI.reset}`;
     const prefix = `${color}[${lvl}]${ANSI.reset}`;
     const ctx = formatContext(context);
-    const stream = lvl === "error" ? console.error : lvl === "warn" ? console.warn : console.log;
+    let stream = console.log;
+    if (lvl === "error") {
+      stream = console.error;
+    } else if (lvl === "warn") {
+      stream = console.warn;
+    }
     stream(`${ts} ${prefix} ${ctx}${args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" ")}`);
   }
 

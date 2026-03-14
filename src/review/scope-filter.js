@@ -50,7 +50,7 @@ export function isIssueInScope(issue, diffFiles, diffContent) {
 
   // Check if the file path appears anywhere in the diff content
   // (covers cases where the file is referenced in imports/requires)
-  if (diffContent && diffContent.includes(file)) return true;
+  if (diffContent?.includes(file)) return true;
 
   return false;
 }

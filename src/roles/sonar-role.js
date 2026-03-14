@@ -59,7 +59,11 @@ export class SonarRole extends BaseRole {
         issuesSummary,
         blocking
       },
-      summary: `Quality gate: ${gate.status}; Issues: ${openIssues.total || 0}${issuesSummary ? ` (${issuesSummary})` : ""}${blocking ? " [BLOCKING]" : ""}`
+      summary: (() => {
+        const issuesPart = issuesSummary ? ` (${issuesSummary})` : "";
+        const blockingPart = blocking ? " [BLOCKING]" : "";
+        return `Quality gate: ${gate.status}; Issues: ${openIssues.total || 0}${issuesPart}${blockingPart}`;
+      })()
     };
   }
 }

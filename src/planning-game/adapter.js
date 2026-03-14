@@ -56,7 +56,7 @@ export function buildTaskFromCard(card) {
 }
 
 export function buildCommitsPayload(gitLog) {
-  if (!gitLog || !gitLog.length) return [];
+  if (!gitLog?.length) return [];
   return gitLog.map((entry) => ({
     hash: entry.hash,
     message: entry.message,
