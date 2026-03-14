@@ -181,6 +181,50 @@ describe("PlannerRole", () => {
     expect(prompt).toContain("pending_subtasks");
   });
 
+  it("includes architectContext in prompt when provided via context", async () => {
+    const fakeAgent = {
+      runTask: vi.fn().mockResolvedValue({ ok: true, output: "1. Aligned step" })
+    };
+    const createAgent = vi.fn().mockReturnValue(fakeAgent);
+
+    const role = new PlannerRole({ config: {}, logger, createAgentFn: createAgent });
+    await role.init({ task: "Build API" });
+    role.context = {
+      ...role.context,
+      architecture: {
+        architecture: {
+          type: "microservices",
+          layers: ["Gateway", "Service", "DB"],
+          patterns: ["CQRS"],
+          dataModel: { entities: ["Event"] },
+          apiContracts: ["POST /events"],
+          tradeoffs: ["Latency vs consistency"]
+        },
+        summary: "Event-driven microservices"
+      }
+    };
+    await role.run("Build API");
+
+    const prompt = fakeAgent.runTask.mock.calls[0][0].prompt;
+    expect(prompt).toContain("Architecture context");
+    expect(prompt).toContain("microservices");
+    expect(prompt).toContain("Event-driven microservices");
+  });
+
+  it("does not include architecture section when not provided", async () => {
+    const fakeAgent = {
+      runTask: vi.fn().mockResolvedValue({ ok: true, output: "1. Simple plan" })
+    };
+    const createAgent = vi.fn().mockReturnValue(fakeAgent);
+
+    const role = new PlannerRole({ config: {}, logger, createAgentFn: createAgent });
+    await role.init({ task: "Small fix" });
+    await role.run("Small fix");
+
+    const prompt = fakeAgent.runTask.mock.calls[0][0].prompt;
+    expect(prompt).not.toContain("Architecture context");
+  });
+
   it("does not include decomposition section when not provided", async () => {
     const fakeAgent = {
       runTask: vi.fn().mockResolvedValue({ ok: true, output: "1. Simple plan" })

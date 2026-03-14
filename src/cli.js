@@ -73,6 +73,7 @@ program
   .option("--enable-security")
   .option("--enable-triage")
   .option("--enable-discover")
+  .option("--enable-architect")
   .option("--enable-serena")
   .option("--mode <name>")
   .option("--max-iterations <n>")
@@ -243,7 +244,9 @@ sonar
     console.log(`Opened ${result.url}`);
   });
 
-program.parseAsync().catch((error) => {
+try {
+  await program.parseAsync();
+} catch (error) {
   console.error(error.message);
   process.exit(1);
-});
+}

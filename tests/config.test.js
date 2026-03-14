@@ -136,6 +136,31 @@ describe("applyRunOverrides", () => {
     expect(out.budget.warn_threshold_pct).toBe(80);
   });
 
+  it("applies enableArchitect and architectModel overrides", () => {
+    const base = {
+      roles: {
+        architect: { provider: null, model: null }
+      },
+      pipeline: {
+        architect: { enabled: false }
+      }
+    };
+
+    const out = applyRunOverrides(base, {
+      enableArchitect: true,
+      architectModel: "o3-pro"
+    });
+
+    expect(out.pipeline.architect.enabled).toBe(true);
+    expect(out.roles.architect.model).toBe("o3-pro");
+  });
+
+  it("applies architect provider override", () => {
+    const base = {};
+    const out = applyRunOverrides(base, { architect: "gemini" });
+    expect(out.roles.architect.provider).toBe("gemini");
+  });
+
   it("returns actionable error when required role is not configured", () => {
     const config = {
       review_mode: "standard",
@@ -155,6 +180,19 @@ describe("applyRunOverrides", () => {
 });
 
 describe("DEFAULTS pipeline", () => {
+  it("has architect disabled by default", async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "kj-defaults-arch-"));
+    const kjHome = path.join(tmpDir, "home");
+    await fs.mkdir(kjHome, { recursive: true });
+
+    process.chdir(tmpDir);
+    process.env.KJ_HOME = kjHome;
+
+    const { config } = await loadConfig();
+    expect(config.pipeline.architect.enabled).toBe(false);
+    expect(config.roles.architect.model).toBeNull();
+  });
+
   it("has tester and security enabled by default", async () => {
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "kj-defaults-"));
     const kjHome = path.join(tmpDir, "home");

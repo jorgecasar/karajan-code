@@ -1,5 +1,4 @@
-import { readFileSync } from "node:fs";
-import { watch } from "node:fs";
+import { readFileSync, watch } from "node:fs";
 
 const DEFAULT_INTERVAL_MS = 5000;
 

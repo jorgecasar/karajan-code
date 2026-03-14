@@ -36,7 +36,7 @@ describe("run-log", () => {
 
   describe("readRunLog", () => {
     it("returns error when no log exists", () => {
-      const result = readRunLog(50, path.join(tmpDir, "nonexistent"));
+      const result = readRunLog(path.join(tmpDir, "nonexistent"));
       expect(result.ok).toBe(false);
       expect(result.error).toContain("No active run log");
     });
@@ -48,14 +48,14 @@ describe("run-log", () => {
       }
       log.close();
 
-      const result = readRunLog(3, tmpDir);
+      const result = readRunLog(tmpDir, 3);
       expect(result.ok).toBe(true);
       expect(result.lines).toHaveLength(3);
       expect(result.totalLines).toBe(11); // 1 header + 10 lines
     });
 
     it("includes parsed status", () => {
-      const result = readRunLog(50, tmpDir);
+      const result = readRunLog(tmpDir);
       // no log exists yet
       expect(result.ok).toBe(false);
     });
@@ -67,7 +67,7 @@ describe("run-log", () => {
       log.logText('[kj_run] started — task="Fix bug"');
       log.close();
 
-      const result = readRunLog(50, tmpDir);
+      const result = readRunLog(tmpDir);
       expect(result.status.isRunning).toBe(true);
       expect(result.status.currentStage).toBe("kj_run");
     });
@@ -78,7 +78,7 @@ describe("run-log", () => {
       log.logText("[kj_run] finished — ok=true");
       log.close();
 
-      const result = readRunLog(50, tmpDir);
+      const result = readRunLog(tmpDir);
       expect(result.status.isRunning).toBe(false);
     });
 
@@ -88,7 +88,7 @@ describe("run-log", () => {
       log.logEvent({ type: "coder:start", stage: "coder", message: "Coder running" });
       log.close();
 
-      const result = readRunLog(50, tmpDir);
+      const result = readRunLog(tmpDir);
       expect(result.status.currentStage).toBe("coder");
     });
 
@@ -97,7 +97,7 @@ describe("run-log", () => {
       log.logEvent({ type: "coder:start", stage: "coder", message: "running", detail: { provider: "claude" } });
       log.close();
 
-      const result = readRunLog(50, tmpDir);
+      const result = readRunLog(tmpDir);
       expect(result.status.currentAgent).toBe("claude");
     });
 
@@ -106,7 +106,7 @@ describe("run-log", () => {
       log.logText("[iteration:start] Iteration 3/5");
       log.close();
 
-      const result = readRunLog(50, tmpDir);
+      const result = readRunLog(tmpDir);
       expect(result.status.iteration).toBe(3);
     });
 
@@ -118,7 +118,7 @@ describe("run-log", () => {
       log.logText("[coder:fail] Coder error 2");
       log.close();
 
-      const result = readRunLog(50, tmpDir);
+      const result = readRunLog(tmpDir);
       expect(result.status.errors).toHaveLength(3);
       expect(result.status.errors[0]).toContain("Coder error 1");
     });
@@ -129,7 +129,7 @@ describe("run-log", () => {
       log.logEvent({ type: "coder:standby", stage: "coder", message: "Rate limited, waiting..." });
       log.close();
 
-      const result = readRunLog(50, tmpDir);
+      const result = readRunLog(tmpDir);
       expect(result.status.currentStage).toBe("standby");
     });
 
@@ -138,7 +138,7 @@ describe("run-log", () => {
       log.logText("[kj_code] started — provider=claude");
       log.close();
 
-      const result = readRunLog(50, tmpDir);
+      const result = readRunLog(tmpDir);
       expect(result.status.isRunning).toBe(true);
       expect(result.status.currentStage).toBe("kj_code");
     });
@@ -148,7 +148,7 @@ describe("run-log", () => {
       log.logText("[kj_plan] started — provider=codex");
       log.close();
 
-      const result = readRunLog(50, tmpDir);
+      const result = readRunLog(tmpDir);
       expect(result.status.isRunning).toBe(true);
       expect(result.status.currentStage).toBe("kj_plan");
     });

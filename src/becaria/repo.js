@@ -19,11 +19,11 @@ export async function detectRepo() {
 
   const url = res.stdout.trim();
   // SSH: git@github.com:owner/repo.git  or  git@github.com-alias:owner/repo.git
-  const sshMatch = url.match(/github\.com[^:]*:([^/]+\/[^/]+?)(?:\.git)?$/);
+  const sshMatch = /github\.com[^:]*:([^/]+\/[^/]+?)(?:\.git)?$/.exec(url);
   if (sshMatch) return sshMatch[1];
 
   // HTTPS: https://github.com/owner/repo.git
-  const httpsMatch = url.match(/github\.com\/([^/]+\/[^/]+?)(?:\.git)?$/);
+  const httpsMatch = /github\.com\/([^/]+\/[^/]+?)(?:\.git)?$/.exec(url);
   if (httpsMatch) return httpsMatch[1];
 
   return null;
@@ -40,6 +40,6 @@ export async function detectPrNumber(branch) {
   const res = await runCommand("gh", args);
   if (res.exitCode !== 0) return null;
 
-  const num = parseInt(res.stdout.trim(), 10);
+  const num = Number.parseInt(res.stdout.trim(), 10);
   return Number.isFinite(num) ? num : null;
 }

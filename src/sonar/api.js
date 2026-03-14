@@ -18,7 +18,7 @@ function tokenFromConfig(config) {
 
 function parseHttpResponse(stdout) {
   const lines = stdout.split("\n");
-  const httpCode = parseInt(lines.pop(), 10) || 0;
+  const httpCode = Number.parseInt(lines.pop(), 10) || 0;
   const body = lines.join("\n");
   return { httpCode, body };
 }

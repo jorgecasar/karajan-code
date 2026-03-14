@@ -2,12 +2,46 @@ import { TriageRole } from "../roles/triage-role.js";
 import { ResearcherRole } from "../roles/researcher-role.js";
 import { PlannerRole } from "../roles/planner-role.js";
 import { DiscoverRole } from "../roles/discover-role.js";
+import { ArchitectRole } from "../roles/architect-role.js";
 import { createAgent } from "../agents/index.js";
+import { createArchitectADRs } from "../planning-game/architect-adrs.js";
 import { addCheckpoint, markSessionStatus } from "../session-store.js";
 import { emitProgress, makeEvent } from "../utils/events.js";
 import { parsePlannerOutput } from "../prompts/planner.js";
 import { selectModelsForRoles } from "../utils/model-selector.js";
 import { createStallDetector } from "../utils/stall-detector.js";
+
+const ROLE_NAMES = ["planner", "researcher", "architect", "refactorer", "reviewer", "tester", "security"];
+
+function buildRoleOverrides(recommendedRoles, pipelineConfig) {
+  const overrides = {};
+  for (const role of ROLE_NAMES) {
+    overrides[`${role}Enabled`] = recommendedRoles.has(role) || Boolean(pipelineConfig[role]?.enabled);
+  }
+  return overrides;
+}
+
+function applyModelSelection(triageOutput, config, emitter, eventBase) {
+  if (!triageOutput.ok || !config?.model_selection?.enabled) return null;
+  const level = triageOutput.result?.level;
+  if (!level) return null;
+
+  const { modelOverrides, reasoning } = selectModelsForRoles({ level, config });
+  for (const [role, model] of Object.entries(modelOverrides)) {
+    if (config.roles?.[role] && !config.roles[role].model) {
+      config.roles[role].model = model;
+    }
+  }
+  const modelSelection = { modelOverrides, reasoning };
+  emitProgress(
+    emitter,
+    makeEvent("model-selection:applied", { ...eventBase, stage: "triage" }, {
+      message: "Smart model selection applied",
+      detail: modelSelection
+    })
+  );
+  return modelSelection;
+}
 
 export async function runTriageStage({ config, logger, emitter, eventBase, session, coderRole, trackBudget }) {
   logger.setContext({ iteration: 0, stage: "triage" });
@@ -55,17 +89,9 @@ export async function runTriageStage({ config, logger, emitter, eventBase, sessi
   });
 
   const recommendedRoles = new Set(triageOutput.result?.roles || []);
-  const roleOverrides = {};
-  if (triageOutput.ok) {
-    // Triage can activate roles, but cannot deactivate roles explicitly enabled in pipeline config
-    const p = config.pipeline || {};
-    roleOverrides.plannerEnabled = recommendedRoles.has("planner") || Boolean(p.planner?.enabled);
-    roleOverrides.researcherEnabled = recommendedRoles.has("researcher") || Boolean(p.researcher?.enabled);
-    roleOverrides.refactorerEnabled = recommendedRoles.has("refactorer") || Boolean(p.refactorer?.enabled);
-    roleOverrides.reviewerEnabled = recommendedRoles.has("reviewer") || Boolean(p.reviewer?.enabled);
-    roleOverrides.testerEnabled = recommendedRoles.has("tester") || Boolean(p.tester?.enabled);
-    roleOverrides.securityEnabled = recommendedRoles.has("security") || Boolean(p.security?.enabled);
-  }
+  const roleOverrides = triageOutput.ok
+    ? buildRoleOverrides(recommendedRoles, config.pipeline || {})
+    : {};
 
   const shouldDecompose = triageOutput.result?.shouldDecompose || false;
   const subtasks = triageOutput.result?.subtasks || [];
@@ -80,27 +106,7 @@ export async function runTriageStage({ config, logger, emitter, eventBase, sessi
     subtasks
   };
 
-  let modelSelection = null;
-  if (triageOutput.ok && config?.model_selection?.enabled) {
-    const level = triageOutput.result?.level;
-    if (level) {
-      const { modelOverrides, reasoning } = selectModelsForRoles({ level, config });
-      for (const [role, model] of Object.entries(modelOverrides)) {
-        if (config.roles?.[role] && !config.roles[role].model) {
-          config.roles[role].model = model;
-        }
-      }
-      modelSelection = { modelOverrides, reasoning };
-      emitProgress(
-        emitter,
-        makeEvent("model-selection:applied", { ...eventBase, stage: "triage" }, {
-          message: "Smart model selection applied",
-          detail: modelSelection
-        })
-      );
-    }
-  }
-
+  const modelSelection = applyModelSelection(triageOutput, config, emitter, eventBase);
   if (modelSelection) {
     stageResult.modelSelection = modelSelection;
   }
@@ -186,7 +192,167 @@ export async function runResearcherStage({ config, logger, emitter, eventBase, s
   return { researchContext, stageResult };
 }
 
-export async function runPlannerStage({ config, logger, emitter, eventBase, session, plannerRole, researchContext, triageDecomposition = null, trackBudget }) {
+async function handleArchitectClarification({ architectOutput, askQuestion, config, logger, emitter, eventBase, session, architectOnOutput, architectProvider, coderRole, researchContext, discoverResult, triageLevel, trackBudget }) {
+  if (!architectOutput.ok
+    || architectOutput.result?.verdict !== "needs_clarification"
+    || !architectOutput.result?.questions?.length) {
+    return architectOutput;
+  }
+
+  const questions = architectOutput.result.questions;
+  if (!askQuestion) {
+    logger.warn("Architect returned needs_clarification but no interactive input available — continuing with best-effort decisions");
+    return architectOutput;
+  }
+
+  const formatted = "The architect needs clarification before proceeding:\n\n"
+    + questions.map((q, i) => `${i + 1}. ${q}`).join("\n")
+    + "\n\nPlease provide your answers:";
+
+  emitProgress(
+    emitter,
+    makeEvent("architect:clarification", { ...eventBase, stage: "architect" }, {
+      message: "Architect needs clarification — pausing for human input",
+      detail: { questions }
+    })
+  );
+
+  const answer = await askQuestion(formatted, { iteration: 0, stage: "architect" });
+  if (!answer) return architectOutput;
+
+  const architect2 = new ArchitectRole({ config, logger, emitter, createAgentFn: createAgent });
+  await architect2.init({ task: session.task, sessionId: session.id, iteration: 0 });
+  const rerunStart = Date.now();
+  const rerunStall = createStallDetector({
+    onOutput: architectOnOutput, emitter, eventBase, stage: "architect", provider: architectProvider
+  });
+  let result;
+  try {
+    result = await architect2.execute({
+      task: session.task,
+      onOutput: rerunStall.onOutput,
+      researchContext,
+      discoverResult,
+      triageLevel,
+      humanAnswers: answer
+    });
+  } finally {
+    rerunStall.stop();
+  }
+  trackBudget({
+    role: "architect",
+    provider: architectProvider,
+    model: config?.roles?.architect?.model || coderRole.model,
+    result,
+    duration_ms: Date.now() - rerunStart
+  });
+  return result;
+}
+
+export async function runArchitectStage({ config, logger, emitter, eventBase, session, coderRole, trackBudget, researchContext = null, discoverResult = null, triageLevel = null, askQuestion = null }) {
+  logger.setContext({ iteration: 0, stage: "architect" });
+  emitProgress(
+    emitter,
+    makeEvent("architect:start", { ...eventBase, stage: "architect" }, {
+      message: "Architect designing solution architecture"
+    })
+  );
+
+  const architectProvider = config?.roles?.architect?.provider || coderRole.provider;
+  const architectOnOutput = ({ stream, line }) => {
+    emitProgress(emitter, makeEvent("agent:output", { ...eventBase, stage: "architect" }, {
+      message: line,
+      detail: { stream, agent: architectProvider }
+    }));
+  };
+  const architectStall = createStallDetector({
+    onOutput: architectOnOutput, emitter, eventBase, stage: "architect", provider: architectProvider
+  });
+
+  const architect = new ArchitectRole({ config, logger, emitter, createAgentFn: createAgent });
+  await architect.init({ task: session.task, sessionId: session.id, iteration: 0 });
+  const architectStart = Date.now();
+  let architectOutput;
+  try {
+    architectOutput = await architect.execute({
+      task: session.task,
+      onOutput: architectStall.onOutput,
+      researchContext,
+      discoverResult,
+      triageLevel
+    });
+  } finally {
+    architectStall.stop();
+  }
+  trackBudget({
+    role: "architect",
+    provider: architectProvider,
+    model: config?.roles?.architect?.model || coderRole.model,
+    result: architectOutput,
+    duration_ms: Date.now() - architectStart
+  });
+
+  await addCheckpoint(session, {
+    stage: "architect",
+    iteration: 0,
+    ok: architectOutput.ok,
+    provider: architectProvider,
+    model: config?.roles?.architect?.model || coderRole.model || null
+  });
+
+  // --- Interactive clarification loop ---
+  architectOutput = await handleArchitectClarification({
+    architectOutput, askQuestion, config, logger, emitter, eventBase, session,
+    architectOnOutput, architectProvider, coderRole, researchContext, discoverResult, triageLevel, trackBudget
+  });
+
+  const stageResult = {
+    ok: architectOutput.ok,
+    verdict: architectOutput.result?.verdict || null,
+    architecture: architectOutput.result?.architecture || null,
+    questions: architectOutput.result?.questions || []
+  };
+
+  emitProgress(
+    emitter,
+    makeEvent("architect:end", { ...eventBase, stage: "architect" }, {
+      status: architectOutput.ok ? "ok" : "fail",
+      message: architectOutput.ok ? "Architecture completed" : `Architecture failed: ${architectOutput.summary}`,
+      detail: stageResult
+    })
+  );
+
+  const architectContext = architectOutput.ok ? architectOutput.result : null;
+
+  // Generate ADRs from architect tradeoffs when PG is linked
+  const tradeoffs = architectOutput.result?.architecture?.tradeoffs;
+  if (architectOutput.ok
+    && architectOutput.result?.verdict === "ready"
+    && tradeoffs?.length > 0
+    && session.pg_task_id
+    && session.pg_project_id) {
+    try {
+      const pgClient = await import("../planning-game/client.js");
+      const adrResult = await createArchitectADRs({
+        tradeoffs,
+        pgTaskId: session.pg_task_id,
+        pgProject: session.pg_project_id,
+        taskTitle: session.task,
+        mcpClient: pgClient
+      });
+      stageResult.adrs = adrResult;
+      if (adrResult.created > 0) {
+        logger.info(`Architect: created ${adrResult.created} ADR(s) in Planning Game`);
+      }
+    } catch (err) {
+      logger.warn(`Architect: failed to create ADRs: ${err.message}`);
+    }
+  }
+
+  return { architectContext, stageResult };
+}
+
+export async function runPlannerStage({ config, logger, emitter, eventBase, session, plannerRole, researchContext, architectContext = null, triageDecomposition = null, trackBudget }) {
   const task = session.task;
   logger.setContext({ iteration: 0, stage: "planner" });
   emitProgress(
@@ -208,7 +374,7 @@ export async function runPlannerStage({ config, logger, emitter, eventBase, sess
   });
 
   const planRole = new PlannerRole({ config, logger, emitter, createAgentFn: createAgent });
-  planRole.context = { task, research: researchContext, triageDecomposition };
+  planRole.context = { task, research: researchContext, architecture: architectContext, triageDecomposition };
   await planRole.init();
   const plannerStart = Date.now();
   let planResult;

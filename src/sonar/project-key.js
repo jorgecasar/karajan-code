@@ -4,9 +4,9 @@ import { runCommand } from "../utils/process.js";
 function slug(value) {
   return String(value || "")
     .toLowerCase()
-    .replace(/[^a-z0-9._:-]+/g, "-")
-    .replace(/-{2,}/g, "-")
-    .replace(/^-+|-+$/g, "");
+    .replaceAll(/[^a-z0-9._:-]+/g, "-")
+    .replaceAll(/-{2,}/g, "-")
+    .replaceAll(/(^-+)|(-+$)/g, "");
 }
 
 export function normalizeProjectKey(value) {
@@ -21,7 +21,7 @@ function digest(input) {
 
 function parseScpLikeRemote(remoteUrl) {
   // Example: git@github.com:owner/repo.git
-  const match = String(remoteUrl || "").trim().match(/^(?:[^@]+@)?([^:]+):(.+)$/);
+  const match = /^(?:[^@]+@)?([^:]+):(.+)$/.exec(String(remoteUrl || "").trim());
   if (!match) return null;
   return { host: match[1], path: match[2] };
 }
@@ -45,7 +45,7 @@ function canonicalRepoId(remoteUrl) {
   const host = String(parsed.host || "").trim().toLowerCase();
   const cleanPath = String(parsed.path || "")
     .trim()
-    .replace(/^\/+|\/+$/g, "")
+    .replaceAll(/(^\/+)|(\/+$)/g, "")
     .replace(/\.git$/i, "")
     .toLowerCase();
   const segments = cleanPath.split("/").filter(Boolean);

@@ -1,14 +1,14 @@
 export function validateReviewResult(reviewResult) {
   if (!reviewResult || typeof reviewResult !== "object") {
-    throw new Error("Reviewer output must be a JSON object");
+    throw new TypeError("Reviewer output must be a JSON object");
   }
 
   if (typeof reviewResult.approved !== "boolean") {
-    throw new Error("Reviewer output missing boolean field: approved");
+    throw new TypeError("Reviewer output missing boolean field: approved");
   }
 
   if (!Array.isArray(reviewResult.blocking_issues)) {
-    throw new Error("Reviewer output missing array field: blocking_issues");
+    throw new TypeError("Reviewer output missing array field: blocking_issues");
   }
 
   if (!Array.isArray(reviewResult.non_blocking_suggestions)) {

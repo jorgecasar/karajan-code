@@ -11,6 +11,7 @@ const REVIEW_APPROVED = JSON.stringify({
 
 const triageRunMock = vi.fn();
 const researcherRunMock = vi.fn();
+const architectExecuteMock = vi.fn();
 const testerRunMock = vi.fn();
 const securityRunMock = vi.fn();
 
@@ -74,6 +75,15 @@ vi.mock("../src/roles/security-role.js", () => ({
     async init() {}
     async run() {
       return securityRunMock();
+    }
+  }
+}));
+
+vi.mock("../src/roles/architect-role.js", () => ({
+  ArchitectRole: class {
+    async init() {}
+    async execute() {
+      return architectExecuteMock();
     }
   }
 }));
@@ -178,6 +188,7 @@ describe("orchestrator triage pipeline", () => {
       usage: { tokens_in: 100, tokens_out: 80, cost_usd: 0.001 }
     });
     researcherRunMock.mockResolvedValue({ ok: true, summary: "research", result: {} });
+    architectExecuteMock.mockResolvedValue({ ok: true, summary: "architecture", result: { verdict: "proceed", architecture: "layered" } });
     testerRunMock.mockResolvedValue({ ok: true, summary: "tests" });
     securityRunMock.mockResolvedValue({ ok: true, summary: "secure" });
 
@@ -340,5 +351,75 @@ describe("orchestrator triage pipeline", () => {
     expect(triageBudget).toBeTruthy();
     expect(triageBudget.total_tokens).toBe(300);
     expect(triageBudget.total_tokens).toBeLessThan(500);
+  });
+
+  it("triage activates architect when recommended", async () => {
+    triageRunMock.mockResolvedValueOnce({
+      ok: true,
+      result: {
+        level: "complex",
+        roles: ["architect", "planner", "reviewer"],
+        reasoning: "New module with data model changes"
+      },
+      usage: { tokens_in: 120, tokens_out: 100 }
+    });
+
+    const emitter = new EventEmitter();
+    const events = [];
+    emitter.on("progress", (event) => events.push(event));
+
+    const result = await runFlow({ task: "create new auth module", config: baseConfig, logger, flags: {}, emitter });
+    expect(result.approved).toBe(true);
+
+    const architectStart = events.find((e) => e.type === "architect:start");
+    expect(architectStart).toBeTruthy();
+    expect(architectExecuteMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("triage does not activate architect when not recommended", async () => {
+    triageRunMock.mockResolvedValueOnce({
+      ok: true,
+      result: {
+        level: "simple",
+        roles: ["reviewer"],
+        reasoning: "Simple CSS fix"
+      },
+      usage: { tokens_in: 80, tokens_out: 60 }
+    });
+
+    const emitter = new EventEmitter();
+    const events = [];
+    emitter.on("progress", (event) => events.push(event));
+
+    await runFlow({ task: "fix button color", config: baseConfig, logger, flags: {}, emitter });
+
+    const architectStart = events.find((e) => e.type === "architect:start");
+    expect(architectStart).toBeUndefined();
+    expect(architectExecuteMock).not.toHaveBeenCalled();
+  });
+
+  it("manual enableArchitect flag overrides triage", async () => {
+    // Triage does NOT recommend architect
+    triageRunMock.mockResolvedValueOnce({
+      ok: true,
+      result: { level: "simple", roles: [], reasoning: "Simple task" },
+      usage: { tokens_in: 80, tokens_out: 60 }
+    });
+
+    const emitter = new EventEmitter();
+    const events = [];
+    emitter.on("progress", (event) => events.push(event));
+
+    await runFlow({
+      task: "forced architect",
+      config: baseConfig,
+      logger,
+      flags: { enableArchitect: true },
+      emitter
+    });
+
+    const architectStart = events.find((e) => e.type === "architect:start");
+    expect(architectStart).toBeTruthy();
+    expect(architectExecuteMock).toHaveBeenCalledTimes(1);
   });
 });

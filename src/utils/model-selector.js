@@ -13,11 +13,11 @@ const DEFAULT_ROLE_OVERRIDES = {
 const VALID_LEVELS = new Set(["trivial", "simple", "medium", "complex"]);
 
 export function getDefaultModelTiers() {
-  return JSON.parse(JSON.stringify(DEFAULT_MODEL_TIERS));
+  return structuredClone(DEFAULT_MODEL_TIERS);
 }
 
 export function getDefaultRoleOverrides() {
-  return JSON.parse(JSON.stringify(DEFAULT_ROLE_OVERRIDES));
+  return structuredClone(DEFAULT_ROLE_OVERRIDES);
 }
 
 export function resolveModelForRole({ role, provider, level, tierMap, roleOverrides }) {
@@ -31,7 +31,7 @@ export function resolveModelForRole({ role, provider, level, tierMap, roleOverri
   const roleOvr = overrides[role];
 
   let effectiveLevel = level;
-  if (roleOvr && roleOvr[level]) {
+  if (roleOvr?.[level]) {
     const mappedLevel = roleOvr[level];
     if (VALID_LEVELS.has(mappedLevel)) {
       effectiveLevel = mappedLevel;
@@ -52,12 +52,12 @@ export function selectModelsForRoles({ level, config, roles }) {
 
   const mergedTiers = { ...getDefaultModelTiers() };
   for (const [provider, levels] of Object.entries(userTiers)) {
-    mergedTiers[provider] = { ...(mergedTiers[provider] || {}), ...levels };
+    mergedTiers[provider] = { ...mergedTiers[provider], ...levels };
   }
 
   const mergedRoleOverrides = { ...getDefaultRoleOverrides() };
   for (const [role, levels] of Object.entries(userRoleOverrides)) {
-    mergedRoleOverrides[role] = { ...(mergedRoleOverrides[role] || {}), ...levels };
+    mergedRoleOverrides[role] = { ...mergedRoleOverrides[role], ...levels };
   }
 
   const allRoles = roles || Object.keys(config?.roles || {});

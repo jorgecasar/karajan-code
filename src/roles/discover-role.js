@@ -10,29 +10,74 @@ function resolveProvider(config) {
   );
 }
 
-function buildSummary(parsed, mode) {
-  const gapCount = parsed.gaps?.length || 0;
-  if (gapCount === 0 && mode !== "wendel" && mode !== "jtbd") return "Discovery complete: task is ready";
+function pluralize(count, singular, plural) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function collectModeParts(parsed, mode, gapCount) {
   const parts = [];
-  if (gapCount > 0) parts.push(`${gapCount} gap${gapCount !== 1 ? "s" : ""} found`);
+  if (gapCount > 0) parts.push(`${pluralize(gapCount, "gap", "gaps")} found`);
+
   if (mode === "momtest") {
     const qCount = parsed.momTestQuestions?.length || 0;
-    if (qCount > 0) parts.push(`${qCount} Mom Test question${qCount !== 1 ? "s" : ""}`);
+    if (qCount > 0) parts.push(`${pluralize(qCount, "Mom Test question", "Mom Test questions")}`);
   }
   if (mode === "wendel") {
     const failCount = (parsed.wendelChecklist || []).filter(c => c.status === "fail").length;
-    if (failCount > 0) parts.push(`${failCount} Wendel condition${failCount !== 1 ? "s" : ""} failed`);
-    else if (gapCount === 0) return "Discovery complete: task is ready";
+    if (failCount > 0) parts.push(`${pluralize(failCount, "Wendel condition", "Wendel conditions")} failed`);
   }
   if (mode === "classify" && parsed.classification) {
     parts.push(`type: ${parsed.classification.type}, risk: ${parsed.classification.adoptionRisk}`);
   }
   if (mode === "jtbd") {
     const jCount = parsed.jtbds?.length || 0;
-    if (jCount > 0) parts.push(`${jCount} JTBD${jCount !== 1 ? "s" : ""} generated`);
-    else if (gapCount === 0) return "Discovery complete: task is ready";
+    if (jCount > 0) parts.push(`${pluralize(jCount, "JTBD", "JTBDs")} generated`);
   }
+  return parts;
+}
+
+function buildSummary(parsed, mode) {
+  const gapCount = parsed.gaps?.length || 0;
+  const parts = collectModeParts(parsed, mode, gapCount);
+  if (parts.length === 0) return "Discovery complete: task is ready";
   return `Discovery complete: ${parts.join(", ")} (verdict: ${parsed.verdict})`;
+}
+
+function resolveInput(input, context) {
+  if (typeof input === "string") {
+    return { task: input, onOutput: null, mode: "gaps", context: null };
+  }
+  return {
+    task: input?.task || context?.task || "",
+    onOutput: input?.onOutput || null,
+    mode: input?.mode || "gaps",
+    context: input?.context || null
+  };
+}
+
+function buildUnstructuredResult(output, mode, provider, usage) {
+  return {
+    ok: true,
+    result: { verdict: "ready", gaps: [], mode, raw: output, provider },
+    summary: "Discovery complete (unstructured output)",
+    usage
+  };
+}
+
+const MODE_FIELDS = {
+  momtest: { key: "momTestQuestions", fallback: [] },
+  wendel: { key: "wendelChecklist", fallback: [] },
+  classify: { key: "classification", fallback: null },
+  jtbd: { key: "jtbds", fallback: [] }
+};
+
+function buildResultFromParsed(parsed, mode, provider) {
+  const resultObj = { verdict: parsed.verdict, gaps: parsed.gaps, mode, provider };
+  const fieldDef = MODE_FIELDS[mode];
+  if (fieldDef) {
+    resultObj[fieldDef.key] = parsed[fieldDef.key] ?? fieldDef.fallback;
+  }
+  return resultObj;
 }
 
 export class DiscoverRole extends BaseRole {
@@ -42,13 +87,7 @@ export class DiscoverRole extends BaseRole {
   }
 
   async execute(input) {
-    const task = typeof input === "string"
-      ? input
-      : input?.task || this.context?.task || "";
-    const onOutput = typeof input === "string" ? null : input?.onOutput || null;
-    const mode = (typeof input === "object" ? input?.mode : null) || "gaps";
-    const context = typeof input === "object" ? input?.context || null : null;
-
+    const { task, onOutput, mode, context } = resolveInput(input, this.context);
     const provider = resolveProvider(this.config);
     const agent = this._createAgent(provider, this.config, this.logger);
 
@@ -60,11 +99,7 @@ export class DiscoverRole extends BaseRole {
     if (!result.ok) {
       return {
         ok: false,
-        result: {
-          error: result.error || result.output || "Discovery failed",
-          provider,
-          mode
-        },
+        result: { error: result.error || result.output || "Discovery failed", provider, mode },
         summary: `Discovery failed: ${result.error || "unknown error"}`,
         usage: result.usage
       };
@@ -72,59 +107,16 @@ export class DiscoverRole extends BaseRole {
 
     try {
       const parsed = parseDiscoverOutput(result.output);
-      if (!parsed) {
-        return {
-          ok: true,
-          result: {
-            verdict: "ready",
-            gaps: [],
-            mode,
-            raw: result.output,
-            provider
-          },
-          summary: "Discovery complete (unstructured output)",
-          usage: result.usage
-        };
-      }
-
-      const resultObj = {
-        verdict: parsed.verdict,
-        gaps: parsed.gaps,
-        mode,
-        provider
-      };
-      if (mode === "momtest") {
-        resultObj.momTestQuestions = parsed.momTestQuestions || [];
-      }
-      if (mode === "wendel") {
-        resultObj.wendelChecklist = parsed.wendelChecklist || [];
-      }
-      if (mode === "classify") {
-        resultObj.classification = parsed.classification || null;
-      }
-      if (mode === "jtbd") {
-        resultObj.jtbds = parsed.jtbds || [];
-      }
+      if (!parsed) return buildUnstructuredResult(result.output, mode, provider, result.usage);
 
       return {
         ok: true,
-        result: resultObj,
+        result: buildResultFromParsed(parsed, mode, provider),
         summary: buildSummary(parsed, mode),
         usage: result.usage
       };
     } catch {
-      return {
-        ok: true,
-        result: {
-          verdict: "ready",
-          gaps: [],
-          mode,
-          raw: result.output,
-          provider
-        },
-        summary: "Discovery complete (unstructured output)",
-        usage: result.usage
-      };
+      return buildUnstructuredResult(result.output, mode, provider, result.usage);
     }
   }
 }

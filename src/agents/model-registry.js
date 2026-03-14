@@ -21,7 +21,7 @@ export function getModelPricing(name) {
 
 export function isModelDeprecated(name) {
   const entry = modelRegistry.get(name);
-  if (!entry || !entry.deprecated) return false;
+  if (!entry?.deprecated) return false;
   return new Date(entry.deprecated) <= new Date();
 }
 

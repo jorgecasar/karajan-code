@@ -96,5 +96,7 @@ describe("createActivityLog", () => {
 
     // Should not throw
     await new Promise((r) => setTimeout(r, 50));
+
+    expect(fs.appendFile).toHaveBeenCalled();
   });
 });

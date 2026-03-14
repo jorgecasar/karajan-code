@@ -14,9 +14,11 @@ export function buildScannerOpts(projectKey, scanner = {}) {
   }
   const rules = scanner.disabled_rules || [];
   rules.forEach((rule, i) => {
-    opts.push(`-Dsonar.issue.ignore.multicriteria=e${i + 1}`);
-    opts.push(`-Dsonar.issue.ignore.multicriteria.e${i + 1}.ruleKey=${rule}`);
-    opts.push(`-Dsonar.issue.ignore.multicriteria.e${i + 1}.resourceKey=**/*`);
+    opts.push(
+      `-Dsonar.issue.ignore.multicriteria=e${i + 1}`,
+      `-Dsonar.issue.ignore.multicriteria.e${i + 1}.ruleKey=${rule}`,
+      `-Dsonar.issue.ignore.multicriteria.e${i + 1}.resourceKey=**/*`
+    );
   });
   return opts.join(" ");
 }
@@ -46,7 +48,7 @@ function parseJsonSafe(text) {
 }
 
 function normalizeApiHost(rawHost) {
-  return String(rawHost || "http://localhost:9000").replace(/host\.docker\.internal/g, "localhost");
+  return String(rawHost || "http://localhost:9000").replaceAll("host.docker.internal", "localhost");
 }
 
 async function validateAdminCredentials(host, user, password) {
@@ -82,43 +84,36 @@ function coverageConfig(config) {
   return config?.sonarqube?.coverage || {};
 }
 
+function checkLcovExists(lcovPath, blockOnFailure, stdout = "") {
+  if (!lcovPath) return { ok: true, scannerPatch: {} };
+  if (fs.existsSync(lcovPath)) {
+    return { ok: true, scannerPatch: { javascript_lcov_report_paths: lcovPath } };
+  }
+  if (blockOnFailure) {
+    return { ok: false, exitCode: 1, stdout, stderr: `Configured lcov report path does not exist: ${lcovPath}` };
+  }
+  return { ok: true, scannerPatch: {} };
+}
+
+function handleCoverageNoCommand(lcovPath, blockOnFailure) {
+  if (!lcovPath) {
+    return {
+      ok: false, exitCode: 1, stdout: "",
+      stderr: "Sonar coverage is enabled but neither coverage.command nor coverage.lcov_report_path is configured."
+    };
+  }
+  return checkLcovExists(lcovPath, blockOnFailure);
+}
+
 async function maybeRunCoverage(config) {
   const coverage = coverageConfig(config);
-  if (!coverage.enabled) {
-    return { ok: true, scannerPatch: {} };
-  }
+  if (!coverage.enabled) return { ok: true, scannerPatch: {} };
 
   const lcovPath = String(coverage.lcov_report_path || "").trim();
   const blockOnFailure = coverage.block_on_failure !== false;
 
-  // Allow "consume existing lcov only" mode without running any coverage command.
   if (!String(coverage.command || "").trim()) {
-    if (!lcovPath) {
-      return {
-        ok: false,
-        exitCode: 1,
-        stdout: "",
-        stderr:
-          "Sonar coverage is enabled but neither coverage.command nor coverage.lcov_report_path is configured."
-      };
-    }
-    if (!fs.existsSync(lcovPath)) {
-      if (blockOnFailure) {
-        return {
-          ok: false,
-          exitCode: 1,
-          stdout: "",
-          stderr: `Configured lcov report path does not exist: ${lcovPath}`
-        };
-      }
-      return { ok: true, scannerPatch: {} };
-    }
-    return {
-      ok: true,
-      scannerPatch: {
-        javascript_lcov_report_paths: lcovPath
-      }
-    };
+    return handleCoverageNoCommand(lcovPath, blockOnFailure);
   }
 
   const command = String(coverage.command || "").trim();
@@ -127,38 +122,12 @@ async function maybeRunCoverage(config) {
 
   if (run.exitCode !== 0) {
     if (blockOnFailure) {
-      return {
-        ok: false,
-        exitCode: run.exitCode,
-        stdout: run.stdout || "",
-        stderr: run.stderr || "Coverage command failed"
-      };
+      return { ok: false, exitCode: run.exitCode, stdout: run.stdout || "", stderr: run.stderr || "Coverage command failed" };
     }
     return { ok: true, scannerPatch: {} };
   }
 
-  if (!lcovPath) {
-    return { ok: true, scannerPatch: {} };
-  }
-
-  if (!fs.existsSync(lcovPath)) {
-    if (blockOnFailure) {
-      return {
-        ok: false,
-        exitCode: 1,
-        stdout: run.stdout || "",
-        stderr: `Configured lcov report path does not exist: ${lcovPath}`
-      };
-    }
-    return { ok: true, scannerPatch: {} };
-  }
-
-  return {
-    ok: true,
-    scannerPatch: {
-      javascript_lcov_report_paths: lcovPath
-    }
-  };
+  return checkLcovExists(lcovPath, blockOnFailure, run.stdout || "");
 }
 
 async function resolveSonarToken(config, apiHost) {
@@ -172,7 +141,7 @@ async function resolveSonarToken(config, apiHost) {
     "admin"
   ].filter(Boolean);
 
-  for (const password of [...new Set(candidates)]) {
+  for (const password of new Set(candidates)) {
     const valid = await validateAdminCredentials(apiHost, adminUser, password);
     if (!valid) continue;
     const token = await generateUserToken(apiHost, adminUser, password);
@@ -204,7 +173,7 @@ export async function runSonarScan(config, projectKey = null) {
   const sonarNetwork = sonarConfig.network || "karajan_sonar_net";
   const apiHost = normalizeApiHost(rawHost);
   const isLocalHost = /localhost|127\.0\.0\.1/.test(rawHost);
-  const host = isLocalHost ? rawHost.replace(/localhost|127\.0\.0\.1/g, "host.docker.internal") : rawHost;
+  const host = isLocalHost ? rawHost.replaceAll(/localhost|127\.0\.0\.1/g, "host.docker.internal") : rawHost;
 
   const start = await sonarUp(rawHost);
   if (start.exitCode !== 0) {
@@ -246,7 +215,7 @@ export async function runSonarScan(config, projectKey = null) {
     "-v",
     `${process.cwd()}:/usr/src`,
     ...(isLocalHost ? ["--add-host", "host.docker.internal:host-gateway"] : []),
-    ...(!isLocalHost && !isExternalSonar ? ["--network", sonarNetwork] : []),
+    ...(isLocalHost || isExternalSonar ? [] : ["--network", sonarNetwork]),
     "-e",
     `SONAR_HOST_URL=${host}`,
     "-e",

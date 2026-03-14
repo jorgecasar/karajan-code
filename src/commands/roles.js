@@ -1,5 +1,4 @@
 import fs from "node:fs/promises";
-import path from "node:path";
 import { resolveRoleMdPath, loadFirstExisting } from "../roles/base-role.js";
 import { resolveRole } from "../config.js";
 import { exists } from "../utils/fs.js";
