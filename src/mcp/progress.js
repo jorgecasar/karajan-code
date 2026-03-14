@@ -127,9 +127,10 @@ export function buildProgressNotifier(extra) {
     if (idx < 0) return;
 
     const iteration = event.iteration || event.detail?.iteration;
+    const baseMessage = event.message || event.type;
     const message = iteration
-      ? `[${event.iteration}] ${event.message || event.type}`
-      : event.message || event.type;
+      ? `[${event.iteration}] ${baseMessage}`
+      : baseMessage;
 
     try {
       extra.sendNotification({

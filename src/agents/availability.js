@@ -8,7 +8,7 @@ export async function assertAgentsAvailable(agentNames = []) {
 
   for (const name of unique) {
     const meta = getAgentMeta(name);
-    if (!meta || !meta.bin) continue;
+    if (!meta?.bin) continue;
     const res = await runCommand(resolveBin(meta.bin), ["--version"]);
     if (res.exitCode !== 0) {
       missing.push({ name, ...meta });

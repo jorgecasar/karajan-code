@@ -159,7 +159,7 @@ export function parseDiscoverOutput(raw) {
 
   const rawGaps = Array.isArray(parsed.gaps) ? parsed.gaps : [];
   const gaps = rawGaps
-    .filter((g) => g && g.id && g.description && g.suggestedQuestion)
+    .filter((g) => g?.id && g.description && g.suggestedQuestion)
     .map((g) => ({
       id: g.id,
       description: g.description,
@@ -171,7 +171,7 @@ export function parseDiscoverOutput(raw) {
 
   const rawQuestions = Array.isArray(parsed.momTestQuestions) ? parsed.momTestQuestions : [];
   const momTestQuestions = rawQuestions
-    .filter((q) => q && q.gapId && q.question && q.targetRole && q.rationale)
+    .filter((q) => q?.gapId && q.question && q.targetRole && q.rationale)
     .map((q) => ({
       gapId: q.gapId,
       question: q.question,
@@ -181,7 +181,7 @@ export function parseDiscoverOutput(raw) {
 
   const rawChecklist = Array.isArray(parsed.wendelChecklist) ? parsed.wendelChecklist : [];
   const wendelChecklist = rawChecklist
-    .filter((c) => c && c.condition && c.justification && c.status)
+    .filter((c) => c?.condition && c.justification && c.status)
     .map((c) => ({
       condition: c.condition,
       status: VALID_WENDEL_STATUSES.includes(String(c.status).toLowerCase())
@@ -192,7 +192,7 @@ export function parseDiscoverOutput(raw) {
 
   const rawJtbds = Array.isArray(parsed.jtbds) ? parsed.jtbds : [];
   const jtbds = rawJtbds
-    .filter((j) => j && j.id && j.functional && j.emotionalPersonal && j.emotionalSocial && j.behaviorChange && j.evidence)
+    .filter((j) => j?.id && j.functional && j.emotionalPersonal && j.emotionalSocial && j.behaviorChange && j.evidence)
     .map((j) => ({
       id: j.id,
       functional: j.functional,
@@ -205,8 +205,12 @@ export function parseDiscoverOutput(raw) {
   let classification = null;
   if (parsed.classification && typeof parsed.classification === "object") {
     const rawType = String(parsed.classification.type || "").toUpperCase();
-    const type = rawType === "NOT_APPLICABLE" ? "not_applicable"
-      : VALID_CLASSIFY_TYPES.includes(rawType) ? rawType : "not_applicable";
+    let type;
+    if (rawType === "NOT_APPLICABLE") {
+      type = "not_applicable";
+    } else {
+      type = VALID_CLASSIFY_TYPES.includes(rawType) ? rawType : "not_applicable";
+    }
     const rawRisk = String(parsed.classification.adoptionRisk || "").toLowerCase();
     classification = {
       type,

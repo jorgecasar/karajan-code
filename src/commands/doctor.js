@@ -77,11 +77,11 @@ export async function runChecks({ config }) {
     name: "sonarqube",
     label: "SonarQube",
     ok: sonarOk || config.sonarqube?.enabled === false,
-    detail: config.sonarqube?.enabled === false
-      ? "Disabled in config"
-      : sonarOk
-        ? `Reachable at ${sonarHost}`
-        : `Not reachable at ${sonarHost}`,
+    detail: (() => {
+      if (config.sonarqube?.enabled === false) return "Disabled in config";
+      if (sonarOk) return `Reachable at ${sonarHost}`;
+      return `Not reachable at ${sonarHost}`;
+    })(),
     fix: sonarOk || config.sonarqube?.enabled === false
       ? null
       : "Run 'kj sonar start' or 'docker start karajan-sonarqube'. Use --no-sonar to skip."
@@ -174,7 +174,12 @@ export async function runChecks({ config }) {
             name: "becaria:secrets",
             label: "BecarIA: GitHub secrets",
             ok: secretsOk,
-            detail: secretsOk ? "BECARIA_APP_ID + BECARIA_APP_PRIVATE_KEY found" : `Missing: ${!hasAppId ? "BECARIA_APP_ID " : ""}${!hasKey ? "BECARIA_APP_PRIVATE_KEY" : ""}`.trim(),
+            detail: (() => {
+              if (secretsOk) return "BECARIA_APP_ID + BECARIA_APP_PRIVATE_KEY found";
+              const missingAppId = !hasAppId ? "BECARIA_APP_ID " : "";
+              const missingKey = !hasKey ? "BECARIA_APP_PRIVATE_KEY" : "";
+              return `Missing: ${missingAppId}${missingKey}`.trim();
+            })(),
             fix: secretsOk ? null : "Add BECARIA_APP_ID and BECARIA_APP_PRIVATE_KEY as GitHub repository secrets"
           });
         }

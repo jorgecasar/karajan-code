@@ -45,7 +45,8 @@ function formatLine(event) {
   if (event.detail?.remainingMs !== undefined) extra.push(`remaining=${Math.round(event.detail.remainingMs / 1000)}s`);
 
   const extraStr = extra.length ? ` (${extra.join(", ")})` : "";
-  return `${ts} [${type}] ${stage ? `[${stage}] ` : ""}${msg}${extraStr}`;
+  const stageStr = stage ? `[${stage}] ` : "";
+  return `${ts} [${type}] ${stageStr}${msg}${extraStr}`;
 }
 
 export function createRunLog(projectDir) {
@@ -117,7 +118,14 @@ function parseRunStatus(lines) {
     // Detect run start
     if (line.includes("[kj_run] started") || line.includes("[kj_code] started") || line.includes("[kj_plan] started")) {
       status.isRunning = true;
-      const tool = line.includes("kj_run") ? "kj_run" : line.includes("kj_code") ? "kj_code" : "kj_plan";
+      let tool;
+      if (line.includes("kj_run")) {
+        tool = "kj_run";
+      } else if (line.includes("kj_code")) {
+        tool = "kj_code";
+      } else {
+        tool = "kj_plan";
+      }
       status.currentStage = tool;
       const tsMatch = line.match(/^(\d{2}:\d{2}:\d{2}\.\d{3})/);
       if (tsMatch) status.startedAt = tsMatch[1];
@@ -172,7 +180,7 @@ function parseRunStatus(lines) {
  * Read the current run log contents.
  * Returns the last N lines (default 50) plus a parsed status summary.
  */
-export function readRunLog(maxLines = 50, projectDir) {
+export function readRunLog(projectDir, maxLines = 50) {
   const logPath = resolveLogPath(projectDir);
   try {
     const content = fs.readFileSync(logPath, "utf8");

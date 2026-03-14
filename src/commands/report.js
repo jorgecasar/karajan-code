@@ -156,14 +156,13 @@ async function buildReport(dir, sessionId) {
 }
 
 function printTextReport(report) {
-  const budgetText =
-    typeof report.budget_consumed?.consumed_usd === "number"
-      ? `$${report.budget_consumed.consumed_usd.toFixed(2)}${
-          typeof report.budget_consumed?.limit_usd === "number"
-            ? ` / $${report.budget_consumed.limit_usd.toFixed(2)}`
-            : ""
-        }`
-      : "N/A";
+  let budgetText = "N/A";
+  if (typeof report.budget_consumed?.consumed_usd === "number") {
+    const limitSuffix = typeof report.budget_consumed?.limit_usd === "number"
+      ? ` / $${report.budget_consumed.limit_usd.toFixed(2)}`
+      : "";
+    budgetText = `$${report.budget_consumed.consumed_usd.toFixed(2)}${limitSuffix}`;
+  }
 
   const planText = report.plan_executed.length > 0 ? report.plan_executed.join(" -> ") : "N/A";
   const iterationText =
@@ -318,7 +317,7 @@ async function findSessionsByPgTask(dir, pgTask) {
       // skip malformed sessions
     }
   }
-  return matches.sort();
+  return matches.sort((a, b) => a.localeCompare(b));
 }
 
 export async function reportCommand({ list = false, sessionId = null, format = "text", trace = false, currency = "usd", pgTask = null }) {
@@ -373,7 +372,7 @@ export async function reportCommand({ list = false, sessionId = null, format = "
     return;
   }
 
-  const ids = [...entries].sort();
+  const ids = [...entries].sort((a, b) => a.localeCompare(b));
   const selectedSessionId = sessionId || ids.at(-1);
   if (!selectedSessionId) {
     console.log("No reports yet");

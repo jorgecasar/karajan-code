@@ -87,7 +87,8 @@ export function printHeader({ task, config }) {
   if (pipeline.security?.enabled) activeRoles.push("Security");
   if (pipeline.solomon?.enabled) activeRoles.push(`Solomon (${config.roles?.solomon?.provider || "?"})`);
   if (activeRoles.length > 0) {
-    console.log(`${ANSI.bold}Pipeline:${ANSI.reset} ${activeRoles.join(` ${ANSI.dim}|${ANSI.reset} `)}`);
+    const separator = ` ${ANSI.dim}|${ANSI.reset} `;
+    console.log(`${ANSI.bold}Pipeline:${ANSI.reset} ${activeRoles.join(separator)}`);
   }
 
   console.log(BAR);
@@ -99,10 +100,9 @@ export function printEvent(event) {
   const elapsed = event.elapsed !== undefined ? `${ANSI.dim}[${formatElapsed(event.elapsed)}]${ANSI.reset}` : "";
   const status = event.status ? STATUS_ICON[event.status] || "" : "";
 
-  switch (event.type) {
-    case "session:start":
-      break;
+  if (event.type === "session:start") return;
 
+  switch (event.type) {
     case "iteration:start":
       console.log(
         `\n${ANSI.bold}${icon} Iteration ${event.detail?.iteration}/${event.detail?.maxIterations}${ANSI.reset}  ${elapsed}`
@@ -219,7 +219,8 @@ export function printEvent(event) {
       const rulingUpper = ruling.toUpperCase().replace(/_/g, " ");
       if (ruling === "approve") {
         const dismissedCount = event.detail?.dismissed?.length || 0;
-        console.log(`  \u251c\u2500 ${ANSI.green}\u2696\ufe0f Solomon: APPROVE${dismissedCount > 0 ? ` (${dismissedCount} dismissed)` : ""}${ANSI.reset}  ${elapsed}`);
+        const dismissedSuffix = dismissedCount > 0 ? ` (${dismissedCount} dismissed)` : "";
+        console.log(`  \u251c\u2500 ${ANSI.green}\u2696\ufe0f Solomon: APPROVE${dismissedSuffix}${ANSI.reset}  ${elapsed}`);
       } else if (ruling === "approve_with_conditions") {
         const condCount = event.detail?.conditions?.length || 0;
         console.log(`  \u251c\u2500 ${ANSI.yellow}\u2696\ufe0f Solomon: ${condCount} condition${condCount !== 1 ? "s" : ""}${ANSI.reset}  ${elapsed}`);
@@ -275,7 +276,12 @@ export function printEvent(event) {
       const max = Number(event.detail?.max_budget_usd);
       const pct = Number(event.detail?.pct_used ?? 0);
       const warn = Number(event.detail?.warn_threshold_pct ?? 80);
-      const color = max > 0 && pct >= 100 ? ANSI.red : max > 0 && pct >= warn ? ANSI.yellow : ANSI.green;
+      let color = ANSI.green;
+      if (max > 0 && pct >= 100) {
+        color = ANSI.red;
+      } else if (max > 0 && pct >= warn) {
+        color = ANSI.yellow;
+      }
       if (Number.isFinite(max) && max >= 0) {
         console.log(`  \u251c\u2500 ${icon} Budget: ${color}$${total.toFixed(2)} / $${max.toFixed(2)} (${pct.toFixed(1)}%)${ANSI.reset}`);
       }
@@ -375,9 +381,10 @@ export function printEvent(event) {
           case "failed": stIcon = "\u2717"; stColor = ANSI.red; break;
           default: stIcon = "\u00b7"; stColor = ANSI.dim; break;
         }
-        const suffix = stage.summary
-          ? stage.status === "running" ? ` (${stage.summary})` : ` \u2192 ${stage.summary}`
-          : "";
+        let suffix = "";
+        if (stage.summary) {
+          suffix = stage.status === "running" ? ` (${stage.summary})` : ` \u2192 ${stage.summary}`;
+        }
         console.log(`  ${ANSI.dim}\u2502${ANSI.reset} ${stColor}${stIcon} ${stage.name}${suffix}${ANSI.reset}`);
       }
       console.log(`  ${ANSI.dim}\u2514${ANSI.reset}`);

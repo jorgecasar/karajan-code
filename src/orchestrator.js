@@ -134,7 +134,8 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
     if (!hasBudgetLimit) return;
     const totalCost = budgetTracker.total().cost_usd;
     const pctUsed = budgetLimit === 0 ? 100 : (totalCost / budgetLimit) * 100;
-    const status = totalCost > budgetLimit ? "fail" : pctUsed >= warnThresholdPct ? "paused" : "ok";
+    const warnOrOk = pctUsed >= warnThresholdPct ? "paused" : "ok";
+    const status = totalCost > budgetLimit ? "fail" : warnOrOk;
     emitProgress(
       emitter,
       makeEvent("budget:update", { ...eventBase, stage: role }, {
@@ -180,7 +181,7 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
     try {
       const { fetchCard, updateCard } = await import("./planning-game/client.js");
       pgCard = await fetchCard({ projectId: pgProject, cardId: pgTaskId });
-      if (pgCard && pgCard.status !== "In Progress") {
+      if (pgCard?.status !== "In Progress") {
         await updateCard({
           projectId: pgProject,
           cardId: pgTaskId,
@@ -331,7 +332,7 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
   }
 
   // --- Architect (between researcher and planner) ---
-  let architectContext = null;
+  let architectContext;
   if (architectEnabled) {
     const architectResult = await runArchitectStage({
       config, logger, emitter, eventBase, session, coderRole, trackBudget,
@@ -380,7 +381,9 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
   let lastCheckpointAt = Date.now();
   let checkpointDisabled = false;
 
-  for (let i = 1; i <= config.max_iterations; i += 1) {
+  let i = 0;
+  while (i < config.max_iterations) {
+    i += 1;
     const elapsedMinutes = (Date.now() - startedAt) / 60000;
 
     // --- Interactive checkpoint: pause and ask every N minutes ---
@@ -778,7 +781,10 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
           // Detailed comment
           const status = review.approved ? "APPROVED" : "REQUEST_CHANGES";
           const blocking = review.blocking_issues?.map((x) => `- ${x.id || "ISSUE"} [${x.severity || ""}] ${x.description}`).join("\n") || "";
-          const suggestions = review.non_blocking_suggestions?.map((s) => `- ${typeof s === "string" ? s : `${s.id || ""} ${s.description || s}`}`).join("\n") || "";
+          const suggestions = review.non_blocking_suggestions?.map((s) => {
+            const label = typeof s === "string" ? s : (s.id || "") + " " + (s.description || s);
+            return `- ${label}`;
+          }).join("\n") || "";
           let reviewBody = `Review iteración ${i}: ${status}`;
           if (blocking) reviewBody += `\n\n**Blocking:**\n${blocking}`;
           if (suggestions) reviewBody += `\n\n**Suggestions:**\n${suggestions}`;
