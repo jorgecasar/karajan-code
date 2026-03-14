@@ -7,7 +7,7 @@ const CARD_ID_PATTERN = /[A-Z0-9]{2,5}-(?:TSK|BUG|PCS|PRP|SPR|QA)-\d{4}/;
 
 export function parseCardId(text) {
   if (!text) return null;
-  const match = String(text).match(CARD_ID_PATTERN);
+  const match = CARD_ID_PATTERN.exec(String(text));
   return match ? match[0] : null;
 }
 
@@ -15,9 +15,7 @@ function appendDescriptionSection(parts, card) {
   if (card.descriptionStructured?.length) {
     parts.push("", "### User Story");
     for (const s of card.descriptionStructured) {
-      parts.push(`- **Como** ${s.role}`);
-      parts.push(`  **Quiero** ${s.goal}`);
-      parts.push(`  **Para** ${s.benefit}`);
+      parts.push(`- **Como** ${s.role}`, `  **Quiero** ${s.goal}`, `  **Para** ${s.benefit}`);
     }
   } else if (card.description) {
     parts.push("", "### Description", card.description);
@@ -29,9 +27,7 @@ function appendAcceptanceCriteriaSection(parts, card) {
     parts.push("", "### Acceptance Criteria");
     for (const ac of card.acceptanceCriteriaStructured) {
       if (ac.given && ac.when && ac.then) {
-        parts.push(`- **Given** ${ac.given}`);
-        parts.push(`  **When** ${ac.when}`);
-        parts.push(`  **Then** ${ac.then}`);
+        parts.push(`- **Given** ${ac.given}`, `  **When** ${ac.when}`, `  **Then** ${ac.then}`);
       } else if (ac.raw) {
         parts.push(`- ${ac.raw}`);
       }

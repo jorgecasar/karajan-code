@@ -1,18 +1,18 @@
 function extractStepText(line) {
-  const numberedStep = line.match(/^\d+[).:-]\s*(.+)$/);
+  const numberedStep = /^\d+[).:-]\s*(.+)$/.exec(line);
   if (numberedStep) return numberedStep[1].trim();
-  const bulletStep = line.match(/^[-*]\s+(.+)$/);
+  const bulletStep = /^[-*]\s+(.+)$/.exec(line);
   if (bulletStep) return bulletStep[1].trim();
   return null;
 }
 
 function classifyLine(line, state) {
   if (!state.title) {
-    const titleMatch = line.match(/^title\s*:\s*(.+)$/i);
+    const titleMatch = /^title\s*:\s*(.+)$/i.exec(line);
     if (titleMatch) return { type: "title", value: titleMatch[1].trim() };
   }
   if (!state.approach) {
-    const approachMatch = line.match(/^(approach|strategy)\s*:\s*(.+)$/i);
+    const approachMatch = /^(approach|strategy)\s*:\s*(.+)$/i.exec(line);
     if (approachMatch) return { type: "approach", value: approachMatch[2].trim() };
   }
   const stepText = extractStepText(line);

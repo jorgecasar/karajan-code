@@ -420,10 +420,10 @@ function requiredRolesFor(commandName, config) {
 
 export function validateConfig(config, commandName = "run") {
   const errors = [];
-  if (!["paranoid", "strict", "standard", "relaxed", "custom"].includes(config.review_mode)) {
+  if (!new Set(["paranoid", "strict", "standard", "relaxed", "custom"]).has(config.review_mode)) {
     errors.push(`Invalid review_mode: ${config.review_mode}`);
   }
-  if (!["tdd", "standard"].includes(config.development?.methodology)) {
+  if (!new Set(["tdd", "standard"]).has(config.development?.methodology)) {
     errors.push(`Invalid development.methodology: ${config.development?.methodology}`);
   }
 

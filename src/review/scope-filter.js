@@ -17,7 +17,7 @@ export function extractDiffFiles(diff) {
   const files = new Set();
   for (const line of (diff || "").split("\n")) {
     // Match "+++ b/path" lines in unified diff
-    const m = line.match(/^\+\+\+ b\/(.+)/);
+    const m = /^\+\+\+ b\/(.+)/.exec(line);
     if (m) files.add(m[1]);
   }
   return files;
@@ -146,8 +146,7 @@ export function buildDeferredContext(deferredIssues) {
     lines.push(`- [${issue.severity}] ${file}: ${issue.description}${fix}`);
   }
 
-  lines.push("");
-  lines.push("If your current changes naturally address any of these, great. Otherwise, they will be tracked for future resolution.");
+  lines.push("", "If your current changes naturally address any of these, great. Otherwise, they will be tracked for future resolution.");
 
   return lines.join("\n");
 }

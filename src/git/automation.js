@@ -19,7 +19,7 @@ import {
 
 export function commitMessageFromTask(task) {
   const clean = String(task || "")
-    .replace(/\s+/g, " ")
+    .replaceAll(/\s+/g, " ")
     .trim();
   return `feat: ${clean.slice(0, 72) || "karajan update"}`;
 }
@@ -72,8 +72,7 @@ export function buildPrBody({ task, stageResults }) {
   const shouldDecompose = stageResults?.triage?.shouldDecompose;
   const pendingSubtasks = shouldDecompose && triageSubtasks?.length > 1 ? triageSubtasks.slice(1) : [];
   if (pendingSubtasks.length > 0) {
-    sections.push("", "## Pending subtasks");
-    sections.push("This PR addresses part of a larger task. The following subtasks were identified but not included:");
+    sections.push("", "## Pending subtasks", "This PR addresses part of a larger task. The following subtasks were identified but not included:");
     for (const subtask of pendingSubtasks) {
       sections.push(`- [ ] ${subtask}`);
     }
@@ -115,7 +114,7 @@ export async function earlyPrCreation({ gitCtx, task, logger, session, stageResu
   logger.info(`Early PR created: ${prUrl}`);
 
   // Extract PR number from URL (e.g. https://github.com/owner/repo/pull/42)
-  const prNumber = parseInt(prUrl.split("/").pop(), 10) || null;
+  const prNumber = Number.parseInt(prUrl.split("/").pop(), 10) || null;
   return { prNumber, prUrl, commits };
 }
 

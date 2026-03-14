@@ -17,7 +17,7 @@ function resolveProvider(config) {
 
 function parseTriageOutput(raw) {
   const text = raw?.trim() || "";
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  const jsonMatch = /\{[\s\S]*\}/.exec(text);
   if (!jsonMatch) return null;
   return JSON.parse(jsonMatch[0]);
 }
@@ -90,7 +90,7 @@ export class TriageRole extends BaseRole {
       const reasoning = String(parsed.reasoning || "").trim() || "No reasoning provided.";
       const shouldDecompose = Boolean(parsed.shouldDecompose);
       const subtasks = normalizeSubtasks(parsed.subtasks);
-      const taskType = VALID_TASK_TYPES.includes(parsed.taskType) ? parsed.taskType : FALLBACK_TASK_TYPE;
+      const taskType = VALID_TASK_TYPES.has(parsed.taskType) ? parsed.taskType : FALLBACK_TASK_TYPE;
 
       const triageResult = {
         level,

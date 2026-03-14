@@ -19,8 +19,7 @@ export async function assertAgentsAvailable(agentNames = []) {
 
   const lines = ["Missing required AI CLIs for this command:"];
   for (const m of missing) {
-    lines.push(`- ${m.name}: command '${m.bin}' not found`);
-    lines.push(`  Install: ${m.installUrl}`);
+    lines.push(`- ${m.name}: command '${m.bin}' not found`, `  Install: ${m.installUrl}`);
   }
   throw new Error(lines.join("\n"));
 }

@@ -189,7 +189,9 @@ export async function initCommand({ logger, flags = {} }) {
 
     for (const wf of workflows) {
       const destPath = path.join(workflowDir, wf);
-      if (!(await exists(destPath))) {
+      if (await exists(destPath)) {
+        logger.info(`${wf} already exists — skipping`);
+      } else {
         const srcPath = path.join(templatesDir, wf);
         try {
           const content = await fs.readFile(srcPath, "utf8");
@@ -198,8 +200,6 @@ export async function initCommand({ logger, flags = {} }) {
         } catch (err) {
           logger.warn(`Could not scaffold ${wf}: ${err.message}`);
         }
-      } else {
-        logger.info(`${wf} already exists — skipping`);
       }
     }
 

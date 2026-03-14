@@ -44,7 +44,7 @@ function buildPrompt({ task, diff, sonarIssues, instructions }) {
 
 function parseTesterOutput(raw) {
   const text = raw?.trim() || "";
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  const jsonMatch = /\{[\s\S]*\}/.exec(text);
   if (!jsonMatch) return null;
   return JSON.parse(jsonMatch[0]);
 }

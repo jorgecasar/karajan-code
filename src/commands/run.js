@@ -25,7 +25,6 @@ export async function runCommandHandler({ task, config, logger, flags }) {
   // --- Planning Game: resolve card ID ---
   const pgCardId = flags?.pgTask || parseCardId(task);
   const pgProject = flags?.pgProject || config.planning_game?.project_id || null;
-  const enrichedTask = task;
 
   const jsonMode = flags?.json;
 
@@ -48,10 +47,10 @@ export async function runCommandHandler({ task, config, logger, flags }) {
   });
 
   if (!jsonMode) {
-    printHeader({ task: enrichedTask, config });
+    printHeader({ task: task, config });
   }
 
-  const result = await runFlow({ task: enrichedTask, config, logger, flags, emitter, pgTaskId: pgCardId || null, pgProject: pgProject || null });
+  const result = await runFlow({ task: task, config, logger, flags, emitter, pgTaskId: pgCardId || null, pgProject: pgProject || null });
 
   if (jsonMode) {
     console.log(JSON.stringify(result, null, 2));

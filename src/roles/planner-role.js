@@ -23,14 +23,11 @@ function resolvePlannerRuntimeTimeoutMs(config) {
 
 function appendDecompositionSection(sections, triageDecomposition) {
   if (!triageDecomposition?.length) return;
-  sections.push("## Triage decomposition recommendation");
-  sections.push("The triage stage determined this task should be decomposed. Suggested subtasks:");
+  sections.push("## Triage decomposition recommendation", "The triage stage determined this task should be decomposed. Suggested subtasks:");
   for (let i = 0; i < triageDecomposition.length; i++) {
     sections.push(`${i + 1}. ${triageDecomposition[i]}`);
   }
-  sections.push("");
-  sections.push("Focus your plan on the FIRST subtask only. List the remaining subtasks as 'pending_subtasks' in your output for documentation.");
-  sections.push("");
+  sections.push("", "Focus your plan on the FIRST subtask only. List the remaining subtasks as 'pending_subtasks' in your output for documentation.", "");
 }
 
 const RESEARCH_FIELDS = [
@@ -70,20 +67,20 @@ function buildPrompt({ task, instructions, research, triageDecomposition, archit
   const sections = [];
 
   if (instructions) {
-    sections.push(instructions);
-    sections.push("");
+    sections.push(instructions, "");
   }
 
-  sections.push("Create an implementation plan for this task.");
-  sections.push("Return concise numbered steps focused on execution order and risk.");
-  sections.push("");
+  sections.push(
+    "Create an implementation plan for this task.",
+    "Return concise numbered steps focused on execution order and risk.",
+    ""
+  );
 
   appendDecompositionSection(sections, triageDecomposition);
   appendArchitectSection(sections, architectContext);
   appendResearchSection(sections, research);
 
-  sections.push("## Task");
-  sections.push(task);
+  sections.push("## Task", task);
 
   return sections.join("\n");
 }
