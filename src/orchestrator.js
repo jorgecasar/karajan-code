@@ -882,16 +882,11 @@ async function handleMaxIterationsReached({ session, budgetSummary, emitter, eve
   return { approved: false, sessionId: session.id, reason: "max_iterations" };
 }
 
-export async function runFlow({ task, config, logger, flags = {}, emitter = null, askQuestion = null, pgTaskId = null, pgProject = null }) {
+async function initFlowContext({ task, config, logger, emitter, askQuestion, pgTaskId, pgProject, flags }) {
   const coderRole = resolveRole(config, "coder");
   const reviewerRole = resolveRole(config, "reviewer");
   const refactorerRole = resolveRole(config, "refactorer");
   const pipelineFlags = resolvePipelineFlags(config);
-
-  if (flags.dryRun) {
-    return handleDryRun({ task, config, flags, emitter, pipelineFlags });
-  }
-
   const repeatDetector = new RepeatDetector({ threshold: getRepeatThreshold(config) });
   const coderRoleInstance = new CoderRole({ config, logger, emitter, createAgentFn: createAgent });
   const startedAt = Date.now();
@@ -917,12 +912,81 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
 
   const preLoopResult = await runPreLoopStages({ config, logger, emitter, eventBase, session, flags, pipelineFlags, coderRole, trackBudget, task, askQuestion, pgTaskId, pgProject, stageResults });
   const { plannedTask } = preLoopResult;
-  config = preLoopResult.updatedConfig;
+  const updatedConfig = preLoopResult.updatedConfig;
 
-  const gitCtx = await prepareGitAutomation({ config, task, logger, session });
-  const projectDir = config.projectDir || process.cwd();
-  const { rules: reviewRules } = await resolveReviewProfile({ mode: config.review_mode, projectDir });
+  const gitCtx = await prepareGitAutomation({ config: updatedConfig, task, logger, session });
+  const projectDir = updatedConfig.projectDir || process.cwd();
+  const { rules: reviewRules } = await resolveReviewProfile({ mode: updatedConfig.review_mode, projectDir });
   await coderRoleInstance.init();
+
+  return {
+    coderRole, reviewerRole, refactorerRole, pipelineFlags, repeatDetector, coderRoleInstance,
+    startedAt, eventBase, budgetTracker, budgetLimit, budgetSummary, trackBudget,
+    session, pgCard, stageResults, sonarState, plannedTask, config: updatedConfig,
+    gitCtx, reviewRules
+  };
+}
+
+async function runSingleIteration(ctx) {
+  const {
+    coderRoleInstance, coderRole, refactorerRole, pipelineFlags, config, logger, emitter, eventBase,
+    session, plannedTask, trackBudget, i, reviewerRole, reviewRules, task, repeatDetector,
+    budgetSummary, askQuestion, sonarState, stageResults, gitCtx, pgCard, pgProject
+  } = ctx;
+
+  const iterStart = Date.now();
+  const becariaEnabled = Boolean(config.becaria?.enabled) && gitCtx?.enabled;
+  logger.setContext({ iteration: i, stage: "iteration" });
+
+  emitProgress(emitter, makeEvent("iteration:start", { ...eventBase, stage: "iteration" }, {
+    message: `Iteration ${i}/${config.max_iterations}`,
+    detail: { iteration: i, maxIterations: config.max_iterations }
+  }));
+  logger.info(`Iteration ${i}/${config.max_iterations}`);
+
+  const crResult = await runCoderAndRefactorerStages({ coderRoleInstance, coderRole, refactorerRole, pipelineFlags, config, logger, emitter, eventBase, session, plannedTask, trackBudget, i });
+  if (crResult.action === "return" || crResult.action === "retry") return crResult;
+
+  const qgResult = await runQualityGateStages({ config, logger, emitter, eventBase, session, trackBudget, i, askQuestion, repeatDetector, budgetSummary, sonarState, task, stageResults });
+  if (qgResult.action === "return" || qgResult.action === "continue") return qgResult;
+
+  await handleBecariaEarlyPrOrPush({ becariaEnabled, config, session, emitter, eventBase, gitCtx, task, logger, stageResults, i });
+
+  const revResult = await runReviewerGateStage({ pipelineFlags, reviewerRole, config, logger, emitter, eventBase, session, trackBudget, i, reviewRules, task, repeatDetector, budgetSummary, askQuestion });
+  if (revResult.action === "return" || revResult.action === "retry") return revResult;
+  const review = revResult.review;
+
+  const iterDuration = Date.now() - iterStart;
+  emitProgress(emitter, makeEvent("iteration:end", { ...eventBase, stage: "iteration" }, {
+    message: `Iteration ${i} completed`, detail: { duration: iterDuration }
+  }));
+  session.standby_retry_count = 0;
+
+  const solomonResult = await handleSolomonCheck({ config, session, emitter, eventBase, logger, task, i, askQuestion, becariaEnabled });
+  if (solomonResult.action === "pause") return { action: "return", result: solomonResult.result };
+
+  await handleBecariaReviewDispatch({ becariaEnabled, config, session, review, i, logger });
+
+  if (review.approved) {
+    const approvedResult = await handleApprovedReview({ config, session, emitter, eventBase, coderRole, trackBudget, i, task, stageResults, pipelineFlags, askQuestion, logger, gitCtx, budgetSummary, pgCard, pgProject, review });
+    if (approvedResult.action === "return" || approvedResult.action === "continue") return approvedResult;
+  }
+
+  const retryResult = await handleReviewerRetryAndSolomon({ config, session, emitter, eventBase, logger, review, task, i, askQuestion });
+  if (retryResult.action === "return") return retryResult;
+
+  return { action: "next" };
+}
+
+export async function runFlow({ task, config, logger, flags = {}, emitter = null, askQuestion = null, pgTaskId = null, pgProject = null }) {
+  const pipelineFlags = resolvePipelineFlags(config);
+
+  if (flags.dryRun) {
+    return handleDryRun({ task, config, flags, emitter, pipelineFlags });
+  }
+
+  const ctx = await initFlowContext({ task, config, logger, emitter, askQuestion, pgTaskId, pgProject, flags });
+  config = ctx.config;
 
   const checkpointIntervalMs = (config.session.checkpoint_interval_minutes ?? 5) * 60 * 1000;
   let lastCheckpointAt = Date.now();
@@ -931,67 +995,28 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
   let i = 0;
   while (i < config.max_iterations) {
     i += 1;
-    const elapsedMinutes = (Date.now() - startedAt) / 60000;
+    const elapsedMinutes = (Date.now() - ctx.startedAt) / 60000;
 
     const cpResult = await handleCheckpoint({
       checkpointDisabled, askQuestion, lastCheckpointAt, checkpointIntervalMs, elapsedMinutes,
-      i, config, budgetTracker, stageResults, emitter, eventBase, session, budgetSummary
+      i, config, budgetTracker: ctx.budgetTracker, stageResults: ctx.stageResults, emitter, eventBase: ctx.eventBase, session: ctx.session, budgetSummary: ctx.budgetSummary
     });
     if (cpResult.action === "stop") return cpResult.result;
     checkpointDisabled = cpResult.checkpointDisabled;
     lastCheckpointAt = cpResult.lastCheckpointAt;
 
-    await checkSessionTimeout({ askQuestion, elapsedMinutes, config, session, emitter, eventBase, i, budgetSummary });
-    await checkBudgetExceeded({ budgetTracker, config, session, emitter, eventBase, i, budgetLimit, budgetSummary });
+    await checkSessionTimeout({ askQuestion, elapsedMinutes, config, session: ctx.session, emitter, eventBase: ctx.eventBase, i, budgetSummary: ctx.budgetSummary });
+    await checkBudgetExceeded({ budgetTracker: ctx.budgetTracker, config, session: ctx.session, emitter, eventBase: ctx.eventBase, i, budgetLimit: ctx.budgetLimit, budgetSummary: ctx.budgetSummary });
 
-    eventBase.iteration = i;
-    const iterStart = Date.now();
-    const becariaEnabled = Boolean(config.becaria?.enabled) && gitCtx?.enabled;
-    logger.setContext({ iteration: i, stage: "iteration" });
+    ctx.eventBase.iteration = i;
+    ctx.i = i;
 
-    emitProgress(emitter, makeEvent("iteration:start", { ...eventBase, stage: "iteration" }, {
-      message: `Iteration ${i}/${config.max_iterations}`,
-      detail: { iteration: i, maxIterations: config.max_iterations }
-    }));
-    logger.info(`Iteration ${i}/${config.max_iterations}`);
-
-    const crResult = await runCoderAndRefactorerStages({ coderRoleInstance, coderRole, refactorerRole, pipelineFlags, config, logger, emitter, eventBase, session, plannedTask, trackBudget, i });
-    if (crResult.action === "return") return crResult.result;
-    if (crResult.action === "retry") { i -= 1; continue; }
-
-    const qgResult = await runQualityGateStages({ config, logger, emitter, eventBase, session, trackBudget, i, askQuestion, repeatDetector, budgetSummary, sonarState, task, stageResults });
-    if (qgResult.action === "return") return qgResult.result;
-    if (qgResult.action === "continue") continue;
-
-    await handleBecariaEarlyPrOrPush({ becariaEnabled, config, session, emitter, eventBase, gitCtx, task, logger, stageResults, i });
-
-    const revResult = await runReviewerGateStage({ pipelineFlags, reviewerRole, config, logger, emitter, eventBase, session, trackBudget, i, reviewRules, task, repeatDetector, budgetSummary, askQuestion });
-    if (revResult.action === "return") return revResult.result;
-    if (revResult.action === "retry") { i -= 1; continue; }
-    const review = revResult.review;
-
-    const iterDuration = Date.now() - iterStart;
-    emitProgress(emitter, makeEvent("iteration:end", { ...eventBase, stage: "iteration" }, {
-      message: `Iteration ${i} completed`, detail: { duration: iterDuration }
-    }));
-    session.standby_retry_count = 0;
-
-    const solomonResult = await handleSolomonCheck({ config, session, emitter, eventBase, logger, task, i, askQuestion, becariaEnabled });
-    if (solomonResult.action === "pause") return solomonResult.result;
-
-    await handleBecariaReviewDispatch({ becariaEnabled, config, session, review, i, logger });
-
-    if (review.approved) {
-      const approvedResult = await handleApprovedReview({ config, session, emitter, eventBase, coderRole, trackBudget, i, task, stageResults, pipelineFlags, askQuestion, logger, gitCtx, budgetSummary, pgCard, pgProject, review });
-      if (approvedResult.action === "return") return approvedResult.result;
-      if (approvedResult.action === "continue") continue;
-    }
-
-    const retryResult = await handleReviewerRetryAndSolomon({ config, session, emitter, eventBase, logger, review, task, i, askQuestion });
-    if (retryResult.action === "return") return retryResult.result;
+    const iterResult = await runSingleIteration({ ...ctx, config, logger, emitter, askQuestion, task, pgProject, i });
+    if (iterResult.action === "return") return iterResult.result;
+    if (iterResult.action === "retry") { i -= 1; }
   }
 
-  return handleMaxIterationsReached({ session, budgetSummary, emitter, eventBase, config, stageResults });
+  return handleMaxIterationsReached({ session: ctx.session, budgetSummary: ctx.budgetSummary, emitter, eventBase: ctx.eventBase, config, stageResults: ctx.stageResults });
 }
 
 export async function resumeFlow({ sessionId, answer, config, logger, flags = {}, emitter = null, askQuestion = null }) {

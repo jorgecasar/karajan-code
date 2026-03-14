@@ -43,10 +43,9 @@ export function buildTriagePrompt({ task, instructions, availableRoles }) {
     "Classify the task complexity, determine its taskType, recommend only the necessary pipeline roles, and assess whether the task should be decomposed into smaller subtasks.",
     "Keep the reasoning short and practical.",
     "Return a single valid JSON object and nothing else.",
-    'JSON schema: {"level":"trivial|simple|medium|complex","roles":["planner|researcher|refactorer|reviewer|tester|security|architect"],"taskType":"sw|infra|doc|add-tests|refactor","reasoning":string,"shouldDecompose":boolean,"subtasks":string[]}'
+    'JSON schema: {"level":"trivial|simple|medium|complex","roles":["planner|researcher|refactorer|reviewer|tester|security|architect"],"taskType":"sw|infra|doc|add-tests|refactor","reasoning":string,"shouldDecompose":boolean,"subtasks":string[]}',
+    `## Task\n${task}`
   );
-
-  sections.push(`## Task\n${task}`);
 
   return sections.join("\n\n");
 }
