@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-03-14
+
+### Added
+- **ArchitectRole**: new pre-construction design role that defines solution architecture (layers, patterns, data model, API contracts, tradeoffs) between researcher and planner stages
+- **Interactive architecture pause**: when architect detects ambiguity (`verdict: "needs_clarification"`), pipeline pauses to ask targeted questions via `askQuestion`
+- **Auto ADR generation**: architectural decisions from tradeoffs are automatically persisted as Architecture Decision Records in Planning Game when a card is linked
+- **Triage → architect activation**: triage automatically activates architect based on task complexity, scope (new modules, data model changes), and design ambiguity
+- **Planner architectContext**: planner receives and uses architectural decisions to generate implementation steps aligned with the designed architecture
+- **`--enable-architect` CLI flag** and `enableArchitect`/`architectModel` MCP parameters for explicit control
+- **`templates/roles/architect.md`**: LLM instruction template for the architect role
+
+### Changed
+- **SonarQube full cleanup**: resolved all 205 open issues (CRITICAL, MAJOR, MINOR) — 0 remaining
+- **Cognitive complexity refactoring**: orchestrator.js (345→15), display.js (134→2), server-handlers.js (101→3), config.js (55→10), and 14 other files
+- **Handler dispatch maps**: replaced large switch/if-else chains with object dispatch maps in display.js, server-handlers.js, and config.js
+- **MCP server**: migrated from deprecated `Server` to `McpServer` class
+- **Modern JS**: replaceAll, RegExp.exec, Number.parseInt, Set.has, structuredClone across 50+ files
+
 ## [1.16.0] - 2026-03-11
 
 ### Added
