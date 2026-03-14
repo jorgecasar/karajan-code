@@ -146,8 +146,10 @@ export function buildDiscoverPrompt({ task, instructions, mode = "gaps", context
 function parseClassification(raw) {
   if (!raw || typeof raw !== "object") return null;
   const rawType = String(raw.type || "").toUpperCase();
-  const type = rawType === "NOT_APPLICABLE" ? "not_applicable"
-    : VALID_CLASSIFY_TYPES.includes(rawType) ? rawType : "not_applicable";
+  let type;
+  if (rawType === "NOT_APPLICABLE") type = "not_applicable";
+  else if (VALID_CLASSIFY_TYPES.includes(rawType)) type = rawType;
+  else type = "not_applicable";
   const rawRisk = String(raw.adoptionRisk || "").toLowerCase();
   return {
     type,

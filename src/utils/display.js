@@ -404,9 +404,10 @@ const EVENT_HANDLERS = {
     console.log(`  ${ANSI.dim}\u250c Pipeline${ANSI.reset}`);
     for (const stage of trackerStages) {
       const { icon: stIcon, color: stColor } = TRACKER_STATUS[stage.status] || TRACKER_DEFAULT;
-      const suffix = stage.summary
-        ? stage.status === "running" ? ` (${stage.summary})` : ` \u2192 ${stage.summary}`
-        : "";
+      let suffix = "";
+      if (stage.summary) {
+        suffix = stage.status === "running" ? ` (${stage.summary})` : ` \u2192 ${stage.summary}`;
+      }
       console.log(`  ${ANSI.dim}\u2502${ANSI.reset} ${stColor}${stIcon} ${stage.name}${suffix}${ANSI.reset}`);
     }
     console.log(`  ${ANSI.dim}\u2514${ANSI.reset}`);

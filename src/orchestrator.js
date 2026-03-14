@@ -450,7 +450,7 @@ async function checkBudgetExceeded({ budgetTracker, config, session, emitter, ev
 }
 
 async function handleStandbyResult({ stageResult, session, emitter, eventBase, i, stage, logger }) {
-  if (!stageResult || stageResult.action !== "standby") {
+  if (!stageResult?.action || stageResult.action !== "standby") {
     return { handled: false };
   }
 
@@ -616,7 +616,10 @@ async function handleBecariaReviewDispatch({ becariaEnabled, config, session, re
 
     const status = review.approved ? "APPROVED" : "REQUEST_CHANGES";
     const blocking = review.blocking_issues?.map((x) => `- ${x.id || "ISSUE"} [${x.severity || ""}] ${x.description}`).join("\n") || "";
-    const suggestions = review.non_blocking_suggestions?.map((s) => `- ${typeof s === "string" ? s : `${s.id || ""} ${s.description || s}`}`).join("\n") || "";
+    const suggestions = review.non_blocking_suggestions?.map((s) => {
+      const detail = typeof s === "string" ? s : `${s.id || ""} ${s.description || s}`;
+      return `- ${detail}`;
+    }).join("\n") || "";
     let reviewBody = `Review iteración ${i}: ${status}`;
     if (blocking) reviewBody += `\n\n**Blocking:**\n${blocking}`;
     if (suggestions) reviewBody += `\n\n**Suggestions:**\n${suggestions}`;

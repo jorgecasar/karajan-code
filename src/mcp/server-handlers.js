@@ -479,7 +479,10 @@ async function buildPreflightRequiredResponse(toolName) {
   const agents = listAgents(config);
   const agentSummary = agents
     .filter(ag => ag.provider !== "-")
-    .map(ag => `  ${ag.role}: ${ag.provider}${ag.model !== "-" ? ` (${ag.model})` : ""}`)
+    .map(ag => {
+      const modelSuffix = ag.model !== "-" ? ` (${ag.model})` : "";
+      return `  ${ag.role}: ${ag.provider}${modelSuffix}`;
+    })
     .join("\n");
   return responseText({
     ok: false,
@@ -532,7 +535,8 @@ function formatPreflightConfig(agents, overrides) {
     .filter(ag => ag.provider !== "-")
     .map(ag => {
       const ovr = overrides[ag.role] ? ` -> ${overrides[ag.role]} (session override)` : "";
-      return `  ${ag.role}: ${ag.provider}${ag.model !== "-" ? ` (${ag.model})` : ""}${ovr}`;
+      const modelSuffix = ag.model !== "-" ? ` (${ag.model})` : "";
+      return `  ${ag.role}: ${ag.provider}${modelSuffix}${ovr}`;
     });
   const overrideLines = Object.entries(overrides)
     .filter(([k]) => !AGENT_ROLES.includes(k))
@@ -556,7 +560,7 @@ function buildReportArgs(a) {
 async function handleStatus(a, server) {
   const maxLines = a.lines || 50;
   const projectDir = await resolveProjectDir(server);
-  return readRunLog(maxLines, projectDir);
+  return readRunLog(projectDir, maxLines);
 }
 
 async function handleAgents(a) {

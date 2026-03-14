@@ -1,5 +1,5 @@
 function extractStepText(line) {
-  const numberedStep = line.match(/^\d+[\).:-]\s*(.+)$/);
+  const numberedStep = line.match(/^\d+[).:-]\s*(.+)$/);
   if (numberedStep) return numberedStep[1].trim();
   const bulletStep = line.match(/^[-*]\s+(.+)$/);
   if (bulletStep) return bulletStep[1].trim();
@@ -41,7 +41,7 @@ export function parsePlannerOutput(output) {
   }
 
   if (!state.title) {
-    const firstFreeLine = lines.find((line) => !/^(approach|strategy)\s*:/i.test(line) && !/^\d+[\).:-]\s*/.test(line));
+    const firstFreeLine = lines.find((line) => !/^(approach|strategy)\s*:/i.test(line) && !/^\d+[).:-]\s*/.test(line));
     state.title = firstFreeLine || null;
   }
 
