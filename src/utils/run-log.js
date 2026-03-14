@@ -100,6 +100,51 @@ export function createRunLog(projectDir) {
   };
 }
 
+const KJ_TOOLS = ["kj_run", "kj_code", "kj_plan"];
+
+function detectRunStart(line, status) {
+  const started = KJ_TOOLS.some(t => line.includes(`[${t}] started`));
+  if (!started) return;
+  status.isRunning = true;
+  status.currentStage = KJ_TOOLS.find(t => line.includes(t));
+  const tsMatch = line.match(/^(\d{2}:\d{2}:\d{2}\.\d{3})/);
+  if (tsMatch) status.startedAt = tsMatch[1];
+}
+
+function detectRunFinish(line, status) {
+  const isToolFinish = KJ_TOOLS.some(t => line.includes(`[${t}] finished`) || line.includes(`[${t}]`));
+  if (line.includes("finished") && isToolFinish) {
+    status.isRunning = false;
+  }
+}
+
+function detectStageTransitions(line, status) {
+  const stageStart = line.match(/\[(\w+):start\]/);
+  if (stageStart) status.currentStage = stageStart[1];
+
+  const stageDone = line.match(/\[(\w+):done\]|\[(\w+)\] finished/);
+  if (stageDone) {
+    const doneName = stageDone[1] || stageDone[2];
+    if (doneName === status.currentStage) status.currentStage = "idle";
+  }
+}
+
+function detectMetadata(line, status) {
+  const agentMatch = line.match(/agent=(\w+)/);
+  if (agentMatch) status.currentAgent = agentMatch[1];
+
+  const iterMatch = line.match(/[Ii]teration\s+(\d+)/);
+  if (iterMatch) status.iteration = parseInt(iterMatch[1], 10);
+
+  if (line.match(/\[.*:fail\]|\[.*error\]/i) || line.includes("ERROR")) {
+    status.errors.push(line.trim());
+  }
+
+  if (line.includes("[standby]") || line.includes("standby")) {
+    status.currentStage = "standby";
+  }
+}
+
 /**
  * Parse the run log to extract current status information.
  */
@@ -115,64 +160,14 @@ function parseRunStatus(lines) {
   };
 
   for (const line of lines) {
-    // Detect run start
-    if (line.includes("[kj_run] started") || line.includes("[kj_code] started") || line.includes("[kj_plan] started")) {
-      status.isRunning = true;
-      let tool;
-      if (line.includes("kj_run")) {
-        tool = "kj_run";
-      } else if (line.includes("kj_code")) {
-        tool = "kj_code";
-      } else {
-        tool = "kj_plan";
-      }
-      status.currentStage = tool;
-      const tsMatch = line.match(/^(\d{2}:\d{2}:\d{2}\.\d{3})/);
-      if (tsMatch) status.startedAt = tsMatch[1];
-    }
-
-    // Detect run finish
-    if (line.includes("[kj_run] finished") || line.includes("[kj_code] finished") || line.includes("[kj_plan] finished") || line.includes("finished")) {
-      if (line.includes("[kj_run]") || line.includes("[kj_code]") || line.includes("[kj_plan]")) {
-        status.isRunning = false;
-      }
-    }
-
-    // Detect stage transitions
-    const stageStart = line.match(/\[(\w+):start\]/);
-    if (stageStart) {
-      status.currentStage = stageStart[1];
-    }
-    const stageDone = line.match(/\[(\w+):done\]|\[(\w+)\] finished/);
-    if (stageDone) {
-      const doneName = stageDone[1] || stageDone[2];
-      if (doneName === status.currentStage) status.currentStage = "idle";
-    }
-
-    // Detect agent
-    const agentMatch = line.match(/agent=(\w+)/);
-    if (agentMatch) status.currentAgent = agentMatch[1];
-
-    // Detect iteration
-    const iterMatch = line.match(/[Ii]teration\s+(\d+)/);
-    if (iterMatch) status.iteration = parseInt(iterMatch[1], 10);
-
-    // Detect errors
-    if (line.match(/\[.*:fail\]|\[.*error\]/i) || line.includes("ERROR")) {
-      status.errors.push(line.trim());
-    }
-
-    // Detect standby
-    if (line.includes("[standby]") || line.includes("standby")) {
-      status.currentStage = "standby";
-    }
-
+    detectRunStart(line, status);
+    detectRunFinish(line, status);
+    detectStageTransitions(line, status);
+    detectMetadata(line, status);
     status.lastEvent = line.trim();
   }
 
-  // Keep only last 3 errors
   if (status.errors.length > 3) status.errors = status.errors.slice(-3);
-
   return status;
 }
 

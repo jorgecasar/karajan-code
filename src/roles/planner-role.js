@@ -21,6 +21,51 @@ function resolvePlannerRuntimeTimeoutMs(config) {
   return Math.round(minutes * 60 * 1000);
 }
 
+function appendDecompositionSection(sections, triageDecomposition) {
+  if (!triageDecomposition?.length) return;
+  sections.push("## Triage decomposition recommendation");
+  sections.push("The triage stage determined this task should be decomposed. Suggested subtasks:");
+  for (let i = 0; i < triageDecomposition.length; i++) {
+    sections.push(`${i + 1}. ${triageDecomposition[i]}`);
+  }
+  sections.push("");
+  sections.push("Focus your plan on the FIRST subtask only. List the remaining subtasks as 'pending_subtasks' in your output for documentation.");
+  sections.push("");
+}
+
+const RESEARCH_FIELDS = [
+  { key: "affected_files", label: "Affected files" },
+  { key: "patterns", label: "Patterns" },
+  { key: "constraints", label: "Constraints" },
+  { key: "risks", label: "Risks" },
+  { key: "prior_decisions", label: "Prior decisions" }
+];
+
+function appendResearchSection(sections, research) {
+  if (!research) return;
+  sections.push("## Research findings");
+  for (const { key, label } of RESEARCH_FIELDS) {
+    if (research[key]?.length) {
+      sections.push(`${label}: ${research[key].join(", ")}`);
+    }
+  }
+  sections.push("");
+}
+
+function appendArchitectSection(sections, architectContext) {
+  if (!architectContext) return;
+  const arch = architectContext.architecture || {};
+  sections.push("## Architecture context");
+  if (arch.type) sections.push(`Type: ${arch.type}`);
+  if (arch.layers?.length) sections.push(`Layers: ${arch.layers.join(", ")}`);
+  if (arch.patterns?.length) sections.push(`Patterns: ${arch.patterns.join(", ")}`);
+  if (arch.dataModel?.entities?.length) sections.push(`Data model entities: ${arch.dataModel.entities.join(", ")}`);
+  if (arch.apiContracts?.length) sections.push(`API contracts: ${arch.apiContracts.join(", ")}`);
+  if (arch.tradeoffs?.length) sections.push(`Tradeoffs: ${arch.tradeoffs.join(", ")}`);
+  if (architectContext.summary) sections.push(`Summary: ${architectContext.summary}`);
+  sections.push("");
+}
+
 function buildPrompt({ task, instructions, research, triageDecomposition, architectContext }) {
   const sections = [];
 
@@ -33,49 +78,9 @@ function buildPrompt({ task, instructions, research, triageDecomposition, archit
   sections.push("Return concise numbered steps focused on execution order and risk.");
   sections.push("");
 
-  if (triageDecomposition?.length) {
-    sections.push("## Triage decomposition recommendation");
-    sections.push("The triage stage determined this task should be decomposed. Suggested subtasks:");
-    for (let i = 0; i < triageDecomposition.length; i++) {
-      sections.push(`${i + 1}. ${triageDecomposition[i]}`);
-    }
-    sections.push("");
-    sections.push("Focus your plan on the FIRST subtask only. List the remaining subtasks as 'pending_subtasks' in your output for documentation.");
-    sections.push("");
-  }
-
-  if (architectContext) {
-    const arch = architectContext.architecture || {};
-    sections.push("## Architecture context");
-    if (arch.type) sections.push(`Type: ${arch.type}`);
-    if (arch.layers?.length) sections.push(`Layers: ${arch.layers.join(", ")}`);
-    if (arch.patterns?.length) sections.push(`Patterns: ${arch.patterns.join(", ")}`);
-    if (arch.dataModel?.entities?.length) sections.push(`Data model entities: ${arch.dataModel.entities.join(", ")}`);
-    if (arch.apiContracts?.length) sections.push(`API contracts: ${arch.apiContracts.join(", ")}`);
-    if (arch.tradeoffs?.length) sections.push(`Tradeoffs: ${arch.tradeoffs.join(", ")}`);
-    if (architectContext.summary) sections.push(`Summary: ${architectContext.summary}`);
-    sections.push("");
-  }
-
-  if (research) {
-    sections.push("## Research findings");
-    if (research.affected_files?.length) {
-      sections.push(`Affected files: ${research.affected_files.join(", ")}`);
-    }
-    if (research.patterns?.length) {
-      sections.push(`Patterns: ${research.patterns.join(", ")}`);
-    }
-    if (research.constraints?.length) {
-      sections.push(`Constraints: ${research.constraints.join(", ")}`);
-    }
-    if (research.risks?.length) {
-      sections.push(`Risks: ${research.risks.join(", ")}`);
-    }
-    if (research.prior_decisions?.length) {
-      sections.push(`Prior decisions: ${research.prior_decisions.join(", ")}`);
-    }
-    sections.push("");
-  }
+  appendDecompositionSection(sections, triageDecomposition);
+  appendArchitectSection(sections, architectContext);
+  appendResearchSection(sections, research);
 
   sections.push("## Task");
   sections.push(task);

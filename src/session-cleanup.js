@@ -9,6 +9,34 @@ import { getSessionRoot } from "./utils/paths.js";
 
 const DEFAULT_EXPIRY_DAYS = 30;
 
+async function tryRemoveOrphan({ sessionDir, dirName, cutoff, removed, errors, logger }) {
+  const stat = await fs.stat(sessionDir).catch(() => null);
+  if (!stat || stat.mtimeMs >= cutoff) return;
+  try {
+    await fs.rm(sessionDir, { recursive: true, force: true });
+    removed.push(dirName);
+    logger?.debug?.(`Orphan session dir removed: ${dirName}`);
+  } catch (rmErr) {
+    errors.push({ session: dirName, error: rmErr.message });
+  }
+}
+
+async function tryCleanupSession({ sessionDir, dirName, cutoff, removed, errors, logger }) {
+  const sessionFile = path.join(sessionDir, "session.json");
+  try {
+    const raw = await fs.readFile(sessionFile, "utf8");
+    const session = JSON.parse(raw);
+    const updatedAt = new Date(session.updated_at || session.created_at).getTime();
+    if (updatedAt < cutoff) {
+      await fs.rm(sessionDir, { recursive: true, force: true });
+      removed.push(dirName);
+      logger?.debug?.(`Session expired and removed: ${dirName}`);
+    }
+  } catch {
+    await tryRemoveOrphan({ sessionDir, dirName, cutoff, removed, errors, logger });
+  }
+}
+
 export async function cleanupExpiredSessions({ config, logger } = {}) {
   const expiryDays = config?.session?.expiry_days ?? DEFAULT_EXPIRY_DAYS;
   if (expiryDays <= 0) return { removed: 0, errors: [] };
@@ -29,30 +57,7 @@ export async function cleanupExpiredSessions({ config, logger } = {}) {
 
   for (const dir of dirs) {
     const sessionDir = path.join(sessionRoot, dir.name);
-    const sessionFile = path.join(sessionDir, "session.json");
-
-    try {
-      const raw = await fs.readFile(sessionFile, "utf8");
-      const session = JSON.parse(raw);
-      const updatedAt = new Date(session.updated_at || session.created_at).getTime();
-
-      if (updatedAt < cutoff) {
-        await fs.rm(sessionDir, { recursive: true, force: true });
-        removed.push(dir.name);
-        logger?.debug?.(`Session expired and removed: ${dir.name}`);
-      }
-    } catch (error) {
-      const stat = await fs.stat(sessionDir).catch(() => null);
-      if (stat && stat.mtimeMs < cutoff) {
-        try {
-          await fs.rm(sessionDir, { recursive: true, force: true });
-          removed.push(dir.name);
-          logger?.debug?.(`Orphan session dir removed: ${dir.name}`);
-        } catch (rmErr) {
-          errors.push({ session: dir.name, error: rmErr.message });
-        }
-      }
-    }
+    await tryCleanupSession({ sessionDir, dirName: dir.name, cutoff, removed, errors, logger });
   }
 
   if (removed.length > 0) {

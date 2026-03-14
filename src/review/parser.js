@@ -22,33 +22,32 @@ export function parseMaybeJsonString(value) {
   }
 }
 
+function isReviewPayload(obj) {
+  return obj?.approved !== undefined && obj?.blocking_issues !== undefined;
+}
+
+function findReviewInArray(arr) {
+  for (let i = arr.length - 1; i >= 0; i -= 1) {
+    const item = arr[i];
+    if (isReviewPayload(item)) return item;
+
+    const nested = item?.result || item?.message?.content?.[0]?.text;
+    if (typeof nested === "string") {
+      const parsedNested = parseMaybeJsonString(nested);
+      if (parsedNested?.approved !== undefined) return parsedNested;
+    }
+  }
+  return null;
+}
+
 export function normalizeReviewPayload(payload) {
   if (!payload) return null;
-
-  if (payload.approved !== undefined && payload.blocking_issues !== undefined) {
-    return payload;
-  }
-
-  if (Array.isArray(payload)) {
-    for (let i = payload.length - 1; i >= 0; i -= 1) {
-      const item = payload[i];
-      if (item?.approved !== undefined && item?.blocking_issues !== undefined) {
-        return item;
-      }
-
-      const nested = item?.result || item?.message?.content?.[0]?.text;
-      if (typeof nested === "string") {
-        const parsedNested = parseMaybeJsonString(nested);
-        if (parsedNested?.approved !== undefined) return parsedNested;
-      }
-    }
-    return null;
-  }
+  if (isReviewPayload(payload)) return payload;
+  if (Array.isArray(payload)) return findReviewInArray(payload);
 
   if (typeof payload.result === "string") {
     const parsedResult = parseMaybeJsonString(payload.result);
     if (parsedResult?.approved !== undefined) return parsedResult;
-    return null;
   }
 
   return null;
