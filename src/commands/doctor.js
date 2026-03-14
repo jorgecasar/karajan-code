@@ -14,56 +14,63 @@ function getPackageVersion() {
   return JSON.parse(readFileSync(pkgPath, "utf8")).version;
 }
 
-export async function runChecks({ config }) {
-  const checks = [];
-
-  // 0. Karajan version
+function checkKarajanVersion() {
   const version = getPackageVersion();
-  checks.push({
+  return {
     name: "karajan",
     label: "Karajan Code",
     ok: true,
     detail: `v${version}`,
     fix: null
-  });
+  };
+}
 
-  // 1. Config file
+async function checkConfigFile() {
   const configPath = getConfigPath();
   const configExists = await exists(configPath);
-  checks.push({
+  return {
     name: "config",
     label: "Config file",
     ok: configExists,
     detail: configExists ? configPath : "Not found",
     fix: configExists ? null : "Run 'kj init' to create the config file."
-  });
+  };
+}
 
-  // 2. Git repository
+async function checkGitRepo() {
   let gitOk = false;
   try {
     gitOk = await ensureGitRepo();
   } catch {
     gitOk = false;
   }
-  checks.push({
+  return {
     name: "git",
     label: "Git repository",
     ok: gitOk,
     detail: gitOk ? "Inside a git repository" : "Not a git repository",
     fix: gitOk ? null : "Run 'git init' or navigate to a git-managed project."
-  });
+  };
+}
 
-  // 3. Docker
+async function checkDocker() {
   const docker = await checkBinary("docker", "--version");
-  checks.push({
+  return {
     name: "docker",
     label: "Docker",
     ok: docker.ok,
     detail: docker.ok ? docker.version : "Not found",
     fix: docker.ok ? null : "Install Docker: https://docs.docker.com/get-docker/"
-  });
+  };
+}
 
-  // 4. SonarQube reachability
+function sonarDetail(config, sonarOk, sonarHost) {
+  if (config.sonarqube?.enabled === false) return "Disabled in config";
+  if (sonarOk) return `Reachable at ${sonarHost}`;
+  return `Not reachable at ${sonarHost}`;
+}
+
+async function checkSonarQube(config) {
   const sonarHost = config.sonarqube?.host || "http://localhost:9000";
   let sonarOk = false;
   if (config.sonarqube?.enabled !== false) {
@@ -73,21 +80,20 @@ export async function runChecks({ config }) {
       sonarOk = false;
     }
   }
-  checks.push({
+  const isOkOrDisabled = sonarOk || config.sonarqube?.enabled === false;
+  return {
     name: "sonarqube",
     label: "SonarQube",
-    ok: sonarOk || config.sonarqube?.enabled === false,
-    detail: (() => {
-      if (config.sonarqube?.enabled === false) return "Disabled in config";
-      if (sonarOk) return `Reachable at ${sonarHost}`;
-      return `Not reachable at ${sonarHost}`;
-    })(),
-    fix: sonarOk || config.sonarqube?.enabled === false
+    ok: isOkOrDisabled,
+    detail: sonarDetail(config, sonarOk, sonarHost),
+    fix: isOkOrDisabled
       ? null
       : "Run 'kj sonar start' or 'docker start karajan-sonarqube'. Use --no-sonar to skip."
-  });
+  };
+}
 
-  // 5. Agent CLIs
+async function checkAgentCLIs() {
+  const checks = [];
   for (const agent of KNOWN_AGENTS) {
     const result = await checkBinary(agent.name);
     checks.push({
@@ -98,8 +104,11 @@ export async function runChecks({ config }) {
       fix: result.ok ? null : `Install: ${agent.install}`
     });
   }
+  return checks;
+}
 
-  // 6. Core binaries
+async function checkCoreBinaries() {
+  const checks = [];
   for (const bin of ["node", "npm", "git"]) {
     const result = await checkBinary(bin);
     checks.push({
@@ -110,103 +119,133 @@ export async function runChecks({ config }) {
       fix: result.ok ? null : `Install ${bin} from its official website.`
     });
   }
+  return checks;
+}
 
-  // 7. Serena MCP
-  if (config.serena?.enabled) {
-    let serenaOk = false;
-    try {
-      const serenaCheck = await runCommand("serena", ["--version"]);
-      serenaOk = serenaCheck.exitCode === 0;
-    } catch {
-      serenaOk = false;
-    }
+async function checkSerena() {
+  let serenaOk = false;
+  try {
+    const serenaCheck = await runCommand("serena", ["--version"]);
+    serenaOk = serenaCheck.exitCode === 0;
+  } catch {
+    serenaOk = false;
+  }
+  return {
+    name: "serena",
+    label: "Serena MCP",
+    ok: serenaOk,
+    detail: serenaOk ? "Available" : "Not found (prompts will still include Serena instructions)",
+    fix: serenaOk ? null : "Install Serena: uvx --from git+https://github.com/oraios/serena serena --help"
+  };
+}
+
+async function checkBecariaWorkflows(projectDir) {
+  const checks = [];
+  const workflowDir = path.join(projectDir, ".github", "workflows");
+  const requiredWorkflows = ["becaria-gateway.yml", "automerge.yml", "houston-override.yml"];
+  for (const wf of requiredWorkflows) {
+    const wfPath = path.join(workflowDir, wf);
+    const wfExists = await exists(wfPath);
     checks.push({
-      name: "serena",
-      label: "Serena MCP",
-      ok: serenaOk,
-      detail: serenaOk ? "Available" : "Not found (prompts will still include Serena instructions)",
-      fix: serenaOk ? null : "Install Serena: uvx --from git+https://github.com/oraios/serena serena --help"
+      name: `becaria:workflow:${wf}`,
+      label: `BecarIA workflow: ${wf}`,
+      ok: wfExists,
+      detail: wfExists ? "Found" : "Not found",
+      fix: wfExists ? null : `Run 'kj init --scaffold-becaria' or copy from karajan-code/templates/workflows/${wf}`
     });
   }
+  return checks;
+}
 
-  // 8. BecarIA Gateway infrastructure
-  if (config.becaria?.enabled) {
-    const projectDir = config.projectDir || process.cwd();
-
-    // Workflow files
-    const workflowDir = path.join(projectDir, ".github", "workflows");
-    const requiredWorkflows = ["becaria-gateway.yml", "automerge.yml", "houston-override.yml"];
-    for (const wf of requiredWorkflows) {
-      const wfPath = path.join(workflowDir, wf);
-      const wfExists = await exists(wfPath);
-      checks.push({
-        name: `becaria:workflow:${wf}`,
-        label: `BecarIA workflow: ${wf}`,
-        ok: wfExists,
-        detail: wfExists ? "Found" : "Not found",
-        fix: wfExists ? null : `Run 'kj init --scaffold-becaria' or copy from karajan-code/templates/workflows/${wf}`
-      });
-    }
-
-    // gh CLI
-    const ghCheck = await checkBinary("gh");
-    checks.push({
-      name: "becaria:gh",
-      label: "BecarIA: gh CLI",
-      ok: ghCheck.ok,
-      detail: ghCheck.ok ? ghCheck.version : "Not found",
-      fix: ghCheck.ok ? null : "Install GitHub CLI: https://cli.github.com/"
-    });
-
-    // Secrets check via gh api (best effort — only works if user has admin access)
-    let secretsOk = false;
-    try {
-      const { detectRepo } = await import("../becaria/repo.js");
-      const repo = await detectRepo();
-      if (repo) {
-        const secretsRes = await runCommand("gh", ["api", `repos/${repo}/actions/secrets`, "--jq", ".secrets[].name"]);
-        if (secretsRes.exitCode === 0) {
-          const names = secretsRes.stdout.split("\n").map((s) => s.trim());
-          const hasAppId = names.includes("BECARIA_APP_ID");
-          const hasKey = names.includes("BECARIA_APP_PRIVATE_KEY");
-          secretsOk = hasAppId && hasKey;
-          checks.push({
-            name: "becaria:secrets",
-            label: "BecarIA: GitHub secrets",
-            ok: secretsOk,
-            detail: (() => {
-              if (secretsOk) return "BECARIA_APP_ID + BECARIA_APP_PRIVATE_KEY found";
-              const missingAppId = !hasAppId ? "BECARIA_APP_ID " : "";
-              const missingKey = !hasKey ? "BECARIA_APP_PRIVATE_KEY" : "";
-              return `Missing: ${missingAppId}${missingKey}`.trim();
-            })(),
-            fix: secretsOk ? null : "Add BECARIA_APP_ID and BECARIA_APP_PRIVATE_KEY as GitHub repository secrets"
-          });
-        }
-      }
-    } catch {
-      // Skip secrets check if we can't access the API
-    }
+async function checkBecariaSecrets() {
+  try {
+    const { detectRepo } = await import("../becaria/repo.js");
+    const repo = await detectRepo();
+    if (!repo) return null;
+    const secretsRes = await runCommand("gh", ["api", `repos/${repo}/actions/secrets`, "--jq", ".secrets[].name"]);
+    if (secretsRes.exitCode !== 0) return null;
+    const names = secretsRes.stdout.split("\n").map((s) => s.trim());
+    const hasAppId = names.includes("BECARIA_APP_ID");
+    const hasKey = names.includes("BECARIA_APP_PRIVATE_KEY");
+    const secretsOk = hasAppId && hasKey;
+    return {
+      name: "becaria:secrets",
+      label: "BecarIA: GitHub secrets",
+      ok: secretsOk,
+      detail: secretsOk
+        ? "BECARIA_APP_ID + BECARIA_APP_PRIVATE_KEY found"
+        : `Missing: ${!hasAppId ? "BECARIA_APP_ID " : ""}${!hasKey ? "BECARIA_APP_PRIVATE_KEY" : ""}`.trim(),
+      fix: secretsOk ? null : "Add BECARIA_APP_ID and BECARIA_APP_PRIVATE_KEY as GitHub repository secrets"
+    };
+  } catch {
+    // Skip secrets check if we can't access the API
+    return null;
   }
+}
 
-  // 9. Review rules / Coder rules
+async function checkBecariaInfra(config) {
+  const checks = [];
+  const projectDir = config.projectDir || process.cwd();
+
+  checks.push(...await checkBecariaWorkflows(projectDir));
+
+  const ghCheck = await checkBinary("gh");
+  checks.push({
+    name: "becaria:gh",
+    label: "BecarIA: gh CLI",
+    ok: ghCheck.ok,
+    detail: ghCheck.ok ? ghCheck.version : "Not found",
+    fix: ghCheck.ok ? null : "Install GitHub CLI: https://cli.github.com/"
+  });
+
+  const secretsCheck = await checkBecariaSecrets();
+  if (secretsCheck) checks.push(secretsCheck);
+
+  return checks;
+}
+
+async function checkRuleFiles(config) {
   const projectDir = config.projectDir || process.cwd();
   const reviewRules = await loadFirstExisting(resolveRoleMdPath("reviewer", projectDir));
   const coderRules = await loadFirstExisting(resolveRoleMdPath("coder", projectDir));
-  checks.push({
-    name: "review-rules",
-    label: "Reviewer rules (.md)",
-    ok: Boolean(reviewRules),
-    detail: reviewRules ? "Found" : "Not found (will use defaults)",
-    fix: null
-  });
-  checks.push({
-    name: "coder-rules",
-    label: "Coder rules (.md)",
-    ok: Boolean(coderRules),
-    detail: coderRules ? "Found" : "Not found (will use defaults)",
-    fix: null
-  });
+  return [
+    {
+      name: "review-rules",
+      label: "Reviewer rules (.md)",
+      ok: Boolean(reviewRules),
+      detail: reviewRules ? "Found" : "Not found (will use defaults)",
+      fix: null
+    },
+    {
+      name: "coder-rules",
+      label: "Coder rules (.md)",
+      ok: Boolean(coderRules),
+      detail: coderRules ? "Found" : "Not found (will use defaults)",
+      fix: null
+    }
+  ];
+}
+
+export async function runChecks({ config }) {
+  const checks = [];
+
+  checks.push(checkKarajanVersion());
+  checks.push(await checkConfigFile());
+  checks.push(await checkGitRepo());
+  checks.push(await checkDocker());
+  checks.push(await checkSonarQube(config));
+  checks.push(...await checkAgentCLIs());
+  checks.push(...await checkCoreBinaries());
+
+  if (config.serena?.enabled) {
+    checks.push(await checkSerena());
+  }
+
+  if (config.becaria?.enabled) {
+    checks.push(...await checkBecariaInfra(config));
+  }
+
+  checks.push(...await checkRuleFiles(config));
 
   return checks;
 }

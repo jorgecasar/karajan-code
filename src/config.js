@@ -223,6 +223,121 @@ export async function writeConfig(configPath, config) {
   await fs.writeFile(configPath, yaml.dump(config, { lineWidth: 120 }), "utf8");
 }
 
+// Declarative mappings for applyRunOverrides to reduce cognitive complexity.
+
+// Role provider flags: [flagName, roleName] — truthy check
+const ROLE_PROVIDER_FLAGS = [
+  ["planner", "planner"], ["coder", "coder"], ["reviewer", "reviewer"],
+  ["refactorer", "refactorer"], ["solomon", "solomon"], ["researcher", "researcher"],
+  ["tester", "tester"], ["security", "security"], ["triage", "triage"],
+  ["discover", "discover"], ["architect", "architect"]
+];
+
+// Role model flags: [flagName, roleName] — truthy check, String coercion
+const ROLE_MODEL_FLAGS = [
+  ["plannerModel", "planner"], ["coderModel", "coder"], ["reviewerModel", "reviewer"],
+  ["refactorerModel", "refactorer"], ["solomonModel", "solomon"], ["discoverModel", "discover"],
+  ["architectModel", "architect"]
+];
+
+// Pipeline enable flags: [flagName, pipelineKey] — !== undefined check, Boolean coercion
+const PIPELINE_ENABLE_FLAGS = [
+  ["enablePlanner", "planner"], ["enableRefactorer", "refactorer"],
+  ["enableSolomon", "solomon"], ["enableResearcher", "researcher"],
+  ["enableTester", "tester"], ["enableSecurity", "security"],
+  ["enableTriage", "triage"], ["enableDiscover", "discover"],
+  ["enableArchitect", "architect"]
+];
+
+// Scalar flags: [flagName, setter] — truthy check
+const SCALAR_FLAGS = [
+  ["mode", (out, v) => { out.review_mode = v; }],
+  ["maxIterations", (out, v) => { out.max_iterations = Number(v); }],
+  ["maxIterationMinutes", (out, v) => { out.session.max_iteration_minutes = Number(v); }],
+  ["maxTotalMinutes", (out, v) => { out.session.max_total_minutes = Number(v); }],
+  ["checkpointInterval", (out, v) => { out.session.checkpoint_interval_minutes = Number(v); }],
+  ["baseBranch", (out, v) => { out.base_branch = v; }],
+  ["coderFallback", (out, v) => { out.coder_options.fallback_coder = v; }],
+  ["reviewerFallback", (out, v) => { out.reviewer_options.fallback_reviewer = v; }],
+  ["taskType", (out, v) => { out.taskType = String(v); }],
+  ["branchPrefix", (out, v) => { out.git.branch_prefix = String(v); }]
+];
+
+// Boolean/undefined-check flags: [flagName, setter] — !== undefined check
+const UNDEF_CHECK_FLAGS = [
+  ["reviewerRetries", (out, v) => { out.reviewer_options.retries = Number(v); }],
+  ["autoCommit", (out, v) => { out.git.auto_commit = Boolean(v); }],
+  ["autoPush", (out, v) => { out.git.auto_push = Boolean(v); }],
+  ["autoPr", (out, v) => { out.git.auto_pr = Boolean(v); }],
+  ["autoRebase", (out, v) => { out.git.auto_rebase = Boolean(v); }],
+  ["enableSerena", (out, v) => { out.serena.enabled = Boolean(v); }]
+];
+
+function applyRoleOverrides(out, flags) {
+  for (const [flag, role] of ROLE_PROVIDER_FLAGS) {
+    if (flags[flag]) out.roles[role].provider = flags[flag];
+  }
+  // coder/reviewer also update top-level aliases
+  if (flags.coder) out.coder = flags.coder;
+  if (flags.reviewer) out.reviewer = flags.reviewer;
+
+  for (const [flag, role] of ROLE_MODEL_FLAGS) {
+    if (flags[flag]) out.roles[role].model = String(flags[flag]);
+  }
+  // reviewerModel also updates reviewer_options
+  if (flags.reviewerModel) out.reviewer_options.model = String(flags.reviewerModel);
+}
+
+function applyPipelineOverrides(out, flags) {
+  for (const [flag, key] of PIPELINE_ENABLE_FLAGS) {
+    if (flags[flag] !== undefined) out.pipeline[key].enabled = Boolean(flags[flag]);
+  }
+  if (flags.enableReviewer !== undefined) {
+    out.pipeline.reviewer = out.pipeline.reviewer || {};
+    out.pipeline.reviewer.enabled = Boolean(flags.enableReviewer);
+  }
+}
+
+function applyScalarAndBooleanOverrides(out, flags) {
+  for (const [flag, setter] of SCALAR_FLAGS) {
+    if (flags[flag]) setter(out, flags[flag]);
+  }
+  for (const [flag, setter] of UNDEF_CHECK_FLAGS) {
+    if (flags[flag] !== undefined) setter(out, flags[flag]);
+  }
+}
+
+function applyMethodologyOverride(out, flags) {
+  if (!flags.methodology) return;
+  const methodology = String(flags.methodology).toLowerCase();
+  out.development.methodology = methodology;
+  out.development.require_test_changes = methodology === "tdd";
+}
+
+function applyBecariaOverride(out, flags) {
+  out.becaria = out.becaria || { enabled: false };
+  if (flags.enableBecaria === undefined) return;
+  out.becaria.enabled = Boolean(flags.enableBecaria);
+  // BecarIA requires git automation (commit + push + PR)
+  if (out.becaria.enabled) {
+    out.git.auto_commit = true;
+    out.git.auto_push = true;
+    out.git.auto_pr = true;
+  }
+}
+
+function applyMiscOverrides(out, flags) {
+  if (flags.noSonar || flags.sonar === false) out.sonarqube.enabled = false;
+
+  out.planning_game = out.planning_game || {};
+  if (flags.pgTask) out.planning_game.enabled = true;
+  if (flags.pgProject) out.planning_game.project_id = flags.pgProject;
+
+  out.model_selection = out.model_selection || { enabled: true, tiers: {}, role_overrides: {} };
+  if (flags.smartModels === true) out.model_selection.enabled = true;
+  if (flags.smartModels === false || flags.noSmartModels === true) out.model_selection.enabled = false;
+}
+
 export function applyRunOverrides(config, flags) {
   const out = mergeDeep(config, {});
   out.coder_options = out.coder_options || {};
@@ -237,85 +352,15 @@ export function applyRunOverrides(config, flags) {
   out.budget = mergeDeep(DEFAULTS.budget, out.budget || {});
   out.roles = mergeDeep(DEFAULTS.roles, out.roles || {});
   out.pipeline = mergeDeep(DEFAULTS.pipeline, out.pipeline || {});
-
-  if (flags.planner) out.roles.planner.provider = flags.planner;
-  if (flags.coder) out.coder = flags.coder;
-  if (flags.coder) out.roles.coder.provider = flags.coder;
-  if (flags.reviewer) out.reviewer = flags.reviewer;
-  if (flags.reviewer) out.roles.reviewer.provider = flags.reviewer;
-  if (flags.refactorer) out.roles.refactorer.provider = flags.refactorer;
-  if (flags.solomon) out.roles.solomon.provider = flags.solomon;
-  if (flags.researcher) out.roles.researcher.provider = flags.researcher;
-  if (flags.tester) out.roles.tester.provider = flags.tester;
-  if (flags.security) out.roles.security.provider = flags.security;
-  if (flags.triage) out.roles.triage.provider = flags.triage;
-  if (flags.discover) out.roles.discover.provider = flags.discover;
-  if (flags.discoverModel) out.roles.discover.model = String(flags.discoverModel);
-  if (flags.enableDiscover !== undefined) out.pipeline.discover.enabled = Boolean(flags.enableDiscover);
-  if (flags.architect) out.roles.architect.provider = flags.architect;
-  if (flags.architectModel) out.roles.architect.model = String(flags.architectModel);
-  if (flags.enableArchitect !== undefined) out.pipeline.architect.enabled = Boolean(flags.enableArchitect);
-  if (flags.plannerModel) out.roles.planner.model = String(flags.plannerModel);
-  if (flags.coderModel) {
-    out.roles.coder.model = String(flags.coderModel);
-  }
-  if (flags.reviewerModel) {
-    out.roles.reviewer.model = String(flags.reviewerModel);
-    out.reviewer_options.model = String(flags.reviewerModel);
-  }
-  if (flags.refactorerModel) out.roles.refactorer.model = String(flags.refactorerModel);
-  if (flags.solomonModel) out.roles.solomon.model = String(flags.solomonModel);
-  if (flags.enablePlanner !== undefined) out.pipeline.planner.enabled = Boolean(flags.enablePlanner);
-  if (flags.enableRefactorer !== undefined) out.pipeline.refactorer.enabled = Boolean(flags.enableRefactorer);
-  if (flags.enableSolomon !== undefined) out.pipeline.solomon.enabled = Boolean(flags.enableSolomon);
-  if (flags.enableResearcher !== undefined) out.pipeline.researcher.enabled = Boolean(flags.enableResearcher);
-  if (flags.enableTester !== undefined) out.pipeline.tester.enabled = Boolean(flags.enableTester);
-  if (flags.enableSecurity !== undefined) out.pipeline.security.enabled = Boolean(flags.enableSecurity);
-  if (flags.enableReviewer !== undefined) {
-    out.pipeline.reviewer = out.pipeline.reviewer || {};
-    out.pipeline.reviewer.enabled = Boolean(flags.enableReviewer);
-  }
-  if (flags.enableTriage !== undefined) out.pipeline.triage.enabled = Boolean(flags.enableTriage);
-  if (flags.mode) out.review_mode = flags.mode;
-  if (flags.maxIterations) out.max_iterations = Number(flags.maxIterations);
-  if (flags.maxIterationMinutes) out.session.max_iteration_minutes = Number(flags.maxIterationMinutes);
-  if (flags.maxTotalMinutes) out.session.max_total_minutes = Number(flags.maxTotalMinutes);
-  if (flags.checkpointInterval) out.session.checkpoint_interval_minutes = Number(flags.checkpointInterval);
-  if (flags.baseBranch) out.base_branch = flags.baseBranch;
-  if (flags.coderFallback) out.coder_options.fallback_coder = flags.coderFallback;
-  if (flags.reviewerFallback) out.reviewer_options.fallback_reviewer = flags.reviewerFallback;
-  if (flags.reviewerRetries !== undefined) out.reviewer_options.retries = Number(flags.reviewerRetries);
-  if (flags.autoCommit !== undefined) out.git.auto_commit = Boolean(flags.autoCommit);
-  if (flags.autoPush !== undefined) out.git.auto_push = Boolean(flags.autoPush);
-  if (flags.autoPr !== undefined) out.git.auto_pr = Boolean(flags.autoPr);
-  if (flags.autoRebase !== undefined) out.git.auto_rebase = Boolean(flags.autoRebase);
-  if (flags.branchPrefix) out.git.branch_prefix = String(flags.branchPrefix);
-  if (flags.methodology) {
-    const methodology = String(flags.methodology).toLowerCase();
-    out.development = out.development || {};
-    out.development.methodology = methodology;
-    out.development.require_test_changes = methodology === "tdd";
-  }
-  if (flags.taskType) out.taskType = String(flags.taskType);
-  if (flags.noSonar || flags.sonar === false) out.sonarqube.enabled = false;
   out.serena = out.serena || { enabled: false };
-  if (flags.enableSerena !== undefined) out.serena.enabled = Boolean(flags.enableSerena);
-  out.becaria = out.becaria || { enabled: false };
-  if (flags.enableBecaria !== undefined) {
-    out.becaria.enabled = Boolean(flags.enableBecaria);
-    // BecarIA requires git automation (commit + push + PR)
-    if (out.becaria.enabled) {
-      out.git.auto_commit = true;
-      out.git.auto_push = true;
-      out.git.auto_pr = true;
-    }
-  }
-  out.planning_game = out.planning_game || {};
-  if (flags.pgTask) out.planning_game.enabled = true;
-  if (flags.pgProject) out.planning_game.project_id = flags.pgProject;
-  out.model_selection = out.model_selection || { enabled: true, tiers: {}, role_overrides: {} };
-  if (flags.smartModels === true) out.model_selection.enabled = true;
-  if (flags.smartModels === false || flags.noSmartModels === true) out.model_selection.enabled = false;
+
+  applyRoleOverrides(out, flags);
+  applyPipelineOverrides(out, flags);
+  applyScalarAndBooleanOverrides(out, flags);
+  applyMethodologyOverride(out, flags);
+  applyBecariaOverride(out, flags);
+  applyMiscOverrides(out, flags);
+
   return out;
 }
 
@@ -342,23 +387,35 @@ export function resolveRole(config, role) {
   return { provider, model };
 }
 
+// Pipeline roles checked when commandName is "run": [pipelineKey, roleName]
+const RUN_PIPELINE_ROLES = [
+  ["reviewer", "reviewer"], ["triage", "triage"], ["planner", "planner"],
+  ["refactorer", "refactorer"], ["researcher", "researcher"],
+  ["tester", "tester"], ["security", "security"]
+];
+
+// Direct command-to-role mapping for non-"run" commands
+const COMMAND_ROLE_MAP = {
+  discover: ["discover"],
+  plan: ["planner"],
+  code: ["coder"],
+  review: ["reviewer"]
+};
+
 function requiredRolesFor(commandName, config) {
-  if (commandName === "run") {
-    const required = ["coder"];
-    if (config?.pipeline?.reviewer?.enabled !== false) required.push("reviewer");
-    if (config?.pipeline?.triage?.enabled) required.push("triage");
-    if (config?.pipeline?.planner?.enabled) required.push("planner");
-    if (config?.pipeline?.refactorer?.enabled) required.push("refactorer");
-    if (config?.pipeline?.researcher?.enabled) required.push("researcher");
-    if (config?.pipeline?.tester?.enabled) required.push("tester");
-    if (config?.pipeline?.security?.enabled) required.push("security");
-    return required;
+  if (commandName !== "run") {
+    return COMMAND_ROLE_MAP[commandName] || [];
   }
-  if (commandName === "discover") return ["discover"];
-  if (commandName === "plan") return ["planner"];
-  if (commandName === "code") return ["coder"];
-  if (commandName === "review") return ["reviewer"];
-  return [];
+  const required = ["coder"];
+  for (const [pipelineKey, roleName] of RUN_PIPELINE_ROLES) {
+    const pipelineEntry = config?.pipeline?.[pipelineKey];
+    // reviewer defaults to enabled (only excluded if explicitly false)
+    const isEnabled = pipelineKey === "reviewer"
+      ? pipelineEntry?.enabled !== false
+      : Boolean(pipelineEntry?.enabled);
+    if (isEnabled) required.push(roleName);
+  }
+  return required;
 }
 
 export function validateConfig(config, commandName = "run") {
