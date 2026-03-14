@@ -164,9 +164,9 @@ async function checkBecariaSecrets() {
     if (!repo) return null;
     const secretsRes = await runCommand("gh", ["api", `repos/${repo}/actions/secrets`, "--jq", ".secrets[].name"]);
     if (secretsRes.exitCode !== 0) return null;
-    const names = secretsRes.stdout.split("\n").map((s) => s.trim());
-    const hasAppId = names.includes("BECARIA_APP_ID");
-    const hasKey = names.includes("BECARIA_APP_PRIVATE_KEY");
+    const names = new Set(secretsRes.stdout.split("\n").map((s) => s.trim()));
+    const hasAppId = names.has("BECARIA_APP_ID");
+    const hasKey = names.has("BECARIA_APP_PRIVATE_KEY");
     const secretsOk = hasAppId && hasKey;
     return {
       name: "becaria:secrets",

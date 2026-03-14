@@ -489,6 +489,16 @@ async function handleReviewerRejection({ review, repeatDetector, config, logger,
   return handleReviewerStalledSolomon({ review, repeatCounts, repeatState, config, logger, emitter, eventBase, session, iteration, task, askQuestion, budgetSummary, repeatDetector });
 }
 
+async function fetchReviewDiff(session, logger) {
+  if (session.becaria_pr_number) {
+    const { getPrDiff } = await import("../becaria/pr-diff.js");
+    const diff = await getPrDiff(session.becaria_pr_number);
+    logger.info(`Reviewer reading PR diff #${session.becaria_pr_number}`);
+    return diff;
+  }
+  return generateDiff({ baseRef: session.session_start_sha });
+}
+
 export async function runReviewerStage({ reviewerRole, config, logger, emitter, eventBase, session, trackBudget, iteration, reviewRules, task, repeatDetector, budgetSummary, askQuestion }) {
   logger.setContext({ iteration, stage: "reviewer" });
   emitProgress(
@@ -499,14 +509,7 @@ export async function runReviewerStage({ reviewerRole, config, logger, emitter, 
     })
   );
 
-  let diff;
-  if (session.becaria_pr_number) {
-    const { getPrDiff } = await import("../becaria/pr-diff.js");
-    diff = await getPrDiff(session.becaria_pr_number);
-    logger.info(`Reviewer reading PR diff #${session.becaria_pr_number}`);
-  } else {
-    diff = await generateDiff({ baseRef: session.session_start_sha });
-  }
+  const diff = await fetchReviewDiff(session, logger);
   const reviewerOnOutput = ({ stream, line }) => {
     emitProgress(emitter, makeEvent("agent:output", { ...eventBase, stage: "reviewer" }, {
       message: line,
@@ -581,17 +584,17 @@ export async function runReviewerStage({ reviewerRole, config, logger, emitter, 
       summary: reviewResult.raw_summary || "",
       confidence: reviewResult.confidence ?? 0
     });
-  } catch (parseErr) {
-    logger.warn(`Reviewer output validation failed: ${parseErr.message}`);
+  } catch (error_) {
+    logger.warn(`Reviewer output validation failed: ${error_.message}`);
     review = {
       approved: false,
       blocking_issues: [{
         id: "PARSE_ERROR",
         severity: "high",
-        description: `Reviewer output could not be parsed: ${parseErr.message}`
+        description: `Reviewer output could not be parsed: ${error_.message}`
       }],
       non_blocking_suggestions: [],
-      summary: `Parse error: ${parseErr.message}`,
+      summary: `Parse error: ${error_.message}`,
       confidence: 0
     };
   }

@@ -370,7 +370,7 @@ async function handlePgTaskReport({ dir, pgTask, list, sessionId, format, trace,
 }
 
 async function handleSingleSessionReport({ dir, entries, sessionId, format, trace, currency }) {
-  const ids = [...entries].sort();
+  const ids = [...entries].sort((a, b) => a.localeCompare(b));
   const selectedSessionId = sessionId || ids.at(-1);
   if (!selectedSessionId) {
     console.log("No reports yet");

@@ -16,8 +16,8 @@ async function tryRemoveOrphan({ sessionDir, dirName, cutoff, removed, errors, l
     await fs.rm(sessionDir, { recursive: true, force: true });
     removed.push(dirName);
     logger?.debug?.(`Orphan session dir removed: ${dirName}`);
-  } catch (rmErr) {
-    errors.push({ session: dirName, error: rmErr.message });
+  } catch (error_) {
+    errors.push({ session: dirName, error: error_.message });
   }
 }
 

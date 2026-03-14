@@ -85,18 +85,7 @@ async function runWizard(config, logger) {
   return config;
 }
 
-export async function initCommand({ logger, flags = {} }) {
-  const karajanHome = getKarajanHome();
-  await ensureDir(karajanHome);
-  logger.info(`Ensured ${karajanHome} exists`);
-
-  const configPath = getConfigPath();
-  const reviewRulesPath = path.resolve(process.cwd(), "review-rules.md");
-  const coderRulesPath = path.resolve(process.cwd(), "coder-rules.md");
-
-  const { config, exists: configExists } = await loadConfig();
-  const interactive = flags.noInteractive !== true && isTTY();
-
+async function handleConfigSetup({ config, configExists, interactive, configPath, logger }) {
   if (configExists && interactive) {
     const wizard = createWizard();
     try {
@@ -119,95 +108,117 @@ export async function initCommand({ logger, flags = {} }) {
     await writeConfig(configPath, config);
     logger.info(`Created ${configPath}`);
   }
+}
 
-  if (!(await exists(reviewRulesPath))) {
-    await fs.writeFile(
-      reviewRulesPath,
-      "# Review Rules\n\n- Focus on security, correctness, and test coverage.\n",
-      "utf8"
-    );
-    logger.info("Created review-rules.md");
+async function ensureReviewRules(reviewRulesPath, logger) {
+  if (await exists(reviewRulesPath)) return;
+  await fs.writeFile(
+    reviewRulesPath,
+    "# Review Rules\n\n- Focus on security, correctness, and test coverage.\n",
+    "utf8"
+  );
+  logger.info("Created review-rules.md");
+}
+
+async function ensureCoderRules(coderRulesPath, logger) {
+  if (await exists(coderRulesPath)) return;
+  const templatePath = path.resolve(import.meta.dirname, "../../templates/coder-rules.md");
+  let content;
+  try {
+    content = await fs.readFile(templatePath, "utf8");
+  } catch {
+    content = [
+      "# Coder Rules",
+      "",
+      "## File modification safety",
+      "",
+      "- NEVER overwrite existing files entirely. Always make targeted, minimal edits.",
+      "- After each edit, verify with `git diff` that ONLY the intended lines changed.",
+      "- Do not modify code unrelated to the task.",
+      ""
+    ].join("\n");
   }
+  await fs.writeFile(coderRulesPath, content, "utf8");
+  logger.info("Created coder-rules.md");
+}
 
-  if (!(await exists(coderRulesPath))) {
-    const templatePath = path.resolve(import.meta.dirname, "../../templates/coder-rules.md");
-    let content;
-    try {
-      content = await fs.readFile(templatePath, "utf8");
-    } catch {
-      content = [
-        "# Coder Rules",
-        "",
-        "## File modification safety",
-        "",
-        "- NEVER overwrite existing files entirely. Always make targeted, minimal edits.",
-        "- After each edit, verify with `git diff` that ONLY the intended lines changed.",
-        "- Do not modify code unrelated to the task.",
-        ""
-      ].join("\n");
-    }
-    await fs.writeFile(coderRulesPath, content, "utf8");
-    logger.info("Created coder-rules.md");
-  }
-
-  if (config.sonarqube?.enabled !== false) {
-    const vmCheck = await checkVmMaxMapCount(os.platform());
-    if (!vmCheck.ok) {
-      logger.warn(`vm.max_map_count check failed: ${vmCheck.reason}`);
-      if (vmCheck.fix) {
-        logger.warn(`Fix: ${vmCheck.fix}`);
-      }
-    }
-
-    const sonar = await sonarUp();
-    if (sonar.exitCode !== 0) {
-      throw new Error(`Failed to start SonarQube: ${sonar.stderr || sonar.stdout}`);
-    }
-
-    logger.info("SonarQube container started");
-
-    logger.info("");
-    logger.info("To configure the SonarQube token:");
-    logger.info("  1. Open http://localhost:9000");
-    logger.info("  2. Log in (default credentials: admin / admin)");
-    logger.info("  3. Go to: My Account > Security > Generate Token");
-    logger.info("  4. Name: karajan-cli, Type: Global Analysis Token");
-    logger.info("  5. Set the token in ~/.karajan/kj.config.yml under sonarqube.token");
-    logger.info('     or export KJ_SONAR_TOKEN="<your-token>"');
-  } else {
+async function setupSonarQube(config, logger) {
+  if (config.sonarqube?.enabled === false) {
     logger.info("SonarQube disabled — skipping container setup.");
+    return;
+  }
+  const vmCheck = await checkVmMaxMapCount(os.platform());
+  if (!vmCheck.ok) {
+    logger.warn(`vm.max_map_count check failed: ${vmCheck.reason}`);
+    if (vmCheck.fix) {
+      logger.warn(`Fix: ${vmCheck.fix}`);
+    }
   }
 
-  // --- BecarIA Gateway scaffolding ---
-  if (config.becaria?.enabled || flags.scaffoldBecaria) {
-    const projectDir = process.cwd();
-    const workflowDir = path.join(projectDir, ".github", "workflows");
-    await ensureDir(workflowDir);
+  const sonar = await sonarUp();
+  if (sonar.exitCode !== 0) {
+    throw new Error(`Failed to start SonarQube: ${sonar.stderr || sonar.stdout}`);
+  }
 
-    const templatesDir = path.resolve(import.meta.dirname, "../../templates/workflows");
-    const workflows = ["becaria-gateway.yml", "automerge.yml", "houston-override.yml"];
+  logger.info("SonarQube container started");
+  logger.info("");
+  logger.info("To configure the SonarQube token:");
+  logger.info("  1. Open http://localhost:9000");
+  logger.info("  2. Log in (default credentials: admin / admin)");
+  logger.info("  3. Go to: My Account > Security > Generate Token");
+  logger.info("  4. Name: karajan-cli, Type: Global Analysis Token");
+  logger.info("  5. Set the token in ~/.karajan/kj.config.yml under sonarqube.token");
+  logger.info('     or export KJ_SONAR_TOKEN="<your-token>"');
+}
 
-    for (const wf of workflows) {
-      const destPath = path.join(workflowDir, wf);
-      if (await exists(destPath)) {
-        logger.info(`${wf} already exists — skipping`);
-      } else {
-        const srcPath = path.join(templatesDir, wf);
-        try {
-          const content = await fs.readFile(srcPath, "utf8");
-          await fs.writeFile(destPath, content, "utf8");
-          logger.info(`Created ${path.relative(projectDir, destPath)}`);
-        } catch (err) {
-          logger.warn(`Could not scaffold ${wf}: ${err.message}`);
-        }
+async function scaffoldBecariaGateway(config, flags, logger) {
+  if (!config.becaria?.enabled && !flags.scaffoldBecaria) return;
+  const projectDir = process.cwd();
+  const workflowDir = path.join(projectDir, ".github", "workflows");
+  await ensureDir(workflowDir);
+
+  const templatesDir = path.resolve(import.meta.dirname, "../../templates/workflows");
+  const workflows = ["becaria-gateway.yml", "automerge.yml", "houston-override.yml"];
+
+  for (const wf of workflows) {
+    const destPath = path.join(workflowDir, wf);
+    if (await exists(destPath)) {
+      logger.info(`${wf} already exists — skipping`);
+    } else {
+      const srcPath = path.join(templatesDir, wf);
+      try {
+        const content = await fs.readFile(srcPath, "utf8");
+        await fs.writeFile(destPath, content, "utf8");
+        logger.info(`Created ${path.relative(projectDir, destPath)}`);
+      } catch (err) {
+        logger.warn(`Could not scaffold ${wf}: ${err.message}`);
       }
     }
-
-    logger.info("");
-    logger.info("BecarIA Gateway scaffolded. Next steps:");
-    logger.info("  1. Create a GitHub App named 'becaria-reviewer' with pull_request write permissions");
-    logger.info("  2. Install the App on your repository");
-    logger.info("  3. Add secrets: BECARIA_APP_ID and BECARIA_APP_PRIVATE_KEY");
-    logger.info("  4. Push the workflow files and enable 'kj run --enable-becaria'");
   }
+
+  logger.info("");
+  logger.info("BecarIA Gateway scaffolded. Next steps:");
+  logger.info("  1. Create a GitHub App named 'becaria-reviewer' with pull_request write permissions");
+  logger.info("  2. Install the App on your repository");
+  logger.info("  3. Add secrets: BECARIA_APP_ID and BECARIA_APP_PRIVATE_KEY");
+  logger.info("  4. Push the workflow files and enable 'kj run --enable-becaria'");
+}
+
+export async function initCommand({ logger, flags = {} }) {
+  const karajanHome = getKarajanHome();
+  await ensureDir(karajanHome);
+  logger.info(`Ensured ${karajanHome} exists`);
+
+  const configPath = getConfigPath();
+  const reviewRulesPath = path.resolve(process.cwd(), "review-rules.md");
+  const coderRulesPath = path.resolve(process.cwd(), "coder-rules.md");
+
+  const { config, exists: configExists } = await loadConfig();
+  const interactive = flags.noInteractive !== true && isTTY();
+
+  await handleConfigSetup({ config, configExists, interactive, configPath, logger });
+  await ensureReviewRules(reviewRulesPath, logger);
+  await ensureCoderRules(coderRulesPath, logger);
+  await setupSonarQube(config, logger);
+  await scaffoldBecariaGateway(config, flags, logger);
 }

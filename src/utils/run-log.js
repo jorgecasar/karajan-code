@@ -66,10 +66,10 @@ export function createRunLog(projectDir) {
 
   function write(line) {
     try {
-      if (fd !== null) {
-        fs.writeSync(fd, line + "\n");
-      } else {
+      if (fd === null) {
         fs.appendFileSync(logPath, line + "\n");
+      } else {
+        fs.writeSync(fd, line + "\n");
       }
     } catch { /* best-effort */ }
   }

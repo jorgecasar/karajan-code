@@ -10,28 +10,36 @@ function resolveProvider(config) {
   );
 }
 
-function buildSummary(parsed, mode) {
-  const gapCount = parsed.gaps?.length || 0;
-  if (gapCount === 0 && mode !== "wendel" && mode !== "jtbd") return "Discovery complete: task is ready";
+function pluralize(count, singular, plural) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function collectModeParts(parsed, mode, gapCount) {
   const parts = [];
-  if (gapCount > 0) parts.push(`${gapCount} gap${gapCount === 1 ? "" : "s"} found`);
+  if (gapCount > 0) parts.push(`${pluralize(gapCount, "gap", "gaps")} found`);
+
   if (mode === "momtest") {
     const qCount = parsed.momTestQuestions?.length || 0;
-    if (qCount > 0) parts.push(`${qCount} Mom Test question${qCount === 1 ? "" : "s"}`);
+    if (qCount > 0) parts.push(`${pluralize(qCount, "Mom Test question", "Mom Test questions")}`);
   }
   if (mode === "wendel") {
     const failCount = (parsed.wendelChecklist || []).filter(c => c.status === "fail").length;
-    if (failCount > 0) parts.push(`${failCount} Wendel condition${failCount === 1 ? "" : "s"} failed`);
-    else if (gapCount === 0) return "Discovery complete: task is ready";
+    if (failCount > 0) parts.push(`${pluralize(failCount, "Wendel condition", "Wendel conditions")} failed`);
   }
   if (mode === "classify" && parsed.classification) {
     parts.push(`type: ${parsed.classification.type}, risk: ${parsed.classification.adoptionRisk}`);
   }
   if (mode === "jtbd") {
     const jCount = parsed.jtbds?.length || 0;
-    if (jCount > 0) parts.push(`${jCount} JTBD${jCount === 1 ? "" : "s"} generated`);
-    else if (gapCount === 0) return "Discovery complete: task is ready";
+    if (jCount > 0) parts.push(`${pluralize(jCount, "JTBD", "JTBDs")} generated`);
   }
+  return parts;
+}
+
+function buildSummary(parsed, mode) {
+  const gapCount = parsed.gaps?.length || 0;
+  const parts = collectModeParts(parsed, mode, gapCount);
+  if (parts.length === 0) return "Discovery complete: task is ready";
   return `Discovery complete: ${parts.join(", ")} (verdict: ${parsed.verdict})`;
 }
 

@@ -37,10 +37,9 @@ function buildPrompt({ task, diff, reviewRules, reviewMode, instructions }) {
     `You are a code reviewer in ${reviewMode || "standard"} mode.`,
     "Return only one valid JSON object and nothing else.",
     'JSON schema:',
-    '{"approved":boolean,"blocking_issues":[{"id":string,"severity":"critical|high|medium|low","file":string,"line":number,"description":string,"suggested_fix":string}],"non_blocking_suggestions":[string],"summary":string,"confidence":number}'
+    '{"approved":boolean,"blocking_issues":[{"id":string,"severity":"critical|high|medium|low","file":string,"line":number,"description":string,"suggested_fix":string}],"non_blocking_suggestions":[string],"summary":string,"confidence":number}',
+    `Task context:\n${task}`
   );
-
-  sections.push(`Task context:\n${task}`);
 
   if (reviewRules) {
     sections.push(`Review rules:\n${reviewRules}`);

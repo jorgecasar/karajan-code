@@ -192,6 +192,63 @@ export async function runResearcherStage({ config, logger, emitter, eventBase, s
   return { researchContext, stageResult };
 }
 
+async function handleArchitectClarification({ architectOutput, askQuestion, config, logger, emitter, eventBase, session, architectOnOutput, architectProvider, coderRole, researchContext, discoverResult, triageLevel, trackBudget }) {
+  if (!architectOutput.ok
+    || architectOutput.result?.verdict !== "needs_clarification"
+    || !architectOutput.result?.questions?.length) {
+    return architectOutput;
+  }
+
+  const questions = architectOutput.result.questions;
+  if (!askQuestion) {
+    logger.warn("Architect returned needs_clarification but no interactive input available — continuing with best-effort decisions");
+    return architectOutput;
+  }
+
+  const formatted = "The architect needs clarification before proceeding:\n\n"
+    + questions.map((q, i) => `${i + 1}. ${q}`).join("\n")
+    + "\n\nPlease provide your answers:";
+
+  emitProgress(
+    emitter,
+    makeEvent("architect:clarification", { ...eventBase, stage: "architect" }, {
+      message: "Architect needs clarification — pausing for human input",
+      detail: { questions }
+    })
+  );
+
+  const answer = await askQuestion(formatted, { iteration: 0, stage: "architect" });
+  if (!answer) return architectOutput;
+
+  const architect2 = new ArchitectRole({ config, logger, emitter, createAgentFn: createAgent });
+  await architect2.init({ task: session.task, sessionId: session.id, iteration: 0 });
+  const rerunStart = Date.now();
+  const rerunStall = createStallDetector({
+    onOutput: architectOnOutput, emitter, eventBase, stage: "architect", provider: architectProvider
+  });
+  let result;
+  try {
+    result = await architect2.execute({
+      task: session.task,
+      onOutput: rerunStall.onOutput,
+      researchContext,
+      discoverResult,
+      triageLevel,
+      humanAnswers: answer
+    });
+  } finally {
+    rerunStall.stop();
+  }
+  trackBudget({
+    role: "architect",
+    provider: architectProvider,
+    model: config?.roles?.architect?.model || coderRole.model,
+    result,
+    duration_ms: Date.now() - rerunStart
+  });
+  return result;
+}
+
 export async function runArchitectStage({ config, logger, emitter, eventBase, session, coderRole, trackBudget, researchContext = null, discoverResult = null, triageLevel = null, askQuestion = null }) {
   logger.setContext({ iteration: 0, stage: "architect" });
   emitProgress(
@@ -244,58 +301,10 @@ export async function runArchitectStage({ config, logger, emitter, eventBase, se
   });
 
   // --- Interactive clarification loop ---
-  if (architectOutput.ok
-    && architectOutput.result?.verdict === "needs_clarification"
-    && architectOutput.result?.questions?.length > 0) {
-
-    const questions = architectOutput.result.questions;
-    if (askQuestion) {
-      const formatted = "The architect needs clarification before proceeding:\n\n"
-        + questions.map((q, i) => `${i + 1}. ${q}`).join("\n")
-        + "\n\nPlease provide your answers:";
-
-      emitProgress(
-        emitter,
-        makeEvent("architect:clarification", { ...eventBase, stage: "architect" }, {
-          message: "Architect needs clarification — pausing for human input",
-          detail: { questions }
-        })
-      );
-
-      const answer = await askQuestion(formatted, { iteration: 0, stage: "architect" });
-
-      if (answer) {
-        // Re-run architect with human answers
-        const architect2 = new ArchitectRole({ config, logger, emitter, createAgentFn: createAgent });
-        await architect2.init({ task: session.task, sessionId: session.id, iteration: 0 });
-        const rerunStart = Date.now();
-        const rerunStall = createStallDetector({
-          onOutput: architectOnOutput, emitter, eventBase, stage: "architect", provider: architectProvider
-        });
-        try {
-          architectOutput = await architect2.execute({
-            task: session.task,
-            onOutput: rerunStall.onOutput,
-            researchContext,
-            discoverResult,
-            triageLevel,
-            humanAnswers: answer
-          });
-        } finally {
-          rerunStall.stop();
-        }
-        trackBudget({
-          role: "architect",
-          provider: architectProvider,
-          model: config?.roles?.architect?.model || coderRole.model,
-          result: architectOutput,
-          duration_ms: Date.now() - rerunStart
-        });
-      }
-    } else {
-      logger.warn("Architect returned needs_clarification but no interactive input available — continuing with best-effort decisions");
-    }
-  }
+  architectOutput = await handleArchitectClarification({
+    architectOutput, askQuestion, config, logger, emitter, eventBase, session,
+    architectOnOutput, architectProvider, coderRole, researchContext, discoverResult, triageLevel, trackBudget
+  });
 
   const stageResult = {
     ok: architectOutput.ok,

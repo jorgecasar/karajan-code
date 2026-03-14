@@ -21,7 +21,7 @@ export function parseCooldown(message) {
   );
   if (isoMatch) {
     const target = new Date(isoMatch[1]);
-    if (!isNaN(target.getTime())) {
+    if (!Number.isNaN(target.getTime())) {
       const ms = Math.max(0, target.getTime() - Date.now());
       return { cooldownUntil: target.toISOString(), cooldownMs: ms };
     }
@@ -33,7 +33,7 @@ export function parseCooldown(message) {
   );
   if (resetMatch) {
     const target = new Date(`${resetMatch[1]}T${resetMatch[2]}:00Z`);
-    if (!isNaN(target.getTime())) {
+    if (!Number.isNaN(target.getTime())) {
       const ms = Math.max(0, target.getTime() - Date.now());
       return { cooldownUntil: target.toISOString(), cooldownMs: ms };
     }
