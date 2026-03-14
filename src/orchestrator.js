@@ -23,6 +23,9 @@ import {
 } from "./git/automation.js";
 import { resolveRoleMdPath, loadFirstExisting } from "./roles/base-role.js";
 import { applyPolicies } from "./guards/policy-resolver.js";
+import { scanDiff } from "./guards/output-guard.js";
+import { scanPerfDiff } from "./guards/perf-guard.js";
+import { classifyIntent } from "./guards/intent-guard.js";
 import { resolveReviewProfile } from "./review/profiles.js";
 import { CoderRole } from "./roles/coder-role.js";
 import { invokeSolomon } from "./orchestrator/solomon-escalation.js";
@@ -272,7 +275,7 @@ function applyFlagOverrides(pipelineFlags, flags) {
 
 function resolvePipelinePolicies({ flags, config, stageResults, emitter, eventBase, session, pipelineFlags }) {
   const resolvedPolicies = applyPolicies({
-    taskType: flags.taskType || config.taskType || stageResults.triage?.taskType || null,
+    taskType: flags.taskType || config.taskType || stageResults.triage?.taskType || stageResults.intent?.taskType || null,
     policies: config.policies,
   });
   session.resolved_policies = resolvedPolicies;
@@ -764,6 +767,18 @@ async function handleReviewerRetryAndSolomon({ config, session, emitter, eventBa
 
 
 async function runPreLoopStages({ config, logger, emitter, eventBase, session, flags, pipelineFlags, coderRole, trackBudget, task, askQuestion, pgTaskId, pgProject, stageResults }) {
+  // --- Intent classifier (deterministic pre-triage, opt-in) ---
+  if (config.guards?.intent?.enabled) {
+    const intentResult = classifyIntent(task, config);
+    stageResults.intent = intentResult;
+    if (intentResult.classified) {
+      emitProgress(emitter, makeEvent("intent:classified", { ...eventBase, stage: "intent" }, {
+        message: `Intent classified: ${intentResult.taskType} (${intentResult.level}) — ${intentResult.message}`,
+        detail: intentResult
+      }));
+    }
+  }
+
   // --- Discover (pre-triage, opt-in) ---
   if (flags.enableDiscover !== undefined) pipelineFlags.discoverEnabled = Boolean(flags.enableDiscover);
   if (pipelineFlags.discoverEnabled) {
@@ -805,6 +820,72 @@ async function runCoderAndRefactorerStages({ coderRoleInstance, coderRole, refac
       return refStandby.action === "return"
         ? { action: "return", result: refStandby.result }
         : { action: "retry" };
+    }
+  }
+
+  return { action: "ok" };
+}
+
+async function runGuardStages({ config, logger, emitter, eventBase, session, iteration }) {
+  const outputEnabled = config.guards?.output?.enabled !== false;
+  const perfEnabled = config.guards?.perf?.enabled !== false;
+
+  if (!outputEnabled && !perfEnabled) return { action: "ok" };
+
+  const baseBranch = config.base_branch || "main";
+  let diff;
+  try {
+    const { generateDiff: genDiff, computeBaseRef: compBase } = await import("./review/diff-generator.js");
+    const baseRef = await compBase({ baseBranch });
+    diff = await genDiff({ baseRef });
+  } catch {
+    logger.warn("Guards: could not generate diff, skipping");
+    return { action: "ok" };
+  }
+
+  if (!diff) return { action: "ok" };
+
+  if (outputEnabled) {
+    const outputResult = scanDiff(diff, config);
+    if (outputResult.violations.length > 0) {
+      const critical = outputResult.violations.filter(v => v.severity === "critical");
+      const warnings = outputResult.violations.filter(v => v.severity === "warning");
+      emitProgress(emitter, makeEvent("guard:output", { ...eventBase, stage: "guard" }, {
+        message: `Output guard: ${critical.length} critical, ${warnings.length} warnings`,
+        detail: { violations: outputResult.violations }
+      }));
+      logger.info(`Output guard: ${outputResult.violations.length} violation(s) found`);
+      for (const v of outputResult.violations) {
+        logger.info(`  [${v.severity}] ${v.file}:${v.line} — ${v.message}`);
+      }
+      await addCheckpoint(session, { stage: "guard-output", iteration, pass: outputResult.pass, violations: outputResult.violations.length });
+
+      if (!outputResult.pass && config.guards.output.on_violation === "block") {
+        await markSessionStatus(session, "failed");
+        emitProgress(emitter, makeEvent("guard:blocked", { ...eventBase, stage: "guard" }, {
+          message: "Output guard blocked: critical violations detected",
+          detail: { violations: critical }
+        }));
+        return {
+          action: "return",
+          result: { approved: false, sessionId: session.id, reason: "guard_blocked", violations: critical }
+        };
+      }
+    }
+  }
+
+  if (perfEnabled) {
+    const perfResult = scanPerfDiff(diff, config);
+    if (!perfResult.skipped && perfResult.violations.length > 0) {
+      emitProgress(emitter, makeEvent("guard:perf", { ...eventBase, stage: "guard" }, {
+        message: `Perf guard: ${perfResult.violations.length} issue(s)`,
+        detail: { violations: perfResult.violations }
+      }));
+      logger.info(`Perf guard: ${perfResult.violations.length} issue(s) found`);
+      for (const v of perfResult.violations) {
+        logger.info(`  [${v.severity}] ${v.file}:${v.line} — ${v.message}`);
+      }
+      await addCheckpoint(session, { stage: "guard-perf", iteration, pass: perfResult.pass, violations: perfResult.violations.length });
     }
   }
 
@@ -946,6 +1027,9 @@ async function runSingleIteration(ctx) {
 
   const crResult = await runCoderAndRefactorerStages({ coderRoleInstance, coderRole, refactorerRole, pipelineFlags, config, logger, emitter, eventBase, session, plannedTask, trackBudget, i });
   if (crResult.action === "return" || crResult.action === "retry") return crResult;
+
+  const guardResult = await runGuardStages({ config, logger, emitter, eventBase, session, iteration: i });
+  if (guardResult.action === "return") return guardResult;
 
   const qgResult = await runQualityGateStages({ config, logger, emitter, eventBase, session, trackBudget, i, askQuestion, repeatDetector, budgetSummary, sonarState, task, stageResults });
   if (qgResult.action === "return" || qgResult.action === "continue") return qgResult;
