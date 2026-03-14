@@ -26,10 +26,9 @@ function buildPrompt({ task, diff, sonarIssues, instructions }) {
     "You are a test quality gate. You do NOT write tests — you evaluate them.",
     "Run the test suite, check coverage, identify missing scenarios, and evaluate assertion quality.",
     "Return a single valid JSON object with your findings and nothing else.",
-    'JSON schema: {"tests_pass":boolean,"coverage":{"overall":number,"services":number,"utilities":number},"missing_scenarios":[string],"quality_issues":[string],"verdict":"pass"|"fail"}'
+    'JSON schema: {"tests_pass":boolean,"coverage":{"overall":number,"services":number,"utilities":number},"missing_scenarios":[string],"quality_issues":[string],"verdict":"pass"|"fail"}',
+    `## Task\n${task}`
   );
-
-  sections.push(`## Task\n${task}`);
 
   if (diff) {
     sections.push(`## Git diff\n${diff}`);

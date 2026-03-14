@@ -21,10 +21,7 @@ export function buildDiscoverPrompt({ task, instructions, mode = "gaps", context
 
   sections.push(
     "You are a task discovery agent for Karajan Code, a multi-agent coding orchestrator.",
-    "Analyze the following task and identify gaps, ambiguities, missing information, and implicit assumptions."
-  );
-
-  sections.push(
+    "Analyze the following task and identify gaps, ambiguities, missing information, and implicit assumptions.",
     "## Gap Detection Guidelines",
     [
       "- Look for missing acceptance criteria or requirements",

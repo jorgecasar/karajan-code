@@ -15,10 +15,7 @@ export function buildArchitectPrompt({ task, instructions, researchContext = nul
 
   sections.push(
     "You are the architect in a multi-role AI pipeline.",
-    "Analyze the task and produce a concrete architecture design including layers, patterns, data model, API contracts, dependencies, and tradeoffs."
-  );
-
-  sections.push(
+    "Analyze the task and produce a concrete architecture design including layers, patterns, data model, API contracts, dependencies, and tradeoffs.",
     "## Architecture Guidelines",
     [
       "- Identify the architecture type (layered, microservices, event-driven, etc.)",
@@ -29,10 +26,7 @@ export function buildArchitectPrompt({ task, instructions, researchContext = nul
       "- List external and internal dependencies",
       "- Document tradeoffs and their rationale",
       "- If critical decisions cannot be made without more information, list clarifying questions"
-    ].join("\n")
-  );
-
-  sections.push(
+    ].join("\n"),
     "Return a single valid JSON object and nothing else.",
     'JSON schema: {"verdict":"ready|needs_clarification","architecture":{"type":string,"layers":[string],"patterns":[string],"dataModel":{"entities":[string]},"apiContracts":[string],"dependencies":[string],"tradeoffs":[string]},"questions":[string],"summary":string}'
   );
