@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.20.0] - 2026-03-14
+
+### Added
+- **Standalone CLI commands**: `kj discover`, `kj triage`, `kj researcher`, `kj architect` — clean subcommands for running pre-loop roles independently, instead of requiring `kj run --enable-*` flags
+- Each command supports role-specific flags: `--mode` for discover, `--context` for architect, `--json` for structured output
+
 ## [1.19.0] - 2026-03-14
 
 ### Added
