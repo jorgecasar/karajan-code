@@ -35,6 +35,43 @@ function buildSummary(parsed, mode) {
   return `Discovery complete: ${parts.join(", ")} (verdict: ${parsed.verdict})`;
 }
 
+function resolveInput(input, context) {
+  if (typeof input === "string") {
+    return { task: input, onOutput: null, mode: "gaps", context: null };
+  }
+  return {
+    task: input?.task || context?.task || "",
+    onOutput: input?.onOutput || null,
+    mode: input?.mode || "gaps",
+    context: input?.context || null
+  };
+}
+
+function buildUnstructuredResult(output, mode, provider, usage) {
+  return {
+    ok: true,
+    result: { verdict: "ready", gaps: [], mode, raw: output, provider },
+    summary: "Discovery complete (unstructured output)",
+    usage
+  };
+}
+
+const MODE_FIELDS = {
+  momtest: { key: "momTestQuestions", fallback: [] },
+  wendel: { key: "wendelChecklist", fallback: [] },
+  classify: { key: "classification", fallback: null },
+  jtbd: { key: "jtbds", fallback: [] }
+};
+
+function buildResultFromParsed(parsed, mode, provider) {
+  const resultObj = { verdict: parsed.verdict, gaps: parsed.gaps, mode, provider };
+  const fieldDef = MODE_FIELDS[mode];
+  if (fieldDef) {
+    resultObj[fieldDef.key] = parsed[fieldDef.key] ?? fieldDef.fallback;
+  }
+  return resultObj;
+}
+
 export class DiscoverRole extends BaseRole {
   constructor({ config, logger, emitter = null, createAgentFn = null }) {
     super({ name: "discover", config, logger, emitter });
@@ -42,13 +79,7 @@ export class DiscoverRole extends BaseRole {
   }
 
   async execute(input) {
-    const task = typeof input === "string"
-      ? input
-      : input?.task || this.context?.task || "";
-    const onOutput = typeof input === "string" ? null : input?.onOutput || null;
-    const mode = (typeof input === "object" ? input?.mode : null) || "gaps";
-    const context = typeof input === "object" ? input?.context || null : null;
-
+    const { task, onOutput, mode, context } = resolveInput(input, this.context);
     const provider = resolveProvider(this.config);
     const agent = this._createAgent(provider, this.config, this.logger);
 
@@ -60,11 +91,7 @@ export class DiscoverRole extends BaseRole {
     if (!result.ok) {
       return {
         ok: false,
-        result: {
-          error: result.error || result.output || "Discovery failed",
-          provider,
-          mode
-        },
+        result: { error: result.error || result.output || "Discovery failed", provider, mode },
         summary: `Discovery failed: ${result.error || "unknown error"}`,
         usage: result.usage
       };
@@ -72,59 +99,16 @@ export class DiscoverRole extends BaseRole {
 
     try {
       const parsed = parseDiscoverOutput(result.output);
-      if (!parsed) {
-        return {
-          ok: true,
-          result: {
-            verdict: "ready",
-            gaps: [],
-            mode,
-            raw: result.output,
-            provider
-          },
-          summary: "Discovery complete (unstructured output)",
-          usage: result.usage
-        };
-      }
-
-      const resultObj = {
-        verdict: parsed.verdict,
-        gaps: parsed.gaps,
-        mode,
-        provider
-      };
-      if (mode === "momtest") {
-        resultObj.momTestQuestions = parsed.momTestQuestions || [];
-      }
-      if (mode === "wendel") {
-        resultObj.wendelChecklist = parsed.wendelChecklist || [];
-      }
-      if (mode === "classify") {
-        resultObj.classification = parsed.classification || null;
-      }
-      if (mode === "jtbd") {
-        resultObj.jtbds = parsed.jtbds || [];
-      }
+      if (!parsed) return buildUnstructuredResult(result.output, mode, provider, result.usage);
 
       return {
         ok: true,
-        result: resultObj,
+        result: buildResultFromParsed(parsed, mode, provider),
         summary: buildSummary(parsed, mode),
         usage: result.usage
       };
     } catch {
-      return {
-        ok: true,
-        result: {
-          verdict: "ready",
-          gaps: [],
-          mode,
-          raw: result.output,
-          provider
-        },
-        summary: "Discovery complete (unstructured output)",
-        usage: result.usage
-      };
+      return buildUnstructuredResult(result.output, mode, provider, result.usage);
     }
   }
 }

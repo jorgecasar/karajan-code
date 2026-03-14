@@ -9,6 +9,38 @@ import { parsePlannerOutput } from "../prompts/planner.js";
 import { selectModelsForRoles } from "../utils/model-selector.js";
 import { createStallDetector } from "../utils/stall-detector.js";
 
+const ROLE_NAMES = ["planner", "researcher", "refactorer", "reviewer", "tester", "security"];
+
+function buildRoleOverrides(recommendedRoles, pipelineConfig) {
+  const overrides = {};
+  for (const role of ROLE_NAMES) {
+    overrides[`${role}Enabled`] = recommendedRoles.has(role) || Boolean(pipelineConfig[role]?.enabled);
+  }
+  return overrides;
+}
+
+function applyModelSelection(triageOutput, config, emitter, eventBase) {
+  if (!triageOutput.ok || !config?.model_selection?.enabled) return null;
+  const level = triageOutput.result?.level;
+  if (!level) return null;
+
+  const { modelOverrides, reasoning } = selectModelsForRoles({ level, config });
+  for (const [role, model] of Object.entries(modelOverrides)) {
+    if (config.roles?.[role] && !config.roles[role].model) {
+      config.roles[role].model = model;
+    }
+  }
+  const modelSelection = { modelOverrides, reasoning };
+  emitProgress(
+    emitter,
+    makeEvent("model-selection:applied", { ...eventBase, stage: "triage" }, {
+      message: "Smart model selection applied",
+      detail: modelSelection
+    })
+  );
+  return modelSelection;
+}
+
 export async function runTriageStage({ config, logger, emitter, eventBase, session, coderRole, trackBudget }) {
   logger.setContext({ iteration: 0, stage: "triage" });
   emitProgress(
@@ -55,17 +87,9 @@ export async function runTriageStage({ config, logger, emitter, eventBase, sessi
   });
 
   const recommendedRoles = new Set(triageOutput.result?.roles || []);
-  const roleOverrides = {};
-  if (triageOutput.ok) {
-    // Triage can activate roles, but cannot deactivate roles explicitly enabled in pipeline config
-    const p = config.pipeline || {};
-    roleOverrides.plannerEnabled = recommendedRoles.has("planner") || Boolean(p.planner?.enabled);
-    roleOverrides.researcherEnabled = recommendedRoles.has("researcher") || Boolean(p.researcher?.enabled);
-    roleOverrides.refactorerEnabled = recommendedRoles.has("refactorer") || Boolean(p.refactorer?.enabled);
-    roleOverrides.reviewerEnabled = recommendedRoles.has("reviewer") || Boolean(p.reviewer?.enabled);
-    roleOverrides.testerEnabled = recommendedRoles.has("tester") || Boolean(p.tester?.enabled);
-    roleOverrides.securityEnabled = recommendedRoles.has("security") || Boolean(p.security?.enabled);
-  }
+  const roleOverrides = triageOutput.ok
+    ? buildRoleOverrides(recommendedRoles, config.pipeline || {})
+    : {};
 
   const shouldDecompose = triageOutput.result?.shouldDecompose || false;
   const subtasks = triageOutput.result?.subtasks || [];
@@ -80,27 +104,7 @@ export async function runTriageStage({ config, logger, emitter, eventBase, sessi
     subtasks
   };
 
-  let modelSelection = null;
-  if (triageOutput.ok && config?.model_selection?.enabled) {
-    const level = triageOutput.result?.level;
-    if (level) {
-      const { modelOverrides, reasoning } = selectModelsForRoles({ level, config });
-      for (const [role, model] of Object.entries(modelOverrides)) {
-        if (config.roles?.[role] && !config.roles[role].model) {
-          config.roles[role].model = model;
-        }
-      }
-      modelSelection = { modelOverrides, reasoning };
-      emitProgress(
-        emitter,
-        makeEvent("model-selection:applied", { ...eventBase, stage: "triage" }, {
-          message: "Smart model selection applied",
-          detail: modelSelection
-        })
-      );
-    }
-  }
-
+  const modelSelection = applyModelSelection(triageOutput, config, emitter, eventBase);
   if (modelSelection) {
     stageResult.modelSelection = modelSelection;
   }

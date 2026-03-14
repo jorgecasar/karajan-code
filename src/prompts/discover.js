@@ -143,6 +143,68 @@ export function buildDiscoverPrompt({ task, instructions, mode = "gaps", context
   return sections.join("\n\n");
 }
 
+function parseClassification(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const rawType = String(raw.type || "").toUpperCase();
+  const type = rawType === "NOT_APPLICABLE" ? "not_applicable"
+    : VALID_CLASSIFY_TYPES.includes(rawType) ? rawType : "not_applicable";
+  const rawRisk = String(raw.adoptionRisk || "").toLowerCase();
+  return {
+    type,
+    adoptionRisk: VALID_ADOPTION_RISKS.includes(rawRisk) ? rawRisk : "medium",
+    frictionEstimate: raw.frictionEstimate || ""
+  };
+}
+
+function parseGaps(rawGaps) {
+  return (Array.isArray(rawGaps) ? rawGaps : [])
+    .filter((g) => g && g.id && g.description && g.suggestedQuestion)
+    .map((g) => ({
+      id: g.id,
+      description: g.description,
+      severity: VALID_SEVERITIES.includes(String(g.severity).toLowerCase())
+        ? String(g.severity).toLowerCase()
+        : "major",
+      suggestedQuestion: g.suggestedQuestion
+    }));
+}
+
+function parseMomTestQuestions(rawQuestions) {
+  return (Array.isArray(rawQuestions) ? rawQuestions : [])
+    .filter((q) => q && q.gapId && q.question && q.targetRole && q.rationale)
+    .map((q) => ({
+      gapId: q.gapId,
+      question: q.question,
+      targetRole: q.targetRole,
+      rationale: q.rationale
+    }));
+}
+
+function parseWendelChecklist(rawChecklist) {
+  return (Array.isArray(rawChecklist) ? rawChecklist : [])
+    .filter((c) => c && c.condition && c.justification && c.status)
+    .map((c) => ({
+      condition: c.condition,
+      status: VALID_WENDEL_STATUSES.includes(String(c.status).toLowerCase())
+        ? String(c.status).toLowerCase()
+        : "unknown",
+      justification: c.justification
+    }));
+}
+
+function parseJtbds(rawJtbds) {
+  return (Array.isArray(rawJtbds) ? rawJtbds : [])
+    .filter((j) => j && j.id && j.functional && j.emotionalPersonal && j.emotionalSocial && j.behaviorChange && j.evidence)
+    .map((j) => ({
+      id: j.id,
+      functional: j.functional,
+      emotionalPersonal: j.emotionalPersonal,
+      emotionalSocial: j.emotionalSocial,
+      behaviorChange: j.behaviorChange,
+      evidence: j.evidence
+    }));
+}
+
 export function parseDiscoverOutput(raw) {
   const text = raw?.trim() || "";
   const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -155,73 +217,13 @@ export function parseDiscoverOutput(raw) {
     return null;
   }
 
-  const verdict = VALID_VERDICTS.includes(parsed.verdict) ? parsed.verdict : "ready";
-
-  const rawGaps = Array.isArray(parsed.gaps) ? parsed.gaps : [];
-  const gaps = rawGaps
-    .filter((g) => g && g.id && g.description && g.suggestedQuestion)
-    .map((g) => ({
-      id: g.id,
-      description: g.description,
-      severity: VALID_SEVERITIES.includes(String(g.severity).toLowerCase())
-        ? String(g.severity).toLowerCase()
-        : "major",
-      suggestedQuestion: g.suggestedQuestion
-    }));
-
-  const rawQuestions = Array.isArray(parsed.momTestQuestions) ? parsed.momTestQuestions : [];
-  const momTestQuestions = rawQuestions
-    .filter((q) => q && q.gapId && q.question && q.targetRole && q.rationale)
-    .map((q) => ({
-      gapId: q.gapId,
-      question: q.question,
-      targetRole: q.targetRole,
-      rationale: q.rationale
-    }));
-
-  const rawChecklist = Array.isArray(parsed.wendelChecklist) ? parsed.wendelChecklist : [];
-  const wendelChecklist = rawChecklist
-    .filter((c) => c && c.condition && c.justification && c.status)
-    .map((c) => ({
-      condition: c.condition,
-      status: VALID_WENDEL_STATUSES.includes(String(c.status).toLowerCase())
-        ? String(c.status).toLowerCase()
-        : "unknown",
-      justification: c.justification
-    }));
-
-  const rawJtbds = Array.isArray(parsed.jtbds) ? parsed.jtbds : [];
-  const jtbds = rawJtbds
-    .filter((j) => j && j.id && j.functional && j.emotionalPersonal && j.emotionalSocial && j.behaviorChange && j.evidence)
-    .map((j) => ({
-      id: j.id,
-      functional: j.functional,
-      emotionalPersonal: j.emotionalPersonal,
-      emotionalSocial: j.emotionalSocial,
-      behaviorChange: j.behaviorChange,
-      evidence: j.evidence
-    }));
-
-  let classification = null;
-  if (parsed.classification && typeof parsed.classification === "object") {
-    const rawType = String(parsed.classification.type || "").toUpperCase();
-    const type = rawType === "NOT_APPLICABLE" ? "not_applicable"
-      : VALID_CLASSIFY_TYPES.includes(rawType) ? rawType : "not_applicable";
-    const rawRisk = String(parsed.classification.adoptionRisk || "").toLowerCase();
-    classification = {
-      type,
-      adoptionRisk: VALID_ADOPTION_RISKS.includes(rawRisk) ? rawRisk : "medium",
-      frictionEstimate: parsed.classification.frictionEstimate || ""
-    };
-  }
-
   return {
-    verdict,
-    gaps,
-    momTestQuestions,
-    wendelChecklist,
-    classification,
-    jtbds,
+    verdict: VALID_VERDICTS.includes(parsed.verdict) ? parsed.verdict : "ready",
+    gaps: parseGaps(parsed.gaps),
+    momTestQuestions: parseMomTestQuestions(parsed.momTestQuestions),
+    wendelChecklist: parseWendelChecklist(parsed.wendelChecklist),
+    classification: parseClassification(parsed.classification),
+    jtbds: parseJtbds(parsed.jtbds),
     summary: parsed.summary || ""
   };
 }
