@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.19.0] - 2026-03-14
+
+### Added
+- **OpenCode agent**: 5th built-in AI agent — open-source CLI with multi-provider support. Contributed by [@aitorGeniova](https://github.com/aitorGeniova) (#75)
+
 ## [1.18.0] - 2026-03-14
 
 ### Added
