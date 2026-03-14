@@ -174,7 +174,7 @@ async function checkBecariaSecrets() {
       ok: secretsOk,
       detail: secretsOk
         ? "BECARIA_APP_ID + BECARIA_APP_PRIVATE_KEY found"
-        : `Missing: ${!hasAppId ? "BECARIA_APP_ID " : ""}${!hasKey ? "BECARIA_APP_PRIVATE_KEY" : ""}`.trim(),
+        : `Missing: ${[!hasAppId && "BECARIA_APP_ID", !hasKey && "BECARIA_APP_PRIVATE_KEY"].filter(Boolean).join(" ")}`,
       fix: secretsOk ? null : "Add BECARIA_APP_ID and BECARIA_APP_PRIVATE_KEY as GitHub repository secrets"
     };
   } catch {
