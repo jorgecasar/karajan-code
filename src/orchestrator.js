@@ -34,6 +34,7 @@ import { runCoderStage, runRefactorerStage, runTddCheckStage, runSonarStage, run
 import { runTesterStage, runSecurityStage, runImpeccableStage } from "./orchestrator/post-loop-stages.js";
 import { waitForCooldown, MAX_STANDBY_RETRIES } from "./orchestrator/standby.js";
 import { detectTestFramework } from "./utils/project-detect.js";
+import { runPreflightChecks } from "./orchestrator/preflight-checks.js";
 
 
 // --- Extracted helper functions (pure refactoring, zero behavior change) ---
@@ -857,7 +858,23 @@ async function runPreLoopStages({ config, logger, emitter, eventBase, session, f
     }));
   }
 
-  const updatedConfig = resolvePipelinePolicies({ flags, config, stageResults, emitter, eventBase, session, pipelineFlags });
+  let updatedConfig = resolvePipelinePolicies({ flags, config, stageResults, emitter, eventBase, session, pipelineFlags });
+
+  // --- Preflight environment checks ---
+  const preflightResult = await runPreflightChecks({
+    config: updatedConfig, logger, emitter, eventBase,
+    resolvedPolicies: session.resolved_policies,
+    securityEnabled: pipelineFlags.securityEnabled
+  });
+  session.preflight = preflightResult;
+  await saveSession(session);
+
+  if (preflightResult.configOverrides.sonarDisabled) {
+    updatedConfig = { ...updatedConfig, sonarqube: { ...updatedConfig.sonarqube, enabled: false } };
+  }
+  if (preflightResult.configOverrides.securityDisabled) {
+    pipelineFlags.securityEnabled = false;
+  }
 
   // --- Researcher → Planner ---
   const { plannedTask } = await runPlanningPhases({ config: updatedConfig, logger, emitter, eventBase, session, stageResults, pipelineFlags, coderRole, trackBudget, task, askQuestion });
