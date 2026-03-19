@@ -112,6 +112,12 @@ vi.mock("../src/utils/process.js", () => ({
   runCommand: vi.fn()
 }));
 
+vi.mock("../src/orchestrator/preflight-checks.js", () => ({
+  runPreflightChecks: vi.fn().mockResolvedValue({
+    ok: true, checks: [], remediations: [], configOverrides: {}, warnings: []
+  })
+}));
+
 describe("kj_run smoke", () => {
   beforeEach(() => {
     vi.clearAllMocks();
