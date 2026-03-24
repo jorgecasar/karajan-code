@@ -77,7 +77,7 @@ const DEFAULTS = {
     },
     token: null,
     project_key: null,
-    admin_user: "admin",
+    admin_user: null,
     admin_password: null,
     coverage: {
       enabled: false,

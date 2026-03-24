@@ -886,9 +886,16 @@ async function runPreLoopStages({ config, logger, emitter, eventBase, session, f
   session.preflight = preflightResult;
   await saveSession(session);
 
-  if (preflightResult.configOverrides.sonarDisabled) {
-    updatedConfig = { ...updatedConfig, sonarqube: { ...updatedConfig.sonarqube, enabled: false } };
+  // Hard fail if blocking checks failed (SonarQube enabled but not available)
+  if (!preflightResult.ok) {
+    const errorLines = (preflightResult.errors || [])
+      .map(e => `  - ${e.message}\n    Fix: ${e.fix}`)
+      .join("\n");
+    throw new Error(
+      `Preflight FAILED — environment changed during session. Fix the issues and retry:\n${errorLines}`
+    );
   }
+
   if (preflightResult.configOverrides.securityDisabled) {
     pipelineFlags.securityEnabled = false;
   }

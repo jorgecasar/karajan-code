@@ -24,6 +24,7 @@ import { resolveReviewProfile } from "../review/profiles.js";
 import { createRunLog, readRunLog } from "../utils/run-log.js";
 import { currentBranch } from "../utils/git.js";
 import { isPreflightAcked, ackPreflight, getSessionOverrides } from "./preflight.js";
+import { ensureBootstrap } from "../bootstrap.js";
 
 /**
  * Resolve the user's project directory.
@@ -118,6 +119,11 @@ const ERROR_CLASSIFIERS = [
     test: (lower) => lower.includes("not a git repository"),
     category: "git_error",
     suggestion: "Current directory is not a git repository. Navigate to your project root or initialize git with 'git init'."
+  },
+  {
+    test: (lower) => lower.includes("bootstrap failed"),
+    category: "bootstrap_error",
+    suggestion: "Environment prerequisites not met. Run kj_doctor for diagnostics, then fix the issues listed. Do NOT work around these — fix them properly."
   }
 ];
 
@@ -147,6 +153,16 @@ export async function assertNotOnBaseBranch(config) {
       `Do NOT run kj_code directly — create the branch first so the full pipeline (code + review) works correctly.`
     );
   }
+}
+
+/**
+ * Run bootstrap gate: validate all environment prerequisites before execution.
+ * Throws if any prerequisite fails.
+ */
+async function runBootstrapGate(server, a) {
+  const projectDir = await resolveProjectDir(server, a.projectDir);
+  const { config } = await loadConfig(projectDir);
+  await ensureBootstrap(projectDir, config);
 }
 
 export function enrichedFailPayload(error, toolName) {
@@ -191,7 +207,7 @@ export function buildAskQuestion(server) {
 
 const MAX_AUTO_RESUMES = 2;
 const NON_RECOVERABLE_CATEGORIES = new Set([
-  "config_error", "auth_error", "agent_missing", "branch_error", "git_error"
+  "config_error", "auth_error", "agent_missing", "branch_error", "git_error", "bootstrap_error"
 ]);
 
 async function attemptAutoResume({ err, config, logger, emitter, askQuestion, runLog }) {
@@ -783,6 +799,7 @@ async function handleResume(a, server, extra) {
   if (!a.sessionId) {
     return failPayload("Missing required field: sessionId");
   }
+  await runBootstrapGate(server, a);
   if (a.answer) {
     const validation = validateResumeAnswer(a.answer);
     if (!validation.valid) {
@@ -804,6 +821,7 @@ async function handleRun(a, server, extra) {
       return failPayload(`Invalid taskType "${a.taskType}". Valid values: ${[...validTypes].join(", ")}`);
     }
   }
+  await runBootstrapGate(server, a);
   if (!isPreflightAcked()) {
     // Auto-acknowledge with defaults for autonomous operation
     ackPreflight({});
@@ -818,6 +836,7 @@ async function handleCode(a, server, extra) {
   if (!a.task) {
     return failPayload("Missing required field: task");
   }
+  await runBootstrapGate(server, a);
   if (!isPreflightAcked()) {
     // Auto-acknowledge with defaults for autonomous operation
     ackPreflight({});
@@ -832,6 +851,7 @@ async function handleReview(a, server, extra) {
   if (!a.task) {
     return failPayload("Missing required field: task");
   }
+  await runBootstrapGate(server, a);
   return handleReviewDirect(a, server, extra);
 }
 
@@ -839,6 +859,7 @@ async function handlePlan(a, server, extra) {
   if (!a.task) {
     return failPayload("Missing required field: task");
   }
+  await runBootstrapGate(server, a);
   return handlePlanDirect(a, server, extra);
 }
 
@@ -850,6 +871,7 @@ async function handleDiscover(a, server, extra) {
   if (a.mode && !validModes.has(a.mode)) {
     return failPayload(`Invalid mode "${a.mode}". Valid values: ${[...validModes].join(", ")}`);
   }
+  await runBootstrapGate(server, a);
   return handleDiscoverDirect(a, server, extra);
 }
 
@@ -857,6 +879,7 @@ async function handleTriage(a, server, extra) {
   if (!a.task) {
     return failPayload("Missing required field: task");
   }
+  await runBootstrapGate(server, a);
   return handleTriageDirect(a, server, extra);
 }
 
@@ -864,6 +887,7 @@ async function handleResearcher(a, server, extra) {
   if (!a.task) {
     return failPayload("Missing required field: task");
   }
+  await runBootstrapGate(server, a);
   return handleResearcherDirect(a, server, extra);
 }
 
@@ -871,10 +895,12 @@ async function handleArchitect(a, server, extra) {
   if (!a.task) {
     return failPayload("Missing required field: task");
   }
+  await runBootstrapGate(server, a);
   return handleArchitectDirect(a, server, extra);
 }
 
 async function handleAudit(a, server, extra) {
+  await runBootstrapGate(server, a);
   return handleAuditDirect(a, server, extra);
 }
 
@@ -892,6 +918,11 @@ async function handleBoard(a) {
   }
 }
 
+async function handleScan(a, server) {
+  await runBootstrapGate(server, a);
+  return runKjCommand({ command: "scan", options: a });
+}
+
 /* ── Handler dispatch map ─────────────────────────────────────────── */
 
 const toolHandlers = {
@@ -901,7 +932,7 @@ const toolHandlers = {
   kj_agents:    (a) => handleAgents(a),
   kj_preflight: (a) => handlePreflight(a),
   kj_config:    (a) => runKjCommand({ command: "config", commandArgs: a.json ? ["--json"] : [], options: a }),
-  kj_scan:      (a) => runKjCommand({ command: "scan", options: a }),
+  kj_scan:      (a, server) => handleScan(a, server),
   kj_roles:     (a) => handleRoles(a),
   kj_report:    (a) => runKjCommand({ command: "report", commandArgs: buildReportArgs(a), options: a }),
   kj_resume:    (a, server, extra) => handleResume(a, server, extra),

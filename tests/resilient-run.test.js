@@ -1,4 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+
+vi.mock("../src/bootstrap.js", () => ({
+  ensureBootstrap: vi.fn().mockResolvedValue(undefined)
+}));
+
 import { classifyError } from "../src/mcp/server-handlers.js";
 
 vi.mock("../src/session-store.js", () => ({
@@ -31,6 +36,11 @@ describe("resilient run — error classification", () => {
   it("classifies branch error as non-recoverable", () => {
     const { category } = classifyError(new Error("You are on the base branch"));
     expect(category).toBe("branch_error");
+  });
+
+  it("classifies bootstrap error as non-recoverable", () => {
+    const { category } = classifyError(new Error("BOOTSTRAP FAILED — Environment not ready"));
+    expect(category).toBe("bootstrap_error");
   });
 
   it("classifies timeouts as recoverable", () => {

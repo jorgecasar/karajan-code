@@ -8,8 +8,14 @@ vi.mock("../src/sonar/manager.js", () => ({
   sonarUp: vi.fn()
 }));
 
+vi.mock("../src/sonar/credentials.js", () => ({
+  loadSonarCredentials: vi.fn().mockResolvedValue({ user: null, password: null }),
+  credentialsPath: vi.fn().mockReturnValue("/home/user/.karajan/sonar-credentials.json")
+}));
+
 const { runCommand } = await import("../src/utils/process.js");
 const { sonarUp } = await import("../src/sonar/manager.js");
+const { loadSonarCredentials } = await import("../src/sonar/credentials.js");
 const { runSonarScan } = await import("../src/sonar/scanner.js");
 
 const baseConfig = {
@@ -95,12 +101,13 @@ describe("runSonarScan", () => {
     expect(runCommand.mock.calls[0]).toEqual(["git", ["config", "--get", "remote.origin.url"]]);
   });
 
-  it("falls back to admin/admin when no token is configured", async () => {
+  it("resolves token from sonar-credentials.json when no token is configured", async () => {
+    loadSonarCredentials.mockResolvedValue({ user: "admin", password: "secret123" });
     const config = {
       sonarqube: {
         host: "http://localhost:9000",
         token: null,
-        admin_user: "admin",
+        admin_user: null,
         admin_password: null,
         scanner: { sources: "src" }
       }
@@ -110,7 +117,7 @@ describe("runSonarScan", () => {
       .mockResolvedValueOnce({ exitCode: 0, stdout: JSON.stringify({ valid: true }), stderr: "" })
       .mockResolvedValueOnce({
         exitCode: 0,
-        stdout: JSON.stringify({ login: "admin", name: "karajan-x", token: "from-admin" }),
+        stdout: JSON.stringify({ login: "admin", name: "karajan-x", token: "from-creds-file" }),
         stderr: ""
       })
       .mockResolvedValueOnce({ exitCode: 0, stdout: "scan ok", stderr: "" });
@@ -118,20 +125,37 @@ describe("runSonarScan", () => {
     const result = await runSonarScan(config, "my-key");
 
     expect(result.ok).toBe(true);
-    expect(runCommand.mock.calls[0][0]).toBe("curl");
-    expect(runCommand.mock.calls[1][0]).toBe("curl");
-    expect(runCommand.mock.calls[2][0]).toBe("docker");
-    expect(runCommand.mock.calls[2][1]).toContain("SONAR_TOKEN=from-admin");
-    expect(process.env.KJ_SONAR_TOKEN).toBe("from-admin");
+    expect(runCommand.mock.calls[0][1]).toContain("admin:secret123");
+    expect(runCommand.mock.calls[2][1]).toContain("SONAR_TOKEN=from-creds-file");
+    expect(process.env.KJ_SONAR_TOKEN).toBe("from-creds-file");
   });
 
-  it("tries configured admin password before admin/admin", async () => {
+  it("fails with actionable message when no token or credentials are available", async () => {
+    const config = {
+      sonarqube: {
+        host: "http://localhost:9000",
+        token: null,
+        admin_user: null,
+        admin_password: null,
+        scanner: { sources: "src" }
+      }
+    };
+    sonarUp.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+
+    const result = await runSonarScan(config, "my-key");
+
+    expect(result.ok).toBe(false);
+    expect(result.stderr).toContain("sonar-credentials.json");
+  });
+
+  it("tries configured admin password before credentials file", async () => {
+    loadSonarCredentials.mockResolvedValue({ user: "admin", password: "filepass" });
     const config = {
       sonarqube: {
         host: "http://localhost:9000",
         token: null,
         admin_user: "admin",
-        admin_password: "otherpass",
+        admin_password: "configpass",
         scanner: { sources: "src" }
       }
     };
@@ -141,7 +165,7 @@ describe("runSonarScan", () => {
       .mockResolvedValueOnce({ exitCode: 0, stdout: JSON.stringify({ valid: true }), stderr: "" })
       .mockResolvedValueOnce({
         exitCode: 0,
-        stdout: JSON.stringify({ login: "admin", name: "karajan-x", token: "from-default" }),
+        stdout: JSON.stringify({ login: "admin", name: "karajan-x", token: "from-file" }),
         stderr: ""
       })
       .mockResolvedValueOnce({ exitCode: 0, stdout: "scan ok", stderr: "" });
@@ -149,9 +173,9 @@ describe("runSonarScan", () => {
     const result = await runSonarScan(config, "my-key");
 
     expect(result.ok).toBe(true);
-    expect(runCommand.mock.calls[0][1]).toContain("admin:otherpass");
-    expect(runCommand.mock.calls[1][1]).toContain("admin:admin");
-    expect(runCommand.mock.calls[3][1]).toContain("SONAR_TOKEN=from-default");
+    expect(runCommand.mock.calls[0][1]).toContain("admin:configpass");
+    expect(runCommand.mock.calls[1][1]).toContain("admin:filepass");
+    expect(runCommand.mock.calls[3][1]).toContain("SONAR_TOKEN=from-file");
   });
 
   it("filters non-existing scanner source folders to avoid Sonar scan failure", async () => {

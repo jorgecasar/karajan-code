@@ -89,6 +89,16 @@ vi.mock("../src/orchestrator/solomon-escalation.js", () => ({
   escalateToHuman: vi.fn().mockResolvedValue({ action: "pause", question: "Human intervention needed" })
 }));
 
+vi.mock("../src/sonar/credentials.js", () => ({
+  loadSonarCredentials: vi.fn().mockResolvedValue({ user: "admin", password: "testpass" })
+}));
+
+vi.mock("../src/orchestrator/preflight-checks.js", () => ({
+  runPreflightChecks: vi.fn().mockResolvedValue({
+    ok: true, checks: [], remediations: [], configOverrides: {}, warnings: [], errors: []
+  })
+}));
+
 vi.mock("../src/utils/rtk-detect.js", () => ({
   detectRtk: vi.fn().mockResolvedValue({ available: false })
 }));
@@ -175,6 +185,14 @@ describe("configurable sub-loop limits", () => {
 
     const { invokeSolomon } = await import("../src/orchestrator/solomon-escalation.js");
     invokeSolomon.mockResolvedValue({ action: "pause", question: "Solomon escalated" });
+
+    const { runPreflightChecks } = await import("../src/orchestrator/preflight-checks.js");
+    runPreflightChecks.mockResolvedValue({
+      ok: true, checks: [], remediations: [], configOverrides: {}, warnings: [], errors: []
+    });
+
+    const { loadSonarCredentials } = await import("../src/sonar/credentials.js");
+    loadSonarCredentials.mockResolvedValue({ user: "admin", password: "testpass" });
 
     const { detectRtk } = await import("../src/utils/rtk-detect.js");
     detectRtk.mockResolvedValue({ available: false });
