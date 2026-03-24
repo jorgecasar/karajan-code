@@ -29,8 +29,9 @@ En lugar de ejecutar un agente de IA y revisar manualmente su output, `kj` encad
 
 **Caracteristicas principales:**
 - **Pipeline multi-agente** con 11 roles configurables
-- **4 agentes de IA soportados**: Claude, Codex, Gemini, Aider
-- **Servidor MCP** con 15 herramientas — usa `kj` desde Claude, Codex o cualquier host compatible con MCP sin salir de tu agente. [Ver configuracion MCP](#servidor-mcp)
+- **5 agentes de IA soportados**: Claude, Codex, Gemini, Aider, OpenCode
+- **Servidor MCP** con 20 herramientas — usa `kj` desde Claude, Codex o cualquier host compatible con MCP sin salir de tu agente. [Ver configuracion MCP](#servidor-mcp)
+- **Bootstrap obligatorio** — valida prerequisitos del entorno (git, remote, config, agentes, SonarQube) antes de cada ejecucion. Si algo falta, para con instrucciones claras
 - **TDD obligatorio** — se exigen cambios en tests cuando se modifican ficheros fuente
 - **Integracion con SonarQube** — analisis estatico con quality gates (requiere [Docker](#requisitos))
 - **Perfiles de revision** — standard, strict, relaxed, paranoid

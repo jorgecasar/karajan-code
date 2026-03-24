@@ -152,6 +152,7 @@ Use `kj roles show <role>` to inspect any template.
 Karajan auto-detects and auto-configures everything it can:
 
 - **TDD**: Detects test framework (vitest, jest, mocha) → auto-enables TDD
+- **Bootstrap gate**: Validates all prerequisites (git repo, remote, config, agents, SonarQube) before any tool runs. Fails hard with actionable fix instructions — never silently degrades
 - **SonarQube**: Auto-starts Docker container, generates config if missing
 - **Pipeline complexity**: Triage classifies task → trivial tasks skip reviewer loop
 - **Provider outages**: Retries on 500/502/503/504 with backoff (same as rate limits)
@@ -163,9 +164,9 @@ No per-project configuration required. If you want to customize, config is layer
 
 Because it should be.
 
-Karajan has **1847 tests** across 149 files. It runs on Node.js without a build step. You can read the source, understand it, fork it, and modify it without a TypeScript compiler between you and the code.
+Karajan has **1966 tests** across 157 files. It runs on Node.js without a build step. You can read the source, understand it, fork it, and modify it without a TypeScript compiler between you and the code.
 
-This is a deliberate choice, not a limitation. The tests are the type safety. The legibility is a feature. **52 releases in 23 days** — that velocity is possible precisely because vanilla JS with good tests lets you move fast without fear.
+This is a deliberate choice, not a limitation. The tests are the type safety. The legibility is a feature. **55 releases in 26 days** — that velocity is possible precisely because vanilla JS with good tests lets you move fast without fear.
 
 ## Recommended companions
 

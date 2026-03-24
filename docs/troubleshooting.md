@@ -62,9 +62,11 @@ kj sonar start
 
 **Cause**: The token in `kj.config.yml` is wrong or was revoked.
 
-**Fix**:
+**Fix** (choose one):
+
+**Option A — Token (recommended)**:
 1. Open http://localhost:9000
-2. Log in (default: `admin` / `admin`)
+2. Log in with your SonarQube admin credentials
 3. Go to **My Account > Security > Generate Token**
 4. Name: `karajan-cli`, Type: **Global Analysis Token**
 5. Update the token:
@@ -74,6 +76,16 @@ kj sonar start
      token: "sqa_your_new_token_here"
    ```
    Or set the environment variable: `export KJ_SONAR_TOKEN="sqa_..."`
+
+**Option B — Credentials file**:
+```json
+// Save as ~/.karajan/sonar-credentials.json
+{
+  "user": "admin",
+  "password": "your-sonarqube-password"
+}
+```
+Karajan will use these credentials to auto-generate a token on each run.
 
 ### Quality gate fails repeatedly
 
