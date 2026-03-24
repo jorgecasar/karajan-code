@@ -108,6 +108,10 @@ vi.mock("../src/sonar/manager.js", () => ({
   isSonarReachable: vi.fn().mockResolvedValue(true)
 }));
 
+vi.mock("../src/sonar/credentials.js", () => ({
+  loadSonarCredentials: vi.fn().mockResolvedValue({ user: "admin", password: "admin" })
+}));
+
 vi.mock("../src/utils/process.js", () => ({
   runCommand: vi.fn()
 }));
@@ -118,7 +122,7 @@ vi.mock("../src/utils/rtk-detect.js", () => ({
 
 vi.mock("../src/orchestrator/preflight-checks.js", () => ({
   runPreflightChecks: vi.fn().mockResolvedValue({
-    ok: true, checks: [], remediations: [], configOverrides: {}, warnings: []
+    ok: true, checks: [], remediations: [], configOverrides: {}, warnings: [], errors: []
   })
 }));
 

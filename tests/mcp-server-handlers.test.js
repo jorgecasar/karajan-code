@@ -106,6 +106,10 @@ vi.mock("../src/utils/git.js", () => ({
   currentBranch: vi.fn().mockResolvedValue("feat/my-feature")
 }));
 
+vi.mock("../src/bootstrap.js", () => ({
+  ensureBootstrap: vi.fn().mockResolvedValue(undefined)
+}));
+
 const {
   asObject,
   responseText,
