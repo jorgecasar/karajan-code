@@ -2,16 +2,18 @@
  * Preflight environment checks for kj_run.
  *
  * Runs AFTER policy resolution (so we know which stages are active)
- * and BEFORE session iteration loop (so we fail fast or degrade gracefully).
+ * and BEFORE session iteration loop (so we fail fast).
  *
- * Design: always returns ok:true (graceful degradation, never hard-fail).
- * Disabled stages are auto-disabled via configOverrides instead of blocking.
+ * Design: SonarQube checks are BLOCKING when enabled — if SonarQube is
+ * configured but not available, the pipeline STOPS with a clear error.
+ * Security agent checks remain graceful (warning, auto-disable).
  */
 
 import { checkBinary } from "../utils/agent-detect.js";
 import { isSonarReachable, sonarUp } from "../sonar/manager.js";
 import { runCommand } from "../utils/process.js";
 import { emitProgress, makeEvent } from "../utils/events.js";
+import { loadSonarCredentials } from "../sonar/credentials.js";
 
 function normalizeApiHost(rawHost) {
   return String(rawHost || "http://localhost:9000").replace(/host\.docker\.internal/g, "localhost");
@@ -75,13 +77,18 @@ async function checkSonarAuth(config) {
     }
   }
 
-  // Try admin credentials to generate a token
-  const adminUser = process.env.KJ_SONAR_ADMIN_USER || config.sonarqube?.admin_user || "admin";
+  // Try admin credentials: env vars → config → ~/.karajan/sonar-credentials.json (NO default admin/admin)
+  const fileCreds = await loadSonarCredentials() || {};
+  const adminUser = process.env.KJ_SONAR_ADMIN_USER || config.sonarqube?.admin_user || fileCreds.user;
   const candidates = [
     process.env.KJ_SONAR_ADMIN_PASSWORD,
     config.sonarqube?.admin_password,
-    "admin"
+    fileCreds.password
   ].filter(Boolean);
+
+  if (!adminUser || candidates.length === 0) {
+    return { name: "sonar-auth", ok: false, detail: "No Sonar token or admin credentials configured. Set KJ_SONAR_TOKEN, configure sonarqube.token in kj.config.yml, or save credentials in ~/.karajan/sonar-credentials.json." };
+  }
 
   for (const password of [...new Set(candidates)]) {
     const validateRes = await runCommand("curl", [
@@ -128,6 +135,10 @@ async function checkSecurityAgent(config) {
 /**
  * Run preflight environment checks.
  *
+ * SonarQube checks are BLOCKING: if SonarQube is enabled but not available,
+ * ok will be false and errors[] will contain actionable fix instructions.
+ * Security agent checks remain graceful (auto-disable via configOverrides).
+ *
  * @param {object} opts
  * @param {object} opts.config - Karajan config
  * @param {object} opts.logger - Logger instance
@@ -135,7 +146,7 @@ async function checkSecurityAgent(config) {
  * @param {object} opts.eventBase - Base event data
  * @param {object} opts.resolvedPolicies - Output from applyPolicies()
  * @param {boolean} opts.securityEnabled - Whether security stage is enabled
- * @returns {{ ok: boolean, checks: object[], remediations: string[], configOverrides: object, warnings: string[] }}
+ * @returns {{ ok: boolean, checks: object[], remediations: string[], configOverrides: object, warnings: string[], errors: object[] }}
  */
 export async function runPreflightChecks({ config, logger, emitter, eventBase, resolvedPolicies, securityEnabled }) {
   const sonarEnabled = Boolean(config.sonarqube?.enabled) && resolvedPolicies.sonar !== false;
@@ -148,6 +159,7 @@ export async function runPreflightChecks({ config, logger, emitter, eventBase, r
     remediations: [],
     configOverrides: {},
     warnings: [],
+    errors: [],
   };
 
   // Short-circuit: nothing to check
@@ -171,20 +183,24 @@ export async function runPreflightChecks({ config, logger, emitter, eventBase, r
     result.checks.push(dockerCheck);
 
     emitProgress(emitter, makeEvent("preflight:check", { ...eventBase, stage: "preflight" }, {
-      status: dockerCheck.ok ? "ok" : "warn",
+      status: dockerCheck.ok ? "ok" : "fail",
       message: `Docker: ${dockerCheck.detail}`,
       detail: dockerCheck
     }));
 
     if (!dockerCheck.ok) {
-      result.configOverrides.sonarDisabled = true;
-      result.warnings.push("Docker not available — SonarQube auto-disabled");
-      logger.warn("Preflight: Docker not found, disabling SonarQube");
+      result.ok = false;
+      result.errors.push({
+        check: "docker",
+        message: "Docker not available but SonarQube is enabled.",
+        fix: "Start Docker, or disable SonarQube: set sonarqube.enabled: false in kj.config.yml, or pass --no-sonar."
+      });
+      logger.error("Preflight: Docker not found — SonarQube requires Docker");
 
       // Skip remaining sonar checks, continue to security
       if (!securityEnabled) {
         emitProgress(emitter, makeEvent("preflight:end", { ...eventBase, stage: "preflight" }, {
-          status: "warn", message: "Preflight completed with warnings", detail: result
+          status: "fail", message: "Preflight FAILED — environment not ready", detail: result
         }));
         return result;
       }
@@ -192,7 +208,7 @@ export async function runPreflightChecks({ config, logger, emitter, eventBase, r
   }
 
   // --- 2. SonarQube reachable ---
-  if (sonarEnabled && !result.configOverrides.sonarDisabled) {
+  if (sonarEnabled && result.ok) {
     const reachableCheck = await checkSonarReachable(sonarHost);
     result.checks.push(reachableCheck);
 
@@ -201,25 +217,29 @@ export async function runPreflightChecks({ config, logger, emitter, eventBase, r
     }
 
     emitProgress(emitter, makeEvent("preflight:check", { ...eventBase, stage: "preflight" }, {
-      status: reachableCheck.ok ? "ok" : "warn",
+      status: reachableCheck.ok ? "ok" : "fail",
       message: `SonarQube reachability: ${reachableCheck.detail}`,
       detail: reachableCheck
     }));
 
     if (!reachableCheck.ok) {
-      result.configOverrides.sonarDisabled = true;
-      result.warnings.push("SonarQube not reachable — auto-disabled");
-      logger.warn("Preflight: SonarQube not reachable after remediation, disabling");
+      result.ok = false;
+      result.errors.push({
+        check: "sonar-reachable",
+        message: `SonarQube not reachable at ${sonarHost}.`,
+        fix: "Start SonarQube: 'docker start karajan-sonarqube', or disable it: set sonarqube.enabled: false in kj.config.yml, or pass --no-sonar."
+      });
+      logger.error("Preflight: SonarQube not reachable after remediation attempt");
     }
   }
 
   // --- 3. SonarQube auth/token ---
-  if (sonarEnabled && !result.configOverrides.sonarDisabled) {
+  if (sonarEnabled && result.ok) {
     const authCheck = await checkSonarAuth(config);
     result.checks.push(authCheck);
 
     emitProgress(emitter, makeEvent("preflight:check", { ...eventBase, stage: "preflight" }, {
-      status: authCheck.ok ? "ok" : "warn",
+      status: authCheck.ok ? "ok" : "fail",
       message: `SonarQube auth: ${authCheck.detail}`,
       detail: { name: authCheck.name, ok: authCheck.ok, detail: authCheck.detail }
     }));
@@ -229,13 +249,17 @@ export async function runPreflightChecks({ config, logger, emitter, eventBase, r
       result.remediations.push("Sonar token resolved and cached in KJ_SONAR_TOKEN");
       logger.info("Preflight: Sonar token resolved and cached");
     } else if (!authCheck.ok) {
-      result.configOverrides.sonarDisabled = true;
-      result.warnings.push("SonarQube auth failed — auto-disabled");
-      logger.warn("Preflight: Sonar auth failed, disabling SonarQube");
+      result.ok = false;
+      result.errors.push({
+        check: "sonar-auth",
+        message: "SonarQube authentication failed.",
+        fix: "Regenerate the SonarQube token and update it via kj_init or in kj.config.yml under sonarqube.token."
+      });
+      logger.error("Preflight: Sonar auth failed");
     }
   }
 
-  // --- 4. Security agent ---
+  // --- 4. Security agent (graceful — only warning, not blocking) ---
   if (securityEnabled) {
     const secCheck = await checkSecurityAgent(config);
     result.checks.push(secCheck);
@@ -253,12 +277,15 @@ export async function runPreflightChecks({ config, logger, emitter, eventBase, r
     }
   }
 
+  const hasErrors = result.errors.length > 0;
   const hasWarnings = result.warnings.length > 0;
   emitProgress(emitter, makeEvent("preflight:end", { ...eventBase, stage: "preflight" }, {
-    status: hasWarnings ? "warn" : "ok",
-    message: hasWarnings
-      ? `Preflight completed with ${result.warnings.length} warning(s)`
-      : "Preflight passed — all checks OK",
+    status: hasErrors ? "fail" : hasWarnings ? "warn" : "ok",
+    message: hasErrors
+      ? `Preflight FAILED — ${result.errors.length} blocking issue(s)`
+      : hasWarnings
+        ? `Preflight completed with ${result.warnings.length} warning(s)`
+        : "Preflight passed — all checks OK",
     detail: result
   }));
 
