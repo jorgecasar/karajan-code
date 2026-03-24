@@ -17,6 +17,10 @@ vi.mock("../src/agents/resolve-bin.js", () => ({
   resolveBin: vi.fn((name) => `/usr/bin/${name}`)
 }));
 
+vi.mock("../src/sonar/credentials.js", () => ({
+  loadSonarCredentials: vi.fn().mockResolvedValue({ user: "admin", password: "testpass" })
+}));
+
 describe("preflight-checks", () => {
   let runPreflightChecks;
   let checkBinary, isSonarReachable, sonarUp, runCommand;
@@ -41,6 +45,9 @@ describe("preflight-checks", () => {
     isSonarReachable.mockResolvedValue(true);
     sonarUp.mockResolvedValue({ exitCode: 0, stdout: "OK", stderr: "" });
     runCommand.mockResolvedValue({ exitCode: 0, stdout: '{"valid":true}', stderr: "" });
+
+    const { loadSonarCredentials } = await import("../src/sonar/credentials.js");
+    loadSonarCredentials.mockResolvedValue({ user: "admin", password: "testpass" });
 
     logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
     emitter = { emit: vi.fn((_event, data) => emittedEvents.push(data)) };
@@ -71,16 +78,15 @@ describe("preflight-checks", () => {
     expect(result.warnings).toHaveLength(0);
   });
 
-  it("disables sonar when Docker is not available", async () => {
+  it("hard fails when Docker is not available and sonar is enabled", async () => {
     checkBinary.mockResolvedValue({ ok: false, version: "", path: "docker" });
     const result = await runPreflightChecks({
       config: makeConfig(), logger, emitter, eventBase,
       resolvedPolicies: { sonar: true },
       securityEnabled: false,
     });
-    expect(result.ok).toBe(true);
-    expect(result.configOverrides.sonarDisabled).toBe(true);
-    expect(result.warnings).toContainEqual(expect.stringContaining("Docker"));
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContainEqual(expect.objectContaining({ check: "docker" }));
   });
 
   it("auto-starts SonarQube when not reachable", async () => {
@@ -102,7 +108,7 @@ describe("preflight-checks", () => {
     expect(result.remediations).toContainEqual(expect.stringContaining("auto-started"));
   });
 
-  it("disables sonar when SonarQube not reachable and auto-start fails", async () => {
+  it("hard fails when SonarQube not reachable and auto-start fails", async () => {
     isSonarReachable.mockResolvedValue(false);
     sonarUp.mockResolvedValue({ exitCode: 1, stdout: "", stderr: "failed" });
     const result = await runPreflightChecks({
@@ -110,17 +116,19 @@ describe("preflight-checks", () => {
       resolvedPolicies: { sonar: true },
       securityEnabled: false,
     });
-    expect(result.configOverrides.sonarDisabled).toBe(true);
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContainEqual(expect.objectContaining({ check: "sonar-reachable" }));
   });
 
-  it("disables sonar when auth fails", async () => {
+  it("hard fails when sonar auth fails", async () => {
     runCommand.mockResolvedValue({ exitCode: 0, stdout: JSON.stringify({ valid: false }), stderr: "" });
     const result = await runPreflightChecks({
       config: makeConfig(), logger, emitter, eventBase,
       resolvedPolicies: { sonar: true },
       securityEnabled: false,
     });
-    expect(result.configOverrides.sonarDisabled).toBe(true);
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContainEqual(expect.objectContaining({ check: "sonar-auth" }));
   });
 
   it("caches sonar token in KJ_SONAR_TOKEN when generated", async () => {
@@ -206,7 +214,7 @@ describe("preflight-checks", () => {
     expect(result.configOverrides.sonarDisabled).toBeUndefined();
   });
 
-  it("handles sonarUp throwing an exception gracefully", async () => {
+  it("hard fails when sonarUp throws an exception", async () => {
     isSonarReachable.mockResolvedValue(false);
     sonarUp.mockRejectedValue(new Error("compose file missing"));
     const result = await runPreflightChecks({
@@ -214,7 +222,7 @@ describe("preflight-checks", () => {
       resolvedPolicies: { sonar: true },
       securityEnabled: false,
     });
-    expect(result.ok).toBe(true);
-    expect(result.configOverrides.sonarDisabled).toBe(true);
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContainEqual(expect.objectContaining({ check: "sonar-reachable" }));
   });
 });

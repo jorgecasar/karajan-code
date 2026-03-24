@@ -1,4 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("../src/bootstrap.js", () => ({
+  ensureBootstrap: vi.fn().mockResolvedValue(undefined)
+}));
+
 import { validateResumeAnswer } from "../src/mcp/server-handlers.js";
 
 describe("validateResumeAnswer", () => {

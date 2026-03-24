@@ -1,4 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+
+vi.mock("../src/bootstrap.js", () => ({
+  ensureBootstrap: vi.fn().mockResolvedValue(undefined)
+}));
+
 import { tools } from "../src/mcp/tools.js";
 
 describe("kj_discover MCP tool schema", () => {

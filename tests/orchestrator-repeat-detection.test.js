@@ -80,6 +80,10 @@ vi.mock("../src/sonar/manager.js", () => ({
   isSonarReachable: vi.fn().mockResolvedValue(true)
 }));
 
+vi.mock("../src/sonar/credentials.js", () => ({
+  loadSonarCredentials: vi.fn().mockResolvedValue({ user: "admin", password: "testpass" })
+}));
+
 vi.mock("../src/sonar/api.js", () => ({
   getQualityGateStatus: vi.fn(),
   getOpenIssues: vi.fn()
@@ -178,6 +182,9 @@ describe("orchestrator repeat detection", () => {
 
     const { invokeSolomon } = await import("../src/orchestrator/solomon-escalation.js");
     invokeSolomon.mockResolvedValue({ action: "continue", humanGuidance: "Proceed" });
+
+    const { loadSonarCredentials } = await import("../src/sonar/credentials.js");
+    loadSonarCredentials.mockResolvedValue({ user: "admin", password: "testpass" });
 
     const { sonarUp, isSonarReachable } = await import("../src/sonar/manager.js");
     sonarUp.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
