@@ -35,6 +35,10 @@ vi.mock("../src/sonar/manager.js", () => ({
   isSonarReachable: vi.fn().mockResolvedValue(true)
 }));
 
+vi.mock("../src/sonar/credentials.js", () => ({
+  loadSonarCredentials: vi.fn().mockResolvedValue({ user: "admin", password: "testpass" })
+}));
+
 vi.mock("../src/roles/sonar-role.js", () => ({
   SonarRole: class {
     async init() {}
@@ -249,6 +253,9 @@ describe("orchestrator triage pipeline", () => {
       }
       return Promise.resolve({ exitCode: 0, stdout: '{"valid":true}', stderr: "" });
     });
+
+    const { loadSonarCredentials } = await import("../src/sonar/credentials.js");
+    loadSonarCredentials.mockResolvedValue({ user: "admin", password: "testpass" });
 
     const { sonarUp, isSonarReachable } = await import("../src/sonar/manager.js");
     sonarUp.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });

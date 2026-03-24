@@ -7,3 +7,4 @@ coverage/
 kj.config.yml
 review-rules.md
 .sonar-env
+.kj-ready.json
