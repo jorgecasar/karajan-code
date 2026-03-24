@@ -4,6 +4,7 @@ import path from "node:path";
 import { runCommand } from "../utils/process.js";
 import { sonarUp } from "./manager.js";
 import { resolveSonarProjectKey } from "./project-key.js";
+import { loadSonarCredentials } from "./credentials.js";
 
 export function buildScannerOpts(projectKey, scanner = {}) {
   const opts = [`-Dsonar.projectKey=${projectKey}`];
@@ -136,18 +137,18 @@ async function resolveSonarToken(config, apiHost) {
   const explicitToken = process.env.KJ_SONAR_TOKEN || process.env.SONAR_TOKEN || config.sonarqube.token;
   if (explicitToken) return explicitToken;
 
-  const adminUser = process.env.KJ_SONAR_ADMIN_USER || config.sonarqube.admin_user || "admin";
+  // Resolve admin credentials from: env vars → config → ~/.karajan/sonar-credentials.json
+  const fileCreds = await loadSonarCredentials() || {};
+  const adminUser = process.env.KJ_SONAR_ADMIN_USER || config.sonarqube.admin_user || fileCreds.user;
   const candidates = [
     process.env.KJ_SONAR_ADMIN_PASSWORD,
     config.sonarqube.admin_password,
-    "admin"
+    fileCreds.password
   ].filter(Boolean);
 
+  if (!adminUser || candidates.length === 0) return null;
+
   for (const password of new Set(candidates)) {
-    if (password === "admin") {
-      // eslint-disable-next-line no-console
-      console.warn("[karajan] WARNING: Using default admin/admin credentials for SonarQube. Set KJ_SONAR_TOKEN for production use.");
-    }
     const valid = await validateAdminCredentials(apiHost, adminUser, password);
     if (!valid) continue;
     const token = await generateUserToken(apiHost, adminUser, password);
@@ -224,7 +225,7 @@ export async function runSonarScan(config, projectKey = null) {
       ok: false,
       stdout: "",
       stderr:
-        "Unable to resolve Sonar token. Tried configured token/password and fallback admin/admin.",
+        "Unable to resolve Sonar token. Set KJ_SONAR_TOKEN env var, configure sonarqube.token in kj.config.yml, or save credentials in ~/.karajan/sonar-credentials.json.",
       exitCode: 1
     };
   }
