@@ -34,6 +34,9 @@ development:
     - .spec.
 
 # SonarQube settings
+# Authentication: set token below, or KJ_SONAR_TOKEN env var,
+# or save admin credentials in ~/.karajan/sonar-credentials.json:
+#   {"user": "admin", "password": "your-password"}
 sonarqube:
   enabled: true
   host: http://localhost:9000

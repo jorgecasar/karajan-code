@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.35.0] - 2026-03-24
+
+### Added
+- **Mandatory bootstrap gate**: new `.kj-ready.json` checkpoint per project that validates ALL environment prerequisites before any KJ tool executes. Checks: git repo, git remote origin, KJ config, core binaries (node/npm/git), coder agent CLI, SonarQube (when enabled). Results cached for 24 hours. If any check fails, KJ stops with a clear error message and actionable fix instructions — no silent fallbacks or graceful degradation
+- **Bootstrap gate on 12 MCP handlers**: `kj_run`, `kj_code`, `kj_review`, `kj_plan`, `kj_discover`, `kj_triage`, `kj_researcher`, `kj_architect`, `kj_audit`, `kj_resume`, `kj_scan` all validate environment before execution
+- **Secure SonarQube credentials file**: `~/.karajan/sonar-credentials.json` for admin credentials. Format: `{"user": "admin", "password": "your-password"}`
+- **`bootstrap_error` classification**: bootstrap failures classified as non-recoverable — auto-resume will not retry
+- 19 new bootstrap tests + 1 error classification test (1966 total)
+
+### Fixed
+- **Hard-fail preflight checks**: SonarQube preflight checks during pipeline execution now BLOCK the pipeline (`ok: false` + `errors[]`) instead of silently auto-disabling SonarQube via `configOverrides.sonarDisabled`. Security agent checks remain graceful (warning only)
+
+### Security
+- **Removed default admin/admin SonarQube credentials**: the hardcoded `"admin"` password fallback in `resolveSonarToken()` and `checkSonarAuth()` has been removed. Credential resolution chain is now: (1) `KJ_SONAR_TOKEN` / `SONAR_TOKEN` env var, (2) `sonarqube.token` in `kj.config.yml`, (3) admin credentials from env vars / config / `~/.karajan/sonar-credentials.json`. Hard fail with actionable message if nothing configured
+- **`admin_user` default changed from `"admin"` to `null`** in config defaults — explicit configuration required
+
+### Changed
+- `src/orchestrator/preflight-checks.js`: result now includes `errors: []` field alongside existing `warnings: []`
+- `src/orchestrator.js`: consumes `preflightResult.ok === false` and throws Error with fix instructions
+- `.gitignore`: added `.kj-ready.json`
+
+## [1.34.4] - 2026-03-23
+
+### Fixed
+- **OS-aware install commands**: macOS uses `brew install`, Linux uses `curl`/`apt`/`pipx` for agent CLI installation suggestions in `kj doctor` and error messages
+
+## [1.34.3] - 2026-03-22
+
+### Changed
+- **Cognitive complexity refactoring**: reduced cognitive complexity across 6 core files
+
+## [1.34.2] - 2026-03-22
+
+### Fixed
+- **Zero skipped tests**: eliminated all skipped tests + added 44 board backend tests
+
 ## [1.20.0] - 2026-03-14
 
 ### Added
@@ -363,7 +399,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI/CD**: GitHub Actions workflow with validation and PR annotations
 - **716+ unit tests** with Vitest
 
-[Unreleased]: https://github.com/manufosela/karajan-code/compare/v1.13.2...HEAD
+[Unreleased]: https://github.com/manufosela/karajan-code/compare/v1.35.0...HEAD
+[1.35.0]: https://github.com/manufosela/karajan-code/compare/v1.34.4...v1.35.0
+[1.34.4]: https://github.com/manufosela/karajan-code/compare/v1.34.3...v1.34.4
+[1.34.3]: https://github.com/manufosela/karajan-code/compare/v1.34.2...v1.34.3
+[1.34.2]: https://github.com/manufosela/karajan-code/compare/v1.20.0...v1.34.2
 [1.13.2]: https://github.com/manufosela/karajan-code/compare/v1.13.1...v1.13.2
 [1.13.1]: https://github.com/manufosela/karajan-code/compare/v1.13.0...v1.13.1
 [1.13.0]: https://github.com/manufosela/karajan-code/compare/v1.12.0...v1.13.0
