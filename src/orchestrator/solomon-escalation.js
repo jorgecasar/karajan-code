@@ -30,10 +30,17 @@ export async function invokeSolomon({ config, logger, emitter, eventBase, stage,
     });
   }
 
+  const solomonError = ruling.result?.error;
+  if (!ruling.ok && solomonError) {
+    logger.warn(`Solomon execution failed: ${solomonError}`);
+  }
+
   emitProgress(
     emitter,
     makeEvent("solomon:end", { ...eventBase, stage: "solomon" }, {
-      message: `Solomon ruling: ${ruling.result?.ruling || "unknown"}`,
+      message: ruling.ok
+        ? `Solomon ruling: ${ruling.result?.ruling || "unknown"}`
+        : `Solomon failed: ${(solomonError || ruling.summary || "unknown error").slice(0, 200)}`,
       detail: ruling.result
     })
   );
@@ -43,13 +50,15 @@ export async function invokeSolomon({ config, logger, emitter, eventBase, stage,
     iteration,
     ruling: ruling.result?.ruling,
     escalate: ruling.result?.escalate,
+    error: solomonError ? solomonError.slice(0, 500) : undefined,
     subtask: ruling.result?.subtask?.title || null
   });
 
   if (!ruling.ok) {
+    const reason = ruling.result?.escalate_reason || solomonError || ruling.summary;
     return escalateToHuman({
       askQuestion, session, emitter, eventBase, stage, iteration,
-      conflict: { ...conflict, solomonReason: ruling.result?.escalate_reason }
+      conflict: { ...conflict, solomonReason: reason }
     });
   }
 
