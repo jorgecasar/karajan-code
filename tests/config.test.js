@@ -355,12 +355,12 @@ describe("loadConfig", () => {
     await fs.mkdir(kjHome, { recursive: true });
     await fs.writeFile(
       path.join(kjHome, "kj.config.yml"),
-      `budget:\n  pricing:\n    codex/o4-mini:\n      input_per_million: 1\n      output_per_million: 2\n`,
+      `budget:\n  pricing:\n    o4-mini:\n      input_per_million: 1\n      output_per_million: 2\n`,
       "utf8"
     );
     await fs.writeFile(
       path.join(tmpDir, ".karajan.yml"),
-      `budget:\n  pricing:\n    codex/o4-mini:\n      output_per_million: 5\n`,
+      `budget:\n  pricing:\n    o4-mini:\n      output_per_million: 5\n`,
       "utf8"
     );
 
@@ -368,7 +368,7 @@ describe("loadConfig", () => {
     process.env.KJ_HOME = kjHome;
 
     const { config } = await loadConfig();
-    expect(config.budget.pricing["codex/o4-mini"]).toEqual({
+    expect(config.budget.pricing["o4-mini"]).toEqual({
       input_per_million: 1,
       output_per_million: 5
     });

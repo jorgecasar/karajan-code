@@ -46,10 +46,15 @@ const baseConfig = {
 
 const PROJECT_DIR = "/home/user/my-project";
 
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+const PKG_VERSION = JSON.parse(readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../package.json"), "utf8")).version;
+
 function makeValidBootstrap(overrides = {}) {
   return {
     version: 1,
-    karajanVersion: "1.34.4",  // Must match package.json
+    karajanVersion: PKG_VERSION,
     createdAt: new Date().toISOString(),
     projectDir: PROJECT_DIR,
     checks: {

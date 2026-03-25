@@ -153,11 +153,11 @@ describe("checkpoints include provider and model", () => {
         usage: { tokens_in: 100, tokens_out: 80 }
       });
       const config = {
-        roles: { triage: { provider: "claude", model: "claude/haiku" } },
+        roles: { triage: { provider: "claude", model: "haiku" } },
         model_selection: { enabled: false }
       };
       const session = { id: "s1", task: "Fix bug", checkpoints: [] };
-      const coderRole = { provider: "codex", model: "codex/o4-mini" };
+      const coderRole = { provider: "codex", model: "o4-mini" };
 
       const { runTriageStage } = await import("../src/orchestrator/pre-loop-stages.js");
       await runTriageStage({ config, logger, emitter, eventBase, session, coderRole, trackBudget });
@@ -167,7 +167,7 @@ describe("checkpoints include provider and model", () => {
         expect.objectContaining({
           stage: "triage",
           provider: "claude",
-          model: "claude/haiku"
+          model: "haiku"
         })
       );
     });
@@ -180,7 +180,7 @@ describe("checkpoints include provider and model", () => {
       });
       const config = { roles: {}, model_selection: { enabled: false } };
       const session = { id: "s1", task: "Fix typo", checkpoints: [] };
-      const coderRole = { provider: "codex", model: "codex/o4-mini" };
+      const coderRole = { provider: "codex", model: "o4-mini" };
 
       const { runTriageStage } = await import("../src/orchestrator/pre-loop-stages.js");
       await runTriageStage({ config, logger, emitter, eventBase, session, coderRole, trackBudget });
@@ -190,16 +190,16 @@ describe("checkpoints include provider and model", () => {
         expect.objectContaining({
           stage: "triage",
           provider: "codex",
-          model: "codex/o4-mini"
+          model: "o4-mini"
         })
       );
     });
 
     it("researcher checkpoint includes provider and model", async () => {
       researcherRunMock.mockResolvedValue({ ok: true, summary: "Found files", result: {} });
-      const config = { roles: { researcher: { provider: "gemini", model: "gemini/pro" } } };
+      const config = { roles: { researcher: { provider: "gemini", model: "gemini-2.5-pro" } } };
       const session = { id: "s1", task: "Investigate", checkpoints: [] };
-      const coderRole = { provider: "claude", model: "claude/sonnet" };
+      const coderRole = { provider: "claude", model: "sonnet" };
 
       const { runResearcherStage } = await import("../src/orchestrator/pre-loop-stages.js");
       await runResearcherStage({ config, logger, emitter, eventBase, session, coderRole, trackBudget });
@@ -209,7 +209,7 @@ describe("checkpoints include provider and model", () => {
         expect.objectContaining({
           stage: "researcher",
           provider: "gemini",
-          model: "gemini/pro"
+          model: "gemini-2.5-pro"
         })
       );
     });
@@ -217,7 +217,7 @@ describe("checkpoints include provider and model", () => {
     it("planner checkpoint includes provider and model", async () => {
       const { __executeMock } = await import("../src/roles/planner-role.js");
       __executeMock.mockResolvedValue({ ok: true, result: { plan: "Step 1: do stuff" } });
-      const plannerRole = { provider: "claude", model: "claude/opus" };
+      const plannerRole = { provider: "claude", model: "opus" };
       const session = { id: "s1", task: "Plan migration", checkpoints: [] };
       const config = { roles: {} };
 
@@ -229,7 +229,7 @@ describe("checkpoints include provider and model", () => {
         expect.objectContaining({
           stage: "planner",
           provider: "claude",
-          model: "claude/opus"
+          model: "opus"
         })
       );
     });
@@ -249,11 +249,11 @@ describe("checkpoints include provider and model", () => {
 
     it("coder checkpoint includes provider and model", async () => {
       coderExecuteMock.mockResolvedValue({ ok: true, result: {} });
-      const coderRole = { provider: "claude", model: "claude/sonnet" };
+      const coderRole = { provider: "claude", model: "sonnet" };
       const coderRoleInstance = {
         execute: coderExecuteMock,
         provider: "claude",
-        model: "claude/sonnet"
+        model: "sonnet"
       };
       const session = makeSession();
       const config = { coder_options: {} };
@@ -269,7 +269,7 @@ describe("checkpoints include provider and model", () => {
         expect.objectContaining({
           stage: "coder",
           provider: "claude",
-          model: "claude/sonnet"
+          model: "sonnet"
         })
       );
     });
@@ -290,7 +290,7 @@ describe("checkpoints include provider and model", () => {
         attempts: []
       });
 
-      const reviewerRole = { provider: "codex", model: "codex/o4-mini" };
+      const reviewerRole = { provider: "codex", model: "o4-mini" };
       const session = makeSession();
       const config = { reviewer_options: {} };
       const repeatDetector = {
@@ -311,7 +311,7 @@ describe("checkpoints include provider and model", () => {
         expect.objectContaining({
           stage: "reviewer",
           provider: "codex",
-          model: "codex/o4-mini"
+          model: "o4-mini"
         })
       );
     });
@@ -347,9 +347,9 @@ describe("checkpoints include provider and model", () => {
   describe("post-loop stages", () => {
     it("tester checkpoint includes provider and model", async () => {
       testerRunMock.mockResolvedValue({ ok: true, summary: "All tests passed" });
-      const config = { roles: { tester: { provider: "claude", model: "claude/haiku" } }, session: {} };
+      const config = { roles: { tester: { provider: "claude", model: "haiku" } }, session: {} };
       const session = { id: "s1", task: "Fix bug", checkpoints: [], tester_retry_count: 0 };
-      const coderRole = { provider: "codex", model: "codex/o4-mini" };
+      const coderRole = { provider: "codex", model: "o4-mini" };
 
       const { runTesterStage } = await import("../src/orchestrator/post-loop-stages.js");
       await runTesterStage({
@@ -362,16 +362,16 @@ describe("checkpoints include provider and model", () => {
         expect.objectContaining({
           stage: "tester",
           provider: "claude",
-          model: "claude/haiku"
+          model: "haiku"
         })
       );
     });
 
     it("security checkpoint includes provider and model", async () => {
       securityRunMock.mockResolvedValue({ ok: true, summary: "No vulnerabilities" });
-      const config = { roles: { security: { provider: "codex", model: "codex/o3" } }, session: {} };
+      const config = { roles: { security: { provider: "codex", model: "o3" } }, session: {} };
       const session = { id: "s1", task: "Audit", checkpoints: [], security_retry_count: 0 };
-      const coderRole = { provider: "claude", model: "claude/sonnet" };
+      const coderRole = { provider: "claude", model: "sonnet" };
 
       const { runSecurityStage } = await import("../src/orchestrator/post-loop-stages.js");
       await runSecurityStage({
@@ -384,7 +384,7 @@ describe("checkpoints include provider and model", () => {
         expect.objectContaining({
           stage: "security",
           provider: "codex",
-          model: "codex/o3"
+          model: "o3"
         })
       );
     });
@@ -393,7 +393,7 @@ describe("checkpoints include provider and model", () => {
       testerRunMock.mockResolvedValue({ ok: true, summary: "OK" });
       const config = { roles: {}, session: {} };
       const session = { id: "s1", task: "Test", checkpoints: [], tester_retry_count: 0 };
-      const coderRole = { provider: "claude", model: "claude/sonnet" };
+      const coderRole = { provider: "claude", model: "sonnet" };
 
       const { runTesterStage } = await import("../src/orchestrator/post-loop-stages.js");
       await runTesterStage({
@@ -406,7 +406,7 @@ describe("checkpoints include provider and model", () => {
         expect.objectContaining({
           stage: "tester",
           provider: "claude",
-          model: "claude/sonnet"
+          model: "sonnet"
         })
       );
     });
@@ -420,14 +420,14 @@ describe("report trace table includes Model column", () => {
 
     const { printTraceTable } = require("../src/commands/report.js");
     const trace = [
-      { index: 0, role: "coder", provider: "claude", model: "claude/sonnet", timestamp: "2026-01-01T00:00:00Z", duration_ms: 30000, tokens_in: 1000, tokens_out: 500, cost_usd: 0.5 }
+      { index: 0, role: "coder", provider: "claude", model: "sonnet", timestamp: "2026-01-01T00:00:00Z", duration_ms: 30000, tokens_in: 1000, tokens_out: 500, cost_usd: 0.5 }
     ];
 
     printTraceTable(trace, { currency: "usd", exchangeRate: 0.92 });
 
     expect(logs[0]).toContain("Model");
     const dataRow = logs[2];
-    expect(dataRow).toContain("claude/sonnet");
+    expect(dataRow).toContain("sonnet");
 
     console.log.mockRestore();
   });
