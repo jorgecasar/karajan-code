@@ -1,3 +1,12 @@
+const MODEL_NOT_SUPPORTED_PATTERNS = [
+  /model.{0,30}is not supported/i,
+  /model.{0,30}not available/i,
+  /model.{0,30}does not exist/i,
+  /unsupported model/i,
+  /invalid model/i,
+  /model_not_found/i
+];
+
 export class BaseAgent {
   constructor(name, config, logger) {
     this.name = name;
@@ -23,5 +32,11 @@ export class BaseAgent {
   isAutoApproveEnabled(role) {
     if (role === "reviewer") return false;
     return Boolean(this.config?.coder_options?.auto_approve);
+  }
+
+  isModelNotSupportedError(result) {
+    const text = [result?.error, result?.output, result?.stderr, result?.stdout]
+      .filter(Boolean).join("\n");
+    return MODEL_NOT_SUPPORTED_PATTERNS.some(re => re.test(text));
   }
 }
