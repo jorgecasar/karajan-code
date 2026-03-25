@@ -51,7 +51,7 @@ export function createStallDetector({
       lastCriticalWarnAt = now;
       emitProgress(emitter, makeEvent("agent:stall", { ...eventBase, stage }, {
         status: "critical",
-        message: `Agent ${provider} unresponsive for ${Math.round(silenceMs / 1000)}s — may be hung`,
+        message: `[${stage}] Agent ${provider} unresponsive for ${Math.round(silenceMs / 1000)}s — may be hung`,
         detail: {
           provider,
           silenceMs,
@@ -65,7 +65,7 @@ export function createStallDetector({
       lastStallWarnAt = now;
       emitProgress(emitter, makeEvent("agent:stall", { ...eventBase, stage }, {
         status: "warning",
-        message: `Agent ${provider} silent for ${Math.round(silenceMs / 1000)}s — still waiting`,
+        message: `[${stage}] Agent ${provider} silent for ${Math.round(silenceMs / 1000)}s — still waiting`,
         detail: {
           provider,
           silenceMs,
@@ -79,8 +79,8 @@ export function createStallDetector({
 
     emitProgress(emitter, makeEvent("agent:heartbeat", { ...eventBase, stage }, {
       message: silenceMs < stallTimeoutMs
-        ? `Agent ${provider} active — ${lineCount} lines, ${Math.round(elapsedMs / 1000)}s elapsed`
-        : `Agent ${provider} waiting — silent ${Math.round(silenceMs / 1000)}s, ${Math.round(elapsedMs / 1000)}s elapsed`,
+        ? `[${stage}] Agent ${provider} active — ${lineCount} lines, ${Math.round(elapsedMs / 1000)}s elapsed`
+        : `[${stage}] Agent ${provider} waiting — silent ${Math.round(silenceMs / 1000)}s, ${Math.round(elapsedMs / 1000)}s elapsed`,
       detail: {
         provider,
         elapsedMs,
@@ -96,7 +96,7 @@ export function createStallDetector({
       maxSilenceTriggered = true;
       emitProgress(emitter, makeEvent("agent:stall", { ...eventBase, stage }, {
         status: "fail",
-        message: `Agent ${provider} exceeded max silence (${Math.round(hardLimit / 1000)}s)`,
+        message: `[${stage}] Agent ${provider} exceeded max silence (${Math.round(hardLimit / 1000)}s)`,
         detail: {
           provider,
           silenceMs,
