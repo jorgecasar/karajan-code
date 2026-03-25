@@ -34,6 +34,13 @@ vi.mock("../src/utils/git.js", () => ({
   ensureGitRepo: vi.fn()
 }));
 
+vi.mock("node:fs/promises", () => ({
+  default: {
+    readFile: vi.fn().mockRejectedValue(Object.assign(new Error("ENOENT"), { code: "ENOENT" })),
+    access: vi.fn().mockResolvedValue(undefined)
+  }
+}));
+
 const baseConfig = {
   review_mode: "standard",
   sonarqube: { enabled: true, host: "http://localhost:9000", enforcement_profile: "pragmatic" }
@@ -60,6 +67,10 @@ describe("doctor", () => {
 
     const { loadFirstExisting } = await import("../src/roles/base-role.js");
     loadFirstExisting.mockResolvedValue("rules content");
+
+    // Agent config files: simulate ENOENT (not found) so checks are skipped
+    const fsPromises = await import("node:fs/promises");
+    fsPromises.default.readFile.mockRejectedValue(Object.assign(new Error("ENOENT"), { code: "ENOENT" }));
 
     const mod = await import("../src/commands/doctor.js");
     runChecks = mod.runChecks;

@@ -12,7 +12,7 @@ vi.mock("node:fs/promises", () => ({
     writeFile: vi.fn(async (p, content) => { writtenFiles.set(p, content); }),
     readFile: vi.fn(async (p) => {
       if (writtenFiles.has(p)) return writtenFiles.get(p);
-      throw new Error("ENOENT");
+      throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
     })
   }
 }));
@@ -118,7 +118,7 @@ describe("installer E2E: init → doctor", () => {
     fsPromises.writeFile.mockImplementation(async (p, content) => { writtenFiles.set(p, content); });
     fsPromises.readFile.mockImplementation(async (p) => {
       if (writtenFiles.has(p)) return writtenFiles.get(p);
-      throw new Error("ENOENT");
+      throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
     });
   });
 

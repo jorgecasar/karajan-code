@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
+import fs from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import os from "node:os";
 import path from "node:path";
 import { runCommand } from "../utils/process.js";
 import { exists } from "../utils/fs.js";
@@ -239,6 +241,101 @@ async function checkRuleFiles(config) {
   ];
 }
 
+/**
+ * Detect duplicate TOML table headers (e.g. [mcp_servers."karajan-mcp"] appearing twice).
+ * Full TOML parsing would require a dependency — this catches the most common config error.
+ */
+function findDuplicateTomlKeys(content) {
+  const tableHeaders = [];
+  const duplicates = [];
+  for (const line of content.split("\n")) {
+    const match = line.match(/^\s*\[([^\]]+)\]\s*$/);
+    if (match) {
+      const key = match[1].trim();
+      if (tableHeaders.includes(key)) {
+        duplicates.push(key);
+      } else {
+        tableHeaders.push(key);
+      }
+    }
+  }
+  return duplicates;
+}
+
+async function checkAgentConfigs() {
+  const checks = [];
+  const home = os.homedir();
+
+  // Claude: ~/.claude.json
+  const claudeJsonPath = path.join(home, ".claude.json");
+  try {
+    const raw = await fs.readFile(claudeJsonPath, "utf8");
+    JSON.parse(raw);
+    checks.push({ name: "agent-config:claude", label: "Agent config: claude (~/.claude.json)", ok: true, detail: "Valid JSON", fix: null });
+  } catch (err) {
+    if (err.code === "ENOENT") {
+      // File doesn't exist — not an error, Claude may not be configured
+    } else {
+      checks.push({
+        name: "agent-config:claude",
+        label: "Agent config: claude (~/.claude.json)",
+        ok: false,
+        detail: `Invalid JSON: ${err.message.split("\n")[0]}`,
+        fix: "Fix the JSON syntax in ~/.claude.json. Common issues: trailing commas, missing quotes."
+      });
+    }
+  }
+
+  // Codex: ~/.codex/config.toml
+  const codexTomlPath = path.join(home, ".codex", "config.toml");
+  try {
+    const raw = await fs.readFile(codexTomlPath, "utf8");
+    const duplicates = findDuplicateTomlKeys(raw);
+    if (duplicates.length > 0) {
+      checks.push({
+        name: "agent-config:codex",
+        label: "Agent config: codex (~/.codex/config.toml)",
+        ok: false,
+        detail: `Duplicate TOML keys: ${duplicates.join(", ")}`,
+        fix: `Remove duplicate entries in ~/.codex/config.toml: ${duplicates.join(", ")}`
+      });
+    } else {
+      checks.push({ name: "agent-config:codex", label: "Agent config: codex (~/.codex/config.toml)", ok: true, detail: "Valid TOML (no duplicate keys)", fix: null });
+    }
+  } catch (err) {
+    if (err.code !== "ENOENT") {
+      checks.push({
+        name: "agent-config:codex",
+        label: "Agent config: codex (~/.codex/config.toml)",
+        ok: false,
+        detail: `Cannot read: ${err.message.split("\n")[0]}`,
+        fix: "Check file permissions on ~/.codex/config.toml"
+      });
+    }
+  }
+
+  // KJ config: ~/.karajan/kj.config.yml (validate YAML)
+  const kjConfigPath = getConfigPath();
+  try {
+    const raw = await fs.readFile(kjConfigPath, "utf8");
+    const yaml = await import("js-yaml");
+    yaml.default.load(raw);
+    checks.push({ name: "agent-config:karajan", label: "Agent config: karajan (kj.config.yml)", ok: true, detail: "Valid YAML", fix: null });
+  } catch (err) {
+    if (err.code !== "ENOENT") {
+      checks.push({
+        name: "agent-config:karajan",
+        label: "Agent config: karajan (kj.config.yml)",
+        ok: false,
+        detail: `Invalid YAML: ${err.message.split("\n")[0]}`,
+        fix: `Fix YAML syntax in ${kjConfigPath}. Run 'kj init' to regenerate if needed.`
+      });
+    }
+  }
+
+  return checks;
+}
+
 export async function runChecks({ config }) {
   const checks = [];
 
@@ -260,6 +357,7 @@ export async function runChecks({ config }) {
     checks.push(...await checkBecariaInfra(config));
   }
 
+  checks.push(...await checkAgentConfigs());
   checks.push(...await checkRuleFiles(config));
   checks.push(await checkRtk());
 
