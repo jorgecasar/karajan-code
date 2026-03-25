@@ -135,8 +135,28 @@ const ALLOWED_TOOLS = [
 export class ClaudeAgent extends BaseAgent {
   async runTask(task) {
     const role = task.role || "coder";
-    const args = ["-p", task.prompt, "--allowedTools", ...ALLOWED_TOOLS];
     const model = this.getRoleModel(role);
+    const result = await this._runTaskExec(task, model, role);
+    if (!result.ok && model && this.isModelNotSupportedError(result)) {
+      this.logger?.warn(`Claude model "${model}" not supported — retrying with agent default`);
+      return this._runTaskExec(task, null, role);
+    }
+    return result;
+  }
+
+  async reviewTask(task) {
+    const role = task.role || "reviewer";
+    const model = this.getRoleModel(role);
+    const result = await this._reviewTaskExec(task, model);
+    if (!result.ok && model && this.isModelNotSupportedError(result)) {
+      this.logger?.warn(`Claude model "${model}" not supported — retrying with agent default`);
+      return this._reviewTaskExec(task, null);
+    }
+    return result;
+  }
+
+  async _runTaskExec(task, model, role) {
+    const args = ["-p", task.prompt, "--allowedTools", ...ALLOWED_TOOLS];
     if (model) args.push("--model", model);
 
     // Use stream-json when onOutput is provided to get real-time feedback
@@ -161,9 +181,8 @@ export class ClaudeAgent extends BaseAgent {
     return { ok: res.exitCode === 0, output, error: res.exitCode === 0 ? "" : raw, exitCode: res.exitCode };
   }
 
-  async reviewTask(task) {
+  async _reviewTaskExec(task, model) {
     const args = ["-p", task.prompt, "--allowedTools", ...ALLOWED_TOOLS, "--output-format", "stream-json", "--verbose"];
-    const model = this.getRoleModel(task.role || "reviewer");
     if (model) args.push("--model", model);
     const res = await runCommand(resolveBin("claude"), args, cleanExecaOpts({
       onOutput: task.onOutput,

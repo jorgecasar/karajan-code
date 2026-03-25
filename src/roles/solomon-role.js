@@ -62,11 +62,27 @@ function buildPrompt({ conflict, task, instructions }) {
   const iterationCount = conflict?.iterationCount ?? "?";
   const maxIterations = conflict?.maxIterations ?? "?";
 
+  const isFirstRejection = conflict?.isFirstRejection ?? false;
+  const isRepeat = conflict?.isRepeat ?? false;
+
   sections.push(
     `## Conflict context`,
     `Stage: ${stage}`,
-    `Iterations exhausted: ${iterationCount}/${maxIterations}`
+    `Iterations exhausted: ${iterationCount}/${maxIterations}`,
+    `isFirstRejection: ${isFirstRejection}`,
+    `isRepeat: ${isRepeat}`
   );
+
+  if (conflict?.issueCategories) {
+    sections.push(`## Issue categories\n${JSON.stringify(conflict.issueCategories, null, 2)}`);
+  }
+
+  if (conflict?.blockingIssues?.length) {
+    const issueList = conflict.blockingIssues
+      .map((issue, i) => `${i + 1}. [${issue.severity || "unknown"}] ${issue.description || issue}`)
+      .join("\n");
+    sections.push(`## Blocking issues\n${issueList}`);
+  }
 
   if (task) {
     sections.push(`## Original task\n${task}`);

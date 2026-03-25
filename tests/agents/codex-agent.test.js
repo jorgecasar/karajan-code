@@ -188,4 +188,59 @@ describe("CodexAgent", () => {
       expect(opts.timeout).toBe(60000);
     });
   });
+
+  describe("model-not-supported fallback", () => {
+    it("retries runTask without --model when model is not supported", async () => {
+      const config = { ...baseConfig, roles: { coder: { model: "o4-mini" }, reviewer: {} } };
+      runCommand
+        .mockResolvedValueOnce({ exitCode: 1, stdout: "", stderr: "The 'o4-mini' model is not supported when using Codex with a ChatGPT account." })
+        .mockResolvedValueOnce({ exitCode: 0, stdout: "done", stderr: "" });
+
+      const agent = new CodexAgent("codex", config, logger);
+      const result = await agent.runTask({ prompt: "test", role: "coder" });
+
+      expect(result.ok).toBe(true);
+      expect(runCommand).toHaveBeenCalledTimes(2);
+      const retryArgs = runCommand.mock.calls[1][1];
+      expect(retryArgs).not.toContain("--model");
+      expect(retryArgs).not.toContain("o4-mini");
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("o4-mini"));
+    });
+
+    it("retries reviewTask without --model when model is not supported", async () => {
+      const config = { ...baseConfig, roles: { coder: {}, reviewer: { model: "o3" } } };
+      runCommand
+        .mockResolvedValueOnce({ exitCode: 1, stdout: "", stderr: "The 'o3' model is not supported when using Codex with a ChatGPT account." })
+        .mockResolvedValueOnce({ exitCode: 0, stdout: "review ok", stderr: "" });
+
+      const agent = new CodexAgent("codex", config, logger);
+      const result = await agent.reviewTask({ prompt: "review", role: "reviewer" });
+
+      expect(result.ok).toBe(true);
+      expect(runCommand).toHaveBeenCalledTimes(2);
+      const retryArgs = runCommand.mock.calls[1][1];
+      expect(retryArgs).not.toContain("--model");
+    });
+
+    it("does NOT retry when error is not model-related", async () => {
+      const config = { ...baseConfig, roles: { coder: { model: "o4-mini" }, reviewer: {} } };
+      runCommand.mockResolvedValue({ exitCode: 1, stdout: "", stderr: "connection timeout" });
+
+      const agent = new CodexAgent("codex", config, logger);
+      const result = await agent.runTask({ prompt: "test", role: "coder" });
+
+      expect(result.ok).toBe(false);
+      expect(runCommand).toHaveBeenCalledTimes(1);
+    });
+
+    it("does NOT retry when no custom model was used", async () => {
+      runCommand.mockResolvedValue({ exitCode: 1, stdout: "", stderr: "model is not supported" });
+
+      const agent = new CodexAgent("codex", baseConfig, logger);
+      const result = await agent.runTask({ prompt: "test", role: "coder" });
+
+      expect(result.ok).toBe(false);
+      expect(runCommand).toHaveBeenCalledTimes(1);
+    });
+  });
 });
