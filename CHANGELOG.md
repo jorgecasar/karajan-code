@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.36.0] - 2026-03-25
+
+### Added
+- **Budget tracking from real agent usage**: Claude agent extracts `tokens_in`, `tokens_out`, `cost_usd` and `model` from CLI JSON output. Codex agent parses `tokens used` from stdout. Budget display now shows real costs instead of "N/A"
+- **Token estimation fallback**: when agents don't report usage, budget tracker estimates tokens from output text length (~4 chars/token). Marked as `estimated: true` in budget entries
+- **Solomon error propagation**: Solomon failure details now logged to activity log, shown in event messages, saved in session checkpoints, and passed as escalation reason (previously showed "UNKNOWN")
+
+### Fixed
+- **Model-not-supported resilience**: all agents (Claude, Codex, Gemini, Aider, OpenCode) detect "model not supported" errors and automatically retry without the custom model flag, falling back to the agent's default model. Prevents pipeline failures when smart model selection picks a model unavailable for the user's account tier
+- **Solomon context for first rejections**: Solomon now receives `isFirstRejection`, `isRepeat`, `issueCategories` and `blockingIssues` in its prompt, enabling correct `approve_with_conditions` decisions on first reviewer rejections instead of unnecessary human escalation
+
 ## [1.35.0] - 2026-03-24
 
 ### Added
