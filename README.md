@@ -58,30 +58,78 @@ npm install -g karajan-code
 
 That's it. No Docker required (SonarQube uses Docker, but Karajan auto-manages it). No config files to copy. `kj init` auto-detects your installed agents.
 
-## Quick start
+## Three ways to use Karajan
+
+Karajan installs **three commands**: `kj`, `kj-tail`, and `karajan-mcp`.
+
+### 1. CLI — Direct from terminal
+
+Run Karajan directly. You see the full pipeline output in real time.
 
 ```bash
-# Run a task — Karajan handles the rest
 kj run "Create a utility function that validates Spanish DNI numbers, with tests"
-```
-
-[**▶ Watch the full pipeline demo**](https://karajancode.com#demo) — HU certification, triage, architecture, TDD, SonarQube, code review, Solomon arbitration, security audit.
-
-Karajan will:
-1. Triage the task complexity and activate the right roles
-2. Write tests first (TDD)
-3. Implement code to pass those tests
-4. Run SonarQube analysis (auto-starts Docker if needed)
-5. Review the code (Solomon evaluates every rejection)
-6. Iterate until approved or escalate to you
-
-```bash
-# More examples
 kj code "Add input validation to the signup form"     # Coder only
 kj review "Check the authentication changes"           # Review current diff
 kj audit "Full health analysis of this codebase"       # Read-only audit
 kj plan "Refactor the database layer"                  # Plan without coding
 ```
+
+### 2. MCP — Inside your AI agent
+
+This is the primary use case. Karajan runs as an MCP server inside Claude Code, Codex, or Gemini. You ask your AI agent to do something, and it delegates the heavy lifting to Karajan's pipeline.
+
+```
+You → Claude Code → kj_run (via MCP) → triage → coder → sonar → reviewer → tester → security
+```
+
+The MCP server auto-registers during `npm install`. Your AI agent sees 20 tools (`kj_run`, `kj_code`, `kj_review`, etc.) and uses them as needed.
+
+**The problem**: when Karajan runs inside an AI agent, you lose visibility. The agent shows you the final result, but not the pipeline stages, iterations, or Solomon decisions happening in real time.
+
+### 3. kj-tail — Monitor from a separate terminal
+
+**This is the companion tool.** Open a second terminal in the **same project directory** where your AI agent is working, and run:
+
+```bash
+kj-tail
+```
+
+You'll see the live pipeline output — stages, results, iterations, errors — as they happen. Same view as running `kj run` directly.
+
+```
+kj-tail                  # Follow pipeline in real time (default)
+kj-tail -v               # Verbose: include agent heartbeats and budget
+kj-tail -t               # Show timestamps
+kj-tail -s               # Snapshot: show current log and exit
+kj-tail -n 50            # Show last 50 lines then follow
+kj-tail --help           # Full options
+```
+
+> **Important**: `kj-tail` must run from the same directory where the AI agent is executing. It reads `<project>/.kj/run.log`, which is created when Karajan starts a pipeline via MCP.
+
+**Typical workflow:**
+
+```
+┌─────────────────────────┐    ┌─────────────────────────┐
+│  Terminal 1              │    │  Terminal 2              │
+│                          │    │                          │
+│  $ claude                │    │  $ kj-tail               │
+│  > implement the next    │    │                          │
+│    priority task         │    │  ├─ 📋 Triage: medium    │
+│                          │    │  ├─ 🔬 Researcher ✅     │
+│  (Claude calls kj_run   │    │  ├─ 🧠 Planner ✅        │
+│   via MCP — you see      │    │  ├─ 🔨 Coder ✅          │
+│   only the final result) │    │  ├─ 🔍 Sonar: OK        │
+│                          │    │  ├─ 👁️ Reviewer ❌       │
+│                          │    │  ├─ ⚖️ Solomon: 2 cond.  │
+│                          │    │  ├─ 🔨 Coder (iter 2) ✅ │
+│                          │    │  ├─ ✅ Review: APPROVED   │
+│                          │    │  ├─ 🧪 Tester: passed    │
+│                          │    │  └─ 🏁 Result: APPROVED  │
+└─────────────────────────┘    └─────────────────────────┘
+```
+
+[**▶ Watch the full pipeline demo**](https://karajancode.com#demo) — triage, architecture, TDD, SonarQube, code review, Solomon arbitration, security audit.
 
 ## The pipeline
 
@@ -123,15 +171,19 @@ Mix and match. Use Claude as coder and Codex as reviewer. Karajan auto-detects i
 
 ## MCP server — 20 tools
 
-Karajan is designed to be used as an MCP server inside your AI agent. After install, it auto-registers in Claude and Codex:
+After `npm install -g karajan-code`, the MCP server auto-registers in Claude and Codex. Manual config if needed:
 
 ```bash
-# Already done by npm install, but manual config if needed:
-# Add to ~/.claude.json → "mcpServers":
+# Claude: add to ~/.claude.json → "mcpServers":
 # { "karajan-mcp": { "command": "karajan-mcp" } }
+
+# Codex: add to ~/.codex/config.toml → [mcp_servers."karajan-mcp"]
+# command = "karajan-mcp"
 ```
 
 **20 tools** available: `kj_run`, `kj_code`, `kj_review`, `kj_plan`, `kj_audit`, `kj_scan`, `kj_doctor`, `kj_config`, `kj_report`, `kj_resume`, `kj_roles`, `kj_agents`, `kj_preflight`, `kj_status`, `kj_init`, `kj_discover`, `kj_triage`, `kj_researcher`, `kj_architect`, `kj_impeccable`.
+
+Use `kj-tail` in a separate terminal to see what the pipeline is doing in real time (see [Three ways to use Karajan](#three-ways-to-use-karajan)).
 
 ## The role architecture
 

@@ -129,33 +129,70 @@ Guias completas: [`docs/multi-instance.md`](multi-instance.md) | [`docs/install-
 
 `kj init` auto-detecta los agentes instalados. Si solo hay uno disponible, se asigna a todos los roles automaticamente.
 
-## Inicio rapido
+## Tres formas de usar Karajan
+
+Karajan instala **tres comandos**: `kj`, `kj-tail` y `karajan-mcp`.
+
+### 1. CLI — Directamente desde terminal
 
 ```bash
-# Ejecutar una tarea con defaults (claude=coder, codex=reviewer, TDD)
 kj run "Implementar autenticacion de usuario con JWT"
-
-# Solo coder (sin revision)
 kj code "Anadir validacion de inputs al formulario de registro"
-
-# Solo reviewer (revisar diff actual)
 kj review "Revisar los cambios de autenticacion"
+kj plan "Refactorizar la capa de base de datos"
+```
 
-# Generar un plan de implementacion
-kj plan "Refactorizar la capa de base de datos para usar connection pooling"
+### 2. MCP — Dentro de tu agente de IA
 
-# Pipeline completo con todas las opciones
-kj run "Corregir inyeccion SQL critica en el endpoint de busqueda" \
-  --coder claude \
-  --reviewer codex \
-  --reviewer-fallback claude \
-  --methodology tdd \
-  --enable-triage \
-  --enable-tester \
-  --enable-security \
-  --auto-commit \
-  --auto-push \
-  --max-iterations 5
+El caso de uso principal. Karajan corre como servidor MCP dentro de Claude Code, Codex o Gemini. El agente tiene acceso a 20 herramientas (`kj_run`, `kj_code`, `kj_review`, etc.) y delega el trabajo pesado al pipeline de Karajan.
+
+```
+Tu → Claude Code → kj_run (via MCP) → triage → coder → sonar → reviewer → tester → security
+```
+
+**El problema**: cuando Karajan corre dentro de un agente de IA, pierdes visibilidad. El agente te muestra el resultado final, pero no las etapas del pipeline, iteraciones o decisiones de Solomon en tiempo real.
+
+### 3. kj-tail — Monitorizar desde otro terminal
+
+**La herramienta companera.** Abre un segundo terminal en el **mismo directorio del proyecto** donde esta trabajando tu agente de IA:
+
+```bash
+kj-tail
+```
+
+Veras la salida del pipeline en vivo — etapas, resultados, iteraciones, errores — tal como ocurren.
+
+```bash
+kj-tail                  # Seguir pipeline en tiempo real (por defecto)
+kj-tail -v               # Verbose: incluir heartbeats de agente y presupuesto
+kj-tail -t               # Mostrar timestamps
+kj-tail -s               # Snapshot: mostrar log actual y salir
+kj-tail -n 50            # Mostrar ultimas 50 lineas y seguir
+kj-tail --help           # Todas las opciones
+```
+
+> **Importante**: `kj-tail` debe ejecutarse desde el mismo directorio donde el agente de IA esta trabajando. Lee `<proyecto>/.kj/run.log`, que se crea cuando Karajan arranca un pipeline via MCP.
+
+**Flujo tipico:**
+
+```
+┌──────────────────────────┐    ┌──────────────────────────┐
+│  Terminal 1               │    │  Terminal 2               │
+│                           │    │                           │
+│  $ claude                 │    │  $ kj-tail                │
+│  > implementa la          │    │                           │
+│    siguiente tarea        │    │  ├─ 📋 Triage: medium     │
+│    prioritaria            │    │  ├─ 🔬 Researcher ✅      │
+│                           │    │  ├─ 🧠 Planner ✅         │
+│  (Claude llama a kj_run   │    │  ├─ 🔨 Coder ✅           │
+│   via MCP — solo ves      │    │  ├─ 🔍 Sonar: OK         │
+│   el resultado final)     │    │  ├─ 👁️ Reviewer ❌        │
+│                           │    │  ├─ ⚖️ Solomon: 2 cond.   │
+│                           │    │  ├─ 🔨 Coder (iter 2) ✅  │
+│                           │    │  ├─ ✅ Review: APPROVED    │
+│                           │    │  ├─ 🧪 Tester: passed     │
+│                           │    │  └─ 🏁 Result: APPROVED   │
+└──────────────────────────┘    └──────────────────────────┘
 ```
 
 ## Comandos CLI
