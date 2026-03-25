@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# kj-tail — Colorized, filtered tail for Karajan run logs
-# Usage: kj-tail [project-dir] [-v|--verbose]
+# kj-tail — Real-time pipeline monitor for Karajan Code
+# Follows the run log and displays colorized, filtered output.
 
 set -euo pipefail
 
-# Colors
+VERSION="1.36.0"
+
+# ── Colors ──────────────────────────────────────────────
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
@@ -13,58 +15,309 @@ CYAN='\033[0;36m'
 MAGENTA='\033[0;35m'
 GRAY='\033[0;90m'
 BOLD='\033[1m'
+DIM='\033[2m'
 RESET='\033[0m'
 
+# ── Defaults ────────────────────────────────────────────
 VERBOSE=false
+SHOW_AGENT_OUTPUT=false
+SHOW_TIMESTAMPS=false
+FOLLOW=true
+NUM_LINES=0
 PROJECT_DIR=""
 
-for arg in "$@"; do
-  case "$arg" in
-    -v|--verbose) VERBOSE=true ;;
-    *) PROJECT_DIR="$arg" ;;
+# ── Help ────────────────────────────────────────────────
+show_help() {
+  cat <<EOF
+${BOLD}kj-tail${RESET} — Real-time pipeline monitor for Karajan Code
+
+${BOLD}USAGE${RESET}
+  kj-tail [options] [project-dir]
+
+${BOLD}DESCRIPTION${RESET}
+  Follows the Karajan run log (<project>/.kj/run.log) and displays
+  colorized, filtered output. By default shows the same pipeline
+  progress view as 'kj run': stages, results, iterations, and errors.
+
+  Run this in a separate terminal while kj executes via MCP/CLI.
+
+${BOLD}OPTIONS${RESET}
+  -v, --verbose       Show agent heartbeats, budget, and metadata
+  -a, --agent-output  Show raw agent output lines (very noisy)
+  -t, --timestamps    Show timestamps on each line
+  -n, --lines <N>     Show last N lines then follow (default: follow only new)
+  -s, --snapshot      Show current log (no follow) — like 'cat' with colors
+  -h, --help          Show this help
+  --version           Show version
+
+${BOLD}EXAMPLES${RESET}
+  kj-tail                  # Follow current directory's run log
+  kj-tail /path/to/project # Follow a specific project's log
+  kj-tail -v               # Verbose: include heartbeats and budget
+  kj-tail -a               # Show everything including agent output
+  kj-tail -n 50            # Show last 50 lines then follow
+  kj-tail -s               # Snapshot: show full log and exit
+  kj-tail -t               # Show timestamps
+
+${BOLD}LOG LOCATION${RESET}
+  <project-dir>/.kj/run.log
+  Created automatically when kj_run, kj_code, or kj_review starts.
+
+EOF
+  exit 0
+}
+
+# ── Parse args ──────────────────────────────────────────
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help) show_help ;;
+    --version) echo "kj-tail $VERSION"; exit 0 ;;
+    -v|--verbose) VERBOSE=true; shift ;;
+    -a|--agent-output) SHOW_AGENT_OUTPUT=true; VERBOSE=true; shift ;;
+    -t|--timestamps) SHOW_TIMESTAMPS=true; shift ;;
+    -s|--snapshot) FOLLOW=false; shift ;;
+    -n|--lines)
+      shift
+      NUM_LINES="${1:-50}"
+      shift
+      ;;
+    -*)
+      echo -e "${RED}Unknown option: $1${RESET}" >&2
+      echo "Run 'kj-tail --help' for usage." >&2
+      exit 1
+      ;;
+    *) PROJECT_DIR="$1"; shift ;;
   esac
 done
 
 PROJECT_DIR="${PROJECT_DIR:-$(pwd)}"
 LOG_FILE="${PROJECT_DIR}/.kj/run.log"
 
+# ── Locate log ──────────────────────────────────────────
 if [[ ! -f "$LOG_FILE" ]]; then
-  echo -e "${RED}No run.log found at ${LOG_FILE}${RESET}"
-  echo "Usage: kj-tail [project-dir] [-v|--verbose]"
+  echo -e "${RED}No run log found at ${LOG_FILE}${RESET}"
+  echo ""
+  echo "The run log is created when Karajan starts a pipeline."
+  echo "Make sure you're in the project directory, or pass it as argument:"
+  echo ""
+  echo "  kj-tail /path/to/project"
+  echo ""
   exit 1
 fi
 
-echo -e "${BOLD}${CYAN}Karajan tail${RESET} ${GRAY}— ${LOG_FILE}${RESET}"
-echo -e "${GRAY}Ctrl+C to stop. Use -v to include agent output.${RESET}"
+# ── Filter & colorize ──────────────────────────────────
+filter_line() {
+  local line="$1"
+  local ts=""
+  local clean="$line"
+
+  # Extract and optionally strip timestamp (HH:MM:SS.mmm)
+  if [[ "$clean" =~ ^([0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3})\ (.*) ]]; then
+    ts="${BASH_REMATCH[1]}"
+    clean="${BASH_REMATCH[2]}"
+  fi
+
+  # Skip noise in default mode
+  if [[ "$VERBOSE" == "false" ]]; then
+    # Skip agent heartbeats
+    [[ "$clean" == *"[agent:heartbeat]"* ]] && return
+    [[ "$clean" == *"heartbeat"* ]] && return
+    # Skip budget lines
+    [[ "$clean" == *"Budget:"* ]] && return
+    # Skip agent raw output
+    [[ "$clean" == *"[agent:output]"* ]] && return
+    # Skip internal metadata
+    [[ "$clean" == *"[agent:start]"* ]] && return
+    [[ "$clean" == *"[agent:end]"* ]] && return
+    # Skip noisy JSON dumps (system init, tool lists, etc.)
+    [[ "${#clean}" -gt 500 ]] && return
+  fi
+
+  if [[ "$SHOW_AGENT_OUTPUT" == "false" ]]; then
+    # Skip raw agent output (often JSON/stream data)
+    [[ "$clean" == "{"* ]] && [[ "$clean" == *"}" ]] && return
+    [[ "$clean" == *'"type":'* ]] && [[ "${#clean}" -gt 200 ]] && return
+  fi
+
+  # Build prefix
+  local prefix=""
+  if [[ "$SHOW_TIMESTAMPS" == "true" ]] && [[ -n "$ts" ]]; then
+    prefix="${DIM}${ts}${RESET} "
+  fi
+
+  # ── Colorize by content ──────────────────────────────
+  # Session markers
+  if [[ "$clean" == "---"* ]]; then
+    echo -e "${prefix}${BOLD}${CYAN}${clean}${RESET}"
+    return
+  fi
+
+  # Stage: started/finished
+  if [[ "$clean" == *"started"* ]] && [[ "$clean" == *"[kj_"* ]]; then
+    echo -e "${prefix}${BOLD}${CYAN}▶ ${clean}${RESET}"
+    return
+  fi
+  if [[ "$clean" == *"finished"* ]] && [[ "$clean" == *"[kj_"* ]]; then
+    echo -e "${prefix}${BOLD}${GREEN}✓ ${clean}${RESET}"
+    return
+  fi
+
+  # Iterations
+  if [[ "$clean" == *"[iteration]"* ]] || [[ "$clean" == *"Iteration "* ]]; then
+    echo -e "${prefix}${BOLD}${clean}${RESET}"
+    return
+  fi
+
+  # Coder
+  if [[ "$clean" == *"[coder"* ]] || [[ "$clean" == *"Coder"* ]]; then
+    echo -e "${prefix}${GREEN}  ├─ 🔨 ${clean}${RESET}"
+    return
+  fi
+
+  # Reviewer
+  if [[ "$clean" == *"APPROVED"* ]]; then
+    echo -e "${prefix}${GREEN}  ├─ ✅ ${clean}${RESET}"
+    return
+  fi
+  if [[ "$clean" == *"REJECTED"* ]]; then
+    echo -e "${prefix}${RED}  ├─ ❌ ${clean}${RESET}"
+    return
+  fi
+  if [[ "$clean" == *"[reviewer"* ]]; then
+    echo -e "${prefix}${YELLOW}  ├─ 👁️  ${clean}${RESET}"
+    return
+  fi
+
+  # Solomon
+  if [[ "$clean" == *"[solomon"* ]] || [[ "$clean" == *"Solomon"* ]]; then
+    echo -e "${prefix}${MAGENTA}  ├─ ⚖️  ${clean}${RESET}"
+    return
+  fi
+
+  # Sonar
+  if [[ "$clean" == *"[sonar"* ]] || [[ "$clean" == *"SonarQube"* ]] || [[ "$clean" == *"Quality gate"* ]]; then
+    echo -e "${prefix}${BLUE}  ├─ 🔍 ${clean}${RESET}"
+    return
+  fi
+
+  # Tester
+  if [[ "$clean" == *"[tester"* ]] || [[ "$clean" == *"Tester"* ]]; then
+    echo -e "${prefix}${CYAN}  ├─ 🧪 ${clean}${RESET}"
+    return
+  fi
+
+  # Security
+  if [[ "$clean" == *"[security"* ]] || [[ "$clean" == *"Security"* ]]; then
+    echo -e "${prefix}${CYAN}  ├─ 🔒 ${clean}${RESET}"
+    return
+  fi
+
+  # Researcher
+  if [[ "$clean" == *"[researcher"* ]] || [[ "$clean" == *"Researcher"* ]]; then
+    echo -e "${prefix}${CYAN}  ├─ 🔬 ${clean}${RESET}"
+    return
+  fi
+
+  # Architect
+  if [[ "$clean" == *"[architect"* ]] || [[ "$clean" == *"Architect"* ]]; then
+    echo -e "${prefix}${CYAN}  ├─ 🏗️  ${clean}${RESET}"
+    return
+  fi
+
+  # Planner
+  if [[ "$clean" == *"[planner"* ]] || [[ "$clean" == *"Planner"* ]]; then
+    echo -e "${prefix}${CYAN}  ├─ 🧠 ${clean}${RESET}"
+    return
+  fi
+
+  # Triage
+  if [[ "$clean" == *"[triage"* ]] || [[ "$clean" == *"Triage"* ]]; then
+    echo -e "${prefix}${CYAN}  ├─ 📋 ${clean}${RESET}"
+    return
+  fi
+
+  # Audit
+  if [[ "$clean" == *"[audit"* ]] || [[ "$clean" == *"Audit"* ]]; then
+    echo -e "${prefix}${CYAN}  ├─ 📊 ${clean}${RESET}"
+    return
+  fi
+
+  # Preflight
+  if [[ "$clean" == *"[preflight"* ]] || [[ "$clean" == *"Preflight"* ]]; then
+    echo -e "${prefix}${GRAY}  ├─ ⚙️  ${clean}${RESET}"
+    return
+  fi
+
+  # TDD
+  if [[ "$clean" == *"TDD"* ]] || [[ "$clean" == *"tdd"* ]]; then
+    echo -e "${prefix}${GREEN}  ├─ 📋 ${clean}${RESET}"
+    return
+  fi
+
+  # Errors / failures
+  if [[ "$clean" == *"fail"*  || "$clean" == *"FAIL"* || "$clean" == *"error"* || "$clean" == *"ERROR"* ]]; then
+    echo -e "${prefix}${RED}  ├─ ⚠️  ${clean}${RESET}"
+    return
+  fi
+
+  # Standby / rate limit
+  if [[ "$clean" == *"[standby]"* ]] || [[ "$clean" == *"standby"* ]] || [[ "$clean" == *"rate limit"* ]]; then
+    echo -e "${prefix}${YELLOW}  ├─ ⏸️  ${clean}${RESET}"
+    return
+  fi
+
+  # Model fallback
+  if [[ "$clean" == *"not supported"* ]] || [[ "$clean" == *"retrying with"* ]]; then
+    echo -e "${prefix}${YELLOW}  ├─ 🔄 ${clean}${RESET}"
+    return
+  fi
+
+  # Result line
+  if [[ "$clean" == *"Result:"* ]]; then
+    echo -e "${prefix}${BOLD}${GREEN}🏁 ${clean}${RESET}"
+    return
+  fi
+
+  # Budget (verbose only — already filtered above)
+  if [[ "$clean" == *"Budget:"* ]]; then
+    echo -e "${prefix}${GRAY}  ├─ 💰 ${clean}${RESET}"
+    return
+  fi
+
+  # Agent heartbeat (verbose only)
+  if [[ "$clean" == *"heartbeat"* ]] || [[ "$clean" == *"active —"* ]] || [[ "$clean" == *"elapsed"* ]]; then
+    echo -e "${prefix}${GRAY}  ├─ • ${clean}${RESET}"
+    return
+  fi
+
+  # Default
+  echo -e "${prefix}  ├─ ${clean}"
+}
+
+# ── Header ──────────────────────────────────────────────
+echo -e "${BOLD}${CYAN}kj-tail${RESET} ${DIM}v${VERSION} — ${LOG_FILE}${RESET}"
+if [[ "$FOLLOW" == "true" ]]; then
+  echo -e "${GRAY}Ctrl+C to stop${RESET}${VERBOSE:+ ${DIM}(verbose)${RESET}}"
+fi
 echo ""
 
-tail -F "$LOG_FILE" 2>/dev/null | while IFS= read -r line; do
-  # Strip timestamp (HH:MM:SS.mmm)
-  clean="${line#[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9] }"
+# ── Run ─────────────────────────────────────────────────
+if [[ "$FOLLOW" == "false" ]]; then
+  # Snapshot mode: show full log and exit
+  while IFS= read -r line; do
+    filter_line "$line"
+  done < "$LOG_FILE"
+  exit 0
+fi
 
-  # Strip [agent:output] tag — it's the default, no need to show it
-  clean="${clean/\[agent:output\] /}"
-
-  # Colorize by content
-  if [[ "$clean" == *"[coder:start]"* ]] || [[ "$clean" == *"[coder:done]"* ]] || [[ "$clean" == *"[coder]"* ]]; then
-    echo -e "${GREEN}${clean}${RESET}"
-  elif [[ "$clean" == *"[reviewer"* ]]; then
-    echo -e "${YELLOW}${clean}${RESET}"
-  elif [[ "$clean" == *"[sonar"* ]]; then
-    echo -e "${BLUE}${clean}${RESET}"
-  elif [[ "$clean" == *"[solomon"* ]]; then
-    echo -e "${MAGENTA}${clean}${RESET}"
-  elif [[ "$clean" == *"[iteration"* ]] || [[ "$clean" == *"[session"* ]] || [[ "$clean" == *"[kj_run]"* ]] || [[ "$clean" == *"[kj_code]"* ]]; then
-    echo -e "${BOLD}${CYAN}${clean}${RESET}"
-  elif [[ "$clean" == *"fail"* ]] || [[ "$clean" == *"error"* ]] || [[ "$clean" == *"FAIL"* ]] || [[ "$clean" == *"ERROR"* ]]; then
-    echo -e "${RED}${clean}${RESET}"
-  elif [[ "$clean" == *"[agent:heartbeat]"* ]]; then
-    echo -e "${GRAY}${clean}${RESET}"
-  elif [[ "$clean" == *"[standby]"* ]] || [[ "$clean" == *"standby"* ]]; then
-    echo -e "${YELLOW}${clean}${RESET}"
-  elif [[ "$clean" == "---"* ]]; then
-    echo -e "${BOLD}${clean}${RESET}"
-  else
-    echo "$clean"
-  fi
-done
+if [[ "$NUM_LINES" -gt 0 ]]; then
+  # Show last N lines then follow
+  tail -n "$NUM_LINES" -F "$LOG_FILE" 2>/dev/null | while IFS= read -r line; do
+    filter_line "$line"
+  done
+else
+  # Follow only new lines
+  tail -n 0 -F "$LOG_FILE" 2>/dev/null | while IFS= read -r line; do
+    filter_line "$line"
+  done
+fi
