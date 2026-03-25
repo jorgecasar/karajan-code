@@ -1,7 +1,7 @@
 const DEFAULT_MODEL_TIERS = {
-  claude: { trivial: "claude/haiku", simple: "claude/haiku", medium: "claude/sonnet", complex: "claude/opus" },
-  codex: { trivial: "codex/o4-mini", simple: "codex/o4-mini", medium: "codex/o4-mini", complex: "codex/o3" },
-  gemini: { trivial: "gemini/flash", simple: "gemini/flash", medium: "gemini/pro", complex: "gemini/pro" },
+  claude: { trivial: "haiku", simple: "haiku", medium: "sonnet", complex: "opus" },
+  codex: { trivial: "o4-mini", simple: "o4-mini", medium: "o4-mini", complex: "o3" },
+  gemini: { trivial: "gemini-2.0-flash", simple: "gemini-2.0-flash", medium: "gemini-2.5-pro", complex: "gemini-2.5-pro" },
   aider: { trivial: null, simple: null, medium: null, complex: null }
 };
 

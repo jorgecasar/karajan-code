@@ -212,7 +212,7 @@ describe("orchestrator budget integration", () => {
           runTask: vi.fn().mockResolvedValue({
             ok: true,
             output: "",
-            usage: { tokens_in: 1000000, tokens_out: 1000000, model: "codex/o4-mini" }
+            usage: { tokens_in: 1000000, tokens_out: 1000000, model: "o4-mini" }
           })
         };
       }

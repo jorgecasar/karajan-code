@@ -10,23 +10,23 @@ import {
 
 describe("model-registry", () => {
   describe("built-in models", () => {
-    it("registers all 11 built-in models", () => {
+    it("registers all 12 built-in models", () => {
       const models = getRegisteredModels();
-      expect(models.length).toBeGreaterThanOrEqual(11);
+      expect(models.length).toBeGreaterThanOrEqual(12);
     });
 
-    it("returns pricing for claude/sonnet", () => {
-      const pricing = getModelPricing("claude/sonnet");
+    it("returns pricing for sonnet", () => {
+      const pricing = getModelPricing("sonnet");
       expect(pricing).toEqual({ input_per_million: 3, output_per_million: 15 });
     });
 
-    it("returns pricing for codex/o4-mini", () => {
-      const pricing = getModelPricing("codex/o4-mini");
+    it("returns pricing for o4-mini", () => {
+      const pricing = getModelPricing("o4-mini");
       expect(pricing).toEqual({ input_per_million: 1.5, output_per_million: 4 });
     });
 
-    it("returns pricing for gemini/flash", () => {
-      const pricing = getModelPricing("gemini/flash");
+    it("returns pricing for gemini-2.0-flash", () => {
+      const pricing = getModelPricing("gemini-2.0-flash");
       expect(pricing).toEqual({ input_per_million: 0.075, output_per_million: 0.3 });
     });
 
@@ -96,9 +96,9 @@ describe("model-registry", () => {
 
   describe("getModelInfo", () => {
     it("returns full info for a registered model", () => {
-      const info = getModelInfo("claude/opus");
+      const info = getModelInfo("opus");
       expect(info).toEqual({
-        name: "claude/opus",
+        name: "opus",
         provider: "anthropic",
         pricing: { input_per_million: 15, output_per_million: 75 },
         deprecated: null,
@@ -114,8 +114,8 @@ describe("model-registry", () => {
     it("returns a plain object with all registered models", () => {
       const table = buildDefaultPricingTable();
       expect(table["claude"]).toEqual({ input_per_million: 3, output_per_million: 15 });
-      expect(table["codex/o3"]).toEqual({ input_per_million: 10, output_per_million: 40 });
-      expect(table["gemini/flash"]).toEqual({ input_per_million: 0.075, output_per_million: 0.3 });
+      expect(table["o3"]).toEqual({ input_per_million: 10, output_per_million: 40 });
+      expect(table["gemini-2.0-flash"]).toEqual({ input_per_million: 0.075, output_per_million: 0.3 });
     });
 
     it("returns defensive copies (mutations do not affect registry)", () => {

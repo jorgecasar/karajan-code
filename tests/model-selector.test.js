@@ -13,7 +13,7 @@ describe("getDefaultModelTiers", () => {
     expect(a).toEqual(b);
     expect(a).not.toBe(b);
     a.claude.trivial = "mutated";
-    expect(getDefaultModelTiers().claude.trivial).toBe("claude/haiku");
+    expect(getDefaultModelTiers().claude.trivial).toBe("haiku");
   });
 
   it("includes all four providers", () => {
@@ -58,28 +58,28 @@ describe("getDefaultRoleOverrides", () => {
 });
 
 describe("resolveModelForRole", () => {
-  it("maps claude/simple → claude/haiku", () => {
-    expect(resolveModelForRole({ role: "coder", provider: "claude", level: "simple" })).toBe("claude/haiku");
+  it("maps claude/simple → haiku", () => {
+    expect(resolveModelForRole({ role: "coder", provider: "claude", level: "simple" })).toBe("haiku");
   });
 
-  it("maps claude/complex → claude/opus", () => {
-    expect(resolveModelForRole({ role: "coder", provider: "claude", level: "complex" })).toBe("claude/opus");
+  it("maps claude/complex → opus", () => {
+    expect(resolveModelForRole({ role: "coder", provider: "claude", level: "complex" })).toBe("opus");
   });
 
-  it("maps codex/trivial → codex/o4-mini", () => {
-    expect(resolveModelForRole({ role: "coder", provider: "codex", level: "trivial" })).toBe("codex/o4-mini");
+  it("maps codex/trivial → o4-mini", () => {
+    expect(resolveModelForRole({ role: "coder", provider: "codex", level: "trivial" })).toBe("o4-mini");
   });
 
-  it("maps codex/complex → codex/o3", () => {
-    expect(resolveModelForRole({ role: "coder", provider: "codex", level: "complex" })).toBe("codex/o3");
+  it("maps codex/complex → o3", () => {
+    expect(resolveModelForRole({ role: "coder", provider: "codex", level: "complex" })).toBe("o3");
   });
 
-  it("maps gemini/trivial → gemini/flash", () => {
-    expect(resolveModelForRole({ role: "coder", provider: "gemini", level: "trivial" })).toBe("gemini/flash");
+  it("maps gemini/trivial → gemini-2.0-flash", () => {
+    expect(resolveModelForRole({ role: "coder", provider: "gemini", level: "trivial" })).toBe("gemini-2.0-flash");
   });
 
-  it("maps gemini/complex → gemini/pro", () => {
-    expect(resolveModelForRole({ role: "coder", provider: "gemini", level: "complex" })).toBe("gemini/pro");
+  it("maps gemini/complex → gemini-2.5-pro", () => {
+    expect(resolveModelForRole({ role: "coder", provider: "gemini", level: "complex" })).toBe("gemini-2.5-pro");
   });
 
   it("returns null for aider (no sub-models)", () => {
@@ -104,22 +104,22 @@ describe("resolveModelForRole", () => {
 
   it("applies reviewer role override: trivial → medium tier", () => {
     const result = resolveModelForRole({ role: "reviewer", provider: "claude", level: "trivial" });
-    expect(result).toBe("claude/sonnet");
+    expect(result).toBe("sonnet");
   });
 
   it("applies reviewer role override: simple → medium tier", () => {
     const result = resolveModelForRole({ role: "reviewer", provider: "codex", level: "simple" });
-    expect(result).toBe("codex/o4-mini");
+    expect(result).toBe("o4-mini");
   });
 
   it("applies triage role override: complex → simple tier", () => {
     const result = resolveModelForRole({ role: "triage", provider: "claude", level: "complex" });
-    expect(result).toBe("claude/haiku");
+    expect(result).toBe("haiku");
   });
 
   it("applies triage role override: medium → simple tier", () => {
     const result = resolveModelForRole({ role: "triage", provider: "gemini", level: "medium" });
-    expect(result).toBe("gemini/flash");
+    expect(result).toBe("gemini-2.0-flash");
   });
 
   it("uses custom tierMap when provided", () => {
@@ -130,7 +130,7 @@ describe("resolveModelForRole", () => {
   it("uses custom roleOverrides when provided", () => {
     const customOverrides = { coder: { trivial: "complex" } };
     const result = resolveModelForRole({ role: "coder", provider: "claude", level: "trivial", roleOverrides: customOverrides });
-    expect(result).toBe("claude/opus");
+    expect(result).toBe("opus");
   });
 });
 
@@ -146,16 +146,16 @@ describe("selectModelsForRoles", () => {
 
   it("selects models for all roles based on level", () => {
     const { modelOverrides } = selectModelsForRoles({ level: "simple", config: baseConfig });
-    expect(modelOverrides.coder).toBe("claude/haiku");
-    expect(modelOverrides.reviewer).toBe("codex/o4-mini");
-    expect(modelOverrides.triage).toBe("claude/haiku");
+    expect(modelOverrides.coder).toBe("haiku");
+    expect(modelOverrides.reviewer).toBe("o4-mini");
+    expect(modelOverrides.triage).toBe("haiku");
   });
 
   it("selects complex models for complex level", () => {
     const { modelOverrides } = selectModelsForRoles({ level: "complex", config: baseConfig });
-    expect(modelOverrides.coder).toBe("claude/opus");
-    expect(modelOverrides.reviewer).toBe("codex/o3");
-    expect(modelOverrides.triage).toBe("claude/haiku");
+    expect(modelOverrides.coder).toBe("opus");
+    expect(modelOverrides.reviewer).toBe("o3");
+    expect(modelOverrides.triage).toBe("haiku");
   });
 
   it("skips roles with explicit model set", () => {
@@ -163,7 +163,7 @@ describe("selectModelsForRoles", () => {
       ...baseConfig,
       roles: {
         ...baseConfig.roles,
-        coder: { provider: "claude", model: "claude/opus" }
+        coder: { provider: "claude", model: "opus" }
       }
     };
     const { modelOverrides } = selectModelsForRoles({ level: "trivial", config });
@@ -210,17 +210,17 @@ describe("selectModelsForRoles", () => {
     const config = {
       ...baseConfig,
       model_selection: {
-        tiers: { claude: { simple: "claude/sonnet" } },
+        tiers: { claude: { simple: "sonnet" } },
         role_overrides: {}
       }
     };
     const { modelOverrides } = selectModelsForRoles({ level: "simple", config });
-    expect(modelOverrides.coder).toBe("claude/sonnet");
+    expect(modelOverrides.coder).toBe("sonnet");
   });
 
   it("only selects for specified roles when roles param provided", () => {
     const { modelOverrides } = selectModelsForRoles({ level: "simple", config: baseConfig, roles: ["coder"] });
-    expect(modelOverrides.coder).toBe("claude/haiku");
+    expect(modelOverrides.coder).toBe("haiku");
     expect(modelOverrides.reviewer).toBeUndefined();
   });
 
