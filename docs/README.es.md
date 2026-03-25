@@ -195,6 +195,71 @@ kj-tail --help           # Todas las opciones
 └──────────────────────────┘    └──────────────────────────┘
 ```
 
+**Ejemplo con pipeline completo** — tarea compleja con todos los roles:
+
+```
+┌─ Terminal 1 ─────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│  $ claude                                                                    │
+│                                                                              │
+│  > Construye una API REST para un sistema de reservas. Requisitos:           │
+│  > - Express + TypeScript con validacion Zod en cada endpoint                │
+│  > - Endpoints: POST /bookings, GET /bookings/:id,                           │
+│  >   PATCH /bookings/:id/cancel                                              │
+│  > - Una reserva tiene: id, guestName, roomType (standard|suite|penthouse),  │
+│  >   checkIn, checkOut, status (confirmed|cancelled)                         │
+│  > - Validar: checkOut posterior a checkIn, sin fechas pasadas,              │
+│  >   roomType debe ser un valor valido del enum                              │
+│  > - Cancelar devuelve 409 si ya esta cancelada                              │
+│  > - Usa TDD. Ejecutalo con Karajan con architect y planner activos,         │
+│  >   modo paranoid. Coder claude, reviewer codex.                            │
+│                                                                              │
+│  Claude llama a kj_run via MCP con:                                          │
+│    --enable-architect --enable-researcher --enable-planner --mode paranoid    │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌─ Terminal 2: kj-tail ────────────────────────────────────────────────────────┐
+│                                                                              │
+│  kj-tail v1.36.1 — .kj/run.log                                              │
+│                                                                              │
+│  ├─ 📋 Triage: medium (sw) — activando researcher, architect, planner        │
+│  ├─ ⚙️ Preflight passed — all checks OK                                     │
+│  ├─ 🔬 Researcher: 8 ficheros, 3 patrones, 5 restricciones                  │
+│  ├─ 🏗️ Architect: diseno 3 capas (routes → service → validators)            │
+│  ├─ 🧠 Planner: 6 pasos — tests primero, luego rutas, servicio, validadores │
+│  │                                                                           │
+│  ▶ Iteracion 1/5                                                             │
+│  ├─ 🔨 Coder (claude): 3 endpoints + 18 tests                               │
+│  ├─ 📋 TDD: PASS (3 src, 2 test)                                            │
+│  ├─ 🔍 Sonar: Quality gate OK                                               │
+│  ├─ 👁️ Reviewer (codex): REJECTED (2 blocking)                              │
+│  │   "Falta 404 para GET booking inexistente"                                │
+│  │   "Endpoint cancel sin test de idempotencia"                              │
+│  ├─ ⚖️ Solomon: approve_with_conditions (2 condiciones)                     │
+│  │   "Anadir respuesta 404 y test para GET /bookings/:id con id desconocido" │
+│  │   "Anadir test: cancelar reserva ya cancelada devuelve 409, no 500"       │
+│  │                                                                           │
+│  ▶ Iteracion 2/5                                                             │
+│  ├─ 🔨 Coder (claude): corregido — 22 tests                                 │
+│  ├─ 📋 TDD: PASS                                                            │
+│  ├─ 🔍 Sonar: OK                                                            │
+│  ├─ 👁️ Reviewer (codex): APPROVED                                           │
+│  ├─ 🧪 Tester: passed — cobertura 94%, 22 tests                             │
+│  ├─ 🔒 Security: passed — 0 criticos, 1 bajo (helmet recomendado)           │
+│  ├─ 📊 Audit: CERTIFIED (3 advertencias)                                    │
+│  │                                                                           │
+│  🏁 Resultado: APPROVED                                                      │
+│     🔬 Investigacion: 8 ficheros, 3 patrones                                 │
+│     🗺 Plan: 6 pasos (tests primero)                                         │
+│     🧪 Cobertura: 94%, 22 tests                                              │
+│     🔒 Seguridad: OK                                                         │
+│     🔍 Sonar: OK                                                             │
+│     💰 Presupuesto: $0.42 (claude: $0.38, codex: $0.04)                      │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
 ## Comandos CLI
 
 Consulta la [documentacion completa de comandos](../README.md#cli-commands) en el README principal (ingles). Resumen:
