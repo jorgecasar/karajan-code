@@ -243,4 +243,75 @@ describe("CodexAgent", () => {
       expect(runCommand).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe("token usage extraction", () => {
+    it("extracts token count from 'tokens used' line in stdout", async () => {
+      runCommand.mockResolvedValue({
+        exitCode: 0,
+        stdout: "some output\ntokens used\n9,512\n",
+        stderr: ""
+      });
+
+      const agent = new CodexAgent("codex", baseConfig, logger);
+      const result = await agent.runTask({ prompt: "test", role: "coder" });
+
+      expect(result.ok).toBe(true);
+      expect(result.tokens_in).toBe(0);
+      expect(result.tokens_out).toBe(9512);
+    });
+
+    it("extracts token count without comma separators", async () => {
+      runCommand.mockResolvedValue({
+        exitCode: 0,
+        stdout: "done\ntokens used\n512\n",
+        stderr: ""
+      });
+
+      const agent = new CodexAgent("codex", baseConfig, logger);
+      const result = await agent.runTask({ prompt: "test", role: "coder" });
+
+      expect(result.tokens_out).toBe(512);
+    });
+
+    it("returns no token fields when stdout has no token info", async () => {
+      runCommand.mockResolvedValue({
+        exitCode: 0,
+        stdout: "just regular output",
+        stderr: ""
+      });
+
+      const agent = new CodexAgent("codex", baseConfig, logger);
+      const result = await agent.runTask({ prompt: "test", role: "coder" });
+
+      expect(result.ok).toBe(true);
+      expect(result.tokens_in).toBeUndefined();
+      expect(result.tokens_out).toBeUndefined();
+    });
+
+    it("extracts tokens from reviewTask stdout as well", async () => {
+      runCommand.mockResolvedValue({
+        exitCode: 0,
+        stdout: "review done\ntokens used\n15,000\n",
+        stderr: ""
+      });
+
+      const agent = new CodexAgent("codex", baseConfig, logger);
+      const result = await agent.reviewTask({ prompt: "review", role: "reviewer" });
+
+      expect(result.tokens_out).toBe(15000);
+    });
+
+    it("handles large token counts with multiple comma separators", async () => {
+      runCommand.mockResolvedValue({
+        exitCode: 0,
+        stdout: "output\ntokens used\n1,234,567\n",
+        stderr: ""
+      });
+
+      const agent = new CodexAgent("codex", baseConfig, logger);
+      const result = await agent.runTask({ prompt: "test", role: "coder" });
+
+      expect(result.tokens_out).toBe(1234567);
+    });
+  });
 });

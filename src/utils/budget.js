@@ -40,18 +40,22 @@ export function extractUsageMetrics(result, defaultModel = null) {
     null;
 
   // If no real token data AND no explicit cost, estimate from prompt/output sizes.
-  // Estimation is opt-in: only triggered when result.promptSize is explicitly provided.
+  // Primary: uses result.promptSize when explicitly provided.
+  // Fallback: estimates from result.output or result.error text length.
   let estimated = false;
   let finalTokensIn = tokens_in;
   let finalTokensOut = tokens_out;
   const hasExplicitCost = cost_usd !== undefined && cost_usd !== null && cost_usd !== "";
-  if (!tokens_in && !tokens_out && !hasExplicitCost && result?.promptSize > 0) {
-    const promptSize = result.promptSize;
-    const outputSize = (result?.output || result?.summary || "").length;
-    const est = estimateTokens(promptSize, outputSize);
-    finalTokensIn = est.tokens_in;
-    finalTokensOut = est.tokens_out;
-    estimated = true;
+  if (!tokens_in && !tokens_out && !hasExplicitCost) {
+    const outputText = result?.output || result?.error || result?.summary || "";
+    const promptSize = result?.promptSize || 0;
+    const MIN_TEXT_FOR_ESTIMATION = 40;
+    if (promptSize > 0 || outputText.length >= MIN_TEXT_FOR_ESTIMATION) {
+      const est = estimateTokens(promptSize, outputText.length);
+      finalTokensIn = est.tokens_in;
+      finalTokensOut = est.tokens_out;
+      estimated = true;
+    }
   }
 
   return { tokens_in: finalTokensIn, tokens_out: finalTokensOut, cost_usd, model, estimated };

@@ -346,4 +346,97 @@ describe("ClaudeAgent", () => {
       expect(args).not.toContain("--model");
     });
   });
+
+  describe("usage metrics extraction", () => {
+    it("extracts tokens and cost from NDJSON result line (json mode)", async () => {
+      const ndjson = JSON.stringify({
+        type: "result",
+        result: "done",
+        total_cost_usd: 0.117,
+        usage: { input_tokens: 3000, output_tokens: 4000 },
+        modelUsage: { "claude-opus-4-6[1m]": { inputTokens: 3000, outputTokens: 4000, costUSD: 0.117 } }
+      });
+      runCommand.mockResolvedValue({ exitCode: 0, stdout: "", stderr: ndjson });
+
+      const agent = new ClaudeAgent("claude", baseConfig, logger);
+      const result = await agent.runTask({ prompt: "test", role: "coder" });
+
+      expect(result.ok).toBe(true);
+      expect(result.tokens_in).toBe(3000);
+      expect(result.tokens_out).toBe(4000);
+      expect(result.cost_usd).toBe(0.117);
+      expect(result.model).toBe("claude-opus-4-6[1m]");
+    });
+
+    it("extracts usage from multi-line NDJSON (stream-json mode)", async () => {
+      const ndjson = [
+        '{"type":"assistant","message":{"content":[{"type":"text","text":"thinking..."}]}}',
+        JSON.stringify({
+          type: "result",
+          result: "final answer",
+          total_cost_usd: 0.05,
+          usage: { input_tokens: 1500, output_tokens: 2000 },
+          modelUsage: { "sonnet": { inputTokens: 1500, outputTokens: 2000, costUSD: 0.05 } }
+        })
+      ].join("\n");
+      runCommand.mockResolvedValue({ exitCode: 0, stdout: "", stderr: ndjson });
+
+      const agent = new ClaudeAgent("claude", baseConfig, logger);
+      const result = await agent.runTask({ prompt: "test", role: "coder", onOutput: vi.fn() });
+
+      expect(result.tokens_in).toBe(1500);
+      expect(result.tokens_out).toBe(2000);
+      expect(result.cost_usd).toBe(0.05);
+      expect(result.model).toBe("sonnet");
+    });
+
+    it("returns null usage fields when no result line has usage data", async () => {
+      runCommand.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "plain text" });
+
+      const agent = new ClaudeAgent("claude", baseConfig, logger);
+      const result = await agent.runTask({ prompt: "test", role: "coder" });
+
+      expect(result.ok).toBe(true);
+      expect(result.tokens_in).toBeUndefined();
+      expect(result.tokens_out).toBeUndefined();
+      expect(result.cost_usd).toBeUndefined();
+    });
+
+    it("extracts usage from reviewTask output", async () => {
+      const ndjson = JSON.stringify({
+        type: "result",
+        result: "review complete",
+        total_cost_usd: 0.03,
+        usage: { input_tokens: 500, output_tokens: 800 },
+        modelUsage: { "haiku": { inputTokens: 500, outputTokens: 800, costUSD: 0.03 } }
+      });
+      runCommand.mockResolvedValue({ exitCode: 0, stdout: "", stderr: ndjson });
+
+      const agent = new ClaudeAgent("claude", baseConfig, logger);
+      const result = await agent.reviewTask({ prompt: "review", role: "reviewer" });
+
+      expect(result.tokens_in).toBe(500);
+      expect(result.tokens_out).toBe(800);
+      expect(result.cost_usd).toBe(0.03);
+      expect(result.model).toBe("haiku");
+    });
+
+    it("handles result line without modelUsage (model is null)", async () => {
+      const ndjson = JSON.stringify({
+        type: "result",
+        result: "done",
+        total_cost_usd: 0.01,
+        usage: { input_tokens: 100, output_tokens: 200 }
+      });
+      runCommand.mockResolvedValue({ exitCode: 0, stdout: "", stderr: ndjson });
+
+      const agent = new ClaudeAgent("claude", baseConfig, logger);
+      const result = await agent.runTask({ prompt: "test", role: "coder" });
+
+      expect(result.tokens_in).toBe(100);
+      expect(result.tokens_out).toBe(200);
+      expect(result.cost_usd).toBe(0.01);
+      expect(result.model).toBeNull();
+    });
+  });
 });

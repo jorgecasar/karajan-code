@@ -36,6 +36,29 @@ function collectAssistantText(obj) {
 }
 
 /**
+ * Extract usage metrics from stream-json/json NDJSON output.
+ * Looks for the "result" line which contains total_cost_usd,
+ * usage.input_tokens/output_tokens, and modelUsage.
+ * Returns an object with tokens_in, tokens_out, cost_usd, model or null if not found.
+ */
+export function extractUsageFromStreamJson(raw) {
+  const lines = (raw || "").split("\n").filter(Boolean);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const obj = tryParseJson(lines[i]);
+    if (!obj || obj.type !== "result") continue;
+
+    const tokens_in = obj.usage?.input_tokens ?? 0;
+    const tokens_out = obj.usage?.output_tokens ?? 0;
+    const cost_usd = obj.total_cost_usd ?? undefined;
+    const modelUsage = obj.modelUsage;
+    const model = modelUsage ? Object.keys(modelUsage)[0] || null : null;
+
+    return { tokens_in, tokens_out, cost_usd, model };
+  }
+  return null;
+}
+
+/**
  * Extract the final text result from stream-json NDJSON output.
  * Each line is a JSON object. We collect assistant text content from
  * "result" messages and fall back to accumulating "content_block_delta" text.
@@ -170,7 +193,8 @@ export class ClaudeAgent extends BaseAgent {
       }));
       const raw = pickOutput(res);
       const output = extractTextFromStreamJson(raw);
-      return { ok: res.exitCode === 0, output, error: res.exitCode === 0 ? "" : raw, exitCode: res.exitCode };
+      const usage = extractUsageFromStreamJson(raw);
+      return { ok: res.exitCode === 0, output, error: res.exitCode === 0 ? "" : raw, exitCode: res.exitCode, ...usage };
     }
 
     // Without streaming, use json output to get structured response via stderr
@@ -178,7 +202,8 @@ export class ClaudeAgent extends BaseAgent {
     const res = await runCommand(resolveBin("claude"), args, cleanExecaOpts());
     const raw = pickOutput(res);
     const output = extractTextFromStreamJson(raw);
-    return { ok: res.exitCode === 0, output, error: res.exitCode === 0 ? "" : raw, exitCode: res.exitCode };
+    const usage = extractUsageFromStreamJson(raw);
+    return { ok: res.exitCode === 0, output, error: res.exitCode === 0 ? "" : raw, exitCode: res.exitCode, ...usage };
   }
 
   async _reviewTaskExec(task, model) {
@@ -190,6 +215,7 @@ export class ClaudeAgent extends BaseAgent {
       timeout: task.timeoutMs
     }));
     const raw = pickOutput(res);
-    return { ok: res.exitCode === 0, output: raw, error: res.exitCode === 0 ? "" : raw, exitCode: res.exitCode };
+    const usage = extractUsageFromStreamJson(raw);
+    return { ok: res.exitCode === 0, output: raw, error: res.exitCode === 0 ? "" : raw, exitCode: res.exitCode, ...usage };
   }
 }
