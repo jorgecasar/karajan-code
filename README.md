@@ -129,6 +129,70 @@ kj-tail --help           # Full options
 └─────────────────────────┘    └─────────────────────────┘
 ```
 
+**Full pipeline example** — a complex task with all roles:
+
+```
+┌─ Terminal 1 ─────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│  $ claude                                                                    │
+│                                                                              │
+│  > Build a REST API for a booking system. Requirements:                      │
+│  > - Express + TypeScript with Zod validation on every endpoint              │
+│  > - Endpoints: POST /bookings, GET /bookings/:id, PATCH /bookings/:id/cancel│
+│  > - A booking has: id, guestName, roomType (standard|suite|penthouse),      │
+│  >   checkIn, checkOut, status (confirmed|cancelled)                         │
+│  > - Validate: checkOut must be after checkIn, no past dates,                │
+│  >   roomType must be a valid enum value                                     │
+│  > - Cancel returns 409 if already cancelled                                 │
+│  > - Use TDD. Run it through Karajan with architect and planner enabled,     │
+│  >   paranoid review mode. Coder claude, reviewer codex.                     │
+│                                                                              │
+│  Claude calls kj_run via MCP with:                                           │
+│    --enable-architect --enable-researcher --enable-planner --mode paranoid    │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌─ Terminal 2: kj-tail ────────────────────────────────────────────────────────┐
+│                                                                              │
+│  kj-tail v1.36.1 — .kj/run.log                                              │
+│                                                                              │
+│  ├─ 📋 Triage: medium (sw) — enabling researcher, architect, planner         │
+│  ├─ ⚙️ Preflight passed — all checks OK                                     │
+│  ├─ 🔬 Researcher: 8 files analyzed, 3 patterns, 5 constraints              │
+│  ├─ 🏗️ Architect: 3-layer design (routes → service → validators)            │
+│  ├─ 🧠 Planner: 6 steps — tests first, then routes, service, validators     │
+│  │                                                                           │
+│  ▶ Iteration 1/5                                                             │
+│  ├─ 🔨 Coder (claude): implemented 3 endpoints + 18 tests                   │
+│  ├─ 📋 TDD: PASS (3 src, 2 test files)                                      │
+│  ├─ 🔍 Sonar: Quality gate OK — 0 blockers                                  │
+│  ├─ 👁️ Reviewer (codex): REJECTED (2 blocking)                              │
+│  │   "Missing 404 for GET nonexistent booking"                               │
+│  │   "Cancel endpoint lacks idempotency test"                                │
+│  ├─ ⚖️ Solomon: approve_with_conditions (2 conditions)                      │
+│  │   "Add 404 response and test for GET /bookings/:id with unknown id"       │
+│  │   "Add test: cancel already-cancelled booking returns 409, not 500"       │
+│  │                                                                           │
+│  ▶ Iteration 2/5                                                             │
+│  ├─ 🔨 Coder (claude): fixed — 22 tests now                                 │
+│  ├─ 📋 TDD: PASS                                                            │
+│  ├─ 🔍 Sonar: OK                                                            │
+│  ├─ 👁️ Reviewer (codex): APPROVED                                           │
+│  ├─ 🧪 Tester: passed — coverage 94%, 22 tests                              │
+│  ├─ 🔒 Security: passed — 0 critical, 1 low (helmet recommended)            │
+│  ├─ 📊 Audit: CERTIFIED (with 3 advisory warnings)                          │
+│  │                                                                           │
+│  🏁 Result: APPROVED                                                         │
+│     🔬 Research: 8 files, 3 patterns identified                              │
+│     🗺 Plan: 6 steps (tests first)                                           │
+│     🧪 Coverage: 94%, 22 tests                                               │
+│     🔒 Security: passed                                                      │
+│     🔍 Sonar: OK                                                             │
+│     💰 Budget: $0.42 (claude: $0.38, codex: $0.04)                           │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
 [**▶ Watch the full pipeline demo**](https://karajancode.com#demo) — triage, architecture, TDD, SonarQube, code review, Solomon arbitration, security audit.
 
 ## The pipeline
