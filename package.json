@@ -38,6 +38,7 @@
   ],
   "bin": {
     "kj": "bin/kj.js",
+    "kj-tail": "bin/kj-tail",
     "karajan-mcp": "bin/karajan-mcp.js"
   },
   "scripts": {
