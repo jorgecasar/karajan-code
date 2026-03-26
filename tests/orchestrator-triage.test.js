@@ -202,7 +202,7 @@ describe("orchestrator triage pipeline", () => {
     },
     review_mode: "standard",
     max_iterations: 1,
-    review_rules: "./review-rules.md",
+    review_rules: "./.karajan/review-rules.md",
     base_branch: "main",
     development: { methodology: "tdd", require_test_changes: true },
     sonarqube: { enabled: true },

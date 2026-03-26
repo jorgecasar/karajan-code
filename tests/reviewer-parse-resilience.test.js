@@ -102,8 +102,6 @@ vi.mock("../src/sonar/manager.js", () => ({
   isSonarReachable: vi.fn().mockResolvedValue(true)
 }));
 
-<<<<<<< HEAD
-=======
 vi.mock("../src/utils/rtk-detect.js", () => ({
   detectRtk: vi.fn().mockResolvedValue({ available: false })
 }));
@@ -117,7 +115,6 @@ vi.mock("../src/utils/agent-detect.js", () => ({
   isHostAgent: vi.fn().mockReturnValue(false)
 }));
 
->>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
 vi.mock("node:fs/promises", () => ({
   default: {
     readFile: vi.fn().mockResolvedValue("role instructions"),
@@ -147,8 +144,6 @@ describe("reviewer parse resilience", () => {
     getQualityGateStatus.mockResolvedValue({ status: "OK" });
     getOpenIssues.mockResolvedValue({ total: 0, issues: [] });
 
-<<<<<<< HEAD
-=======
     const { detectRtk } = await import("../src/utils/rtk-detect.js");
     detectRtk.mockResolvedValue({ available: false });
 
@@ -172,7 +167,6 @@ describe("reviewer parse resilience", () => {
     const { escalateToHuman } = await import("../src/orchestrator/solomon-escalation.js");
     escalateToHuman.mockResolvedValue({ action: "pause", question: "Human needed" });
 
->>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
     const mod = await import("../src/orchestrator.js");
     runFlow = mod.runFlow;
   });

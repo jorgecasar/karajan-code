@@ -245,7 +245,7 @@ describe("installer E2E: init → doctor", () => {
     expect(["tdd", "standard"]).toContain(defaultConfig.development.methodology);
   });
 
-  it("init creates review-rules.md and coder-rules.md", async () => {
+  it("init creates review-rules.md and coder-rules.md inside .karajan/", async () => {
     const { loadConfig } = await import("../src/config.js");
     const { isTTY } = await import("../src/utils/wizard.js");
     isTTY.mockReturnValue(false);
@@ -264,10 +264,10 @@ describe("installer E2E: init → doctor", () => {
     const { initCommand } = await import("../src/commands/init.js");
     await initCommand({ logger, flags: { noInteractive: true } });
 
-    // review-rules.md and coder-rules.md should have been written
+    // review-rules.md and coder-rules.md should have been written inside .karajan/
     const keys = Array.from(writtenFiles.keys()).filter(Boolean);
-    const reviewRulesWritten = keys.some((k) => k.endsWith("review-rules.md"));
-    const coderRulesWritten = keys.some((k) => k.endsWith("coder-rules.md"));
+    const reviewRulesWritten = keys.some((k) => k.includes(".karajan") && k.endsWith("review-rules.md"));
+    const coderRulesWritten = keys.some((k) => k.includes(".karajan") && k.endsWith("coder-rules.md"));
     expect(reviewRulesWritten).toBe(true);
     expect(coderRulesWritten).toBe(true);
   });

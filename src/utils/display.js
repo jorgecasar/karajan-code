@@ -47,8 +47,6 @@ const ICONS = {
   "budget:update": "\ud83d\udcb8",
   "iteration:end": "\u23f1\ufe0f",
   "session:end": "\ud83c\udfc1",
-<<<<<<< HEAD
-=======
   "discover:start": "\ud83d\udd0e",
   "discover:end": "\ud83d\udd0e",
   "architect:start": "\ud83c\udfdb\ufe0f",
@@ -63,7 +61,6 @@ const ICONS = {
   "sonarcloud:end": "\u2601\ufe0f",
   "preflight:start": "\ud83d\udee1\ufe0f",
   "preflight:end": "\ud83d\udee1\ufe0f",
->>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
   question: "\u2753"
 };
 
@@ -112,8 +109,6 @@ export function printHeader({ task, config }) {
   console.log();
 }
 
-<<<<<<< HEAD
-=======
 /* ── Helper: executor/provider tag ───────────────────────────── */
 
 function formatExecutor(detail) {
@@ -126,39 +121,25 @@ function formatExecutor(detail) {
   return '';
 }
 
->>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
 /* ── Helper: role start/end one-liners ───────────────────────── */
 
 function roleStart(icon, label, provider) {
   console.log(`  \u251c\u2500 ${icon} ${label} (${provider || "?"}) running...`);
 }
 
-<<<<<<< HEAD
-function roleEnd(status, label, elapsed) {
-  console.log(`  \u251c\u2500 ${status} ${label} completed  ${elapsed}`);
-=======
 function roleEnd(status, label, elapsed, executor) {
   console.log(`  \u251c\u2500 ${status} ${label} completed${executor || ''}  ${elapsed}`);
->>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
 }
 
 /* ── Helper: pass/fail stage result ─────────────────────────── */
 
 function passFailStage(detail, label, failDefault, elapsed) {
-<<<<<<< HEAD
-  if (detail?.ok === false) {
-    const summary = detail?.summary || failDefault;
-    console.log(`  \u251c\u2500 ${ANSI.red}\u274c ${label}: ${summary}${ANSI.reset}  ${elapsed}`);
-  } else {
-    console.log(`  \u251c\u2500 ${ANSI.green}\u2705 ${label}: passed${ANSI.reset}  ${elapsed}`);
-=======
   const executor = formatExecutor(detail);
   if (detail?.ok === false) {
     const summary = detail?.summary || failDefault;
     console.log(`  \u251c\u2500 ${ANSI.red}\u274c ${label}: ${summary}${ANSI.reset}${executor}  ${elapsed}`);
   } else {
     console.log(`  \u251c\u2500 ${ANSI.green}\u2705 ${label}: passed${ANSI.reset}${executor}  ${elapsed}`);
->>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
   }
 }
 
@@ -316,65 +297,38 @@ const EVENT_HANDLERS = {
     roleStart(icon, "Planner", event.detail?.planner);
   },
 
-<<<<<<< HEAD
-  "planner:end": (_event, _icon, elapsed, status) => {
-    roleEnd(status, "Planner", elapsed);
-=======
   "planner:end": (event, _icon, elapsed, status) => {
     roleEnd(status, "Planner", elapsed, formatExecutor(event.detail));
->>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
   },
 
   "coder:start": (event, icon) => {
     roleStart(icon, "Coder", event.detail?.coder);
   },
 
-<<<<<<< HEAD
-  "coder:end": (_event, _icon, elapsed, status) => {
-    roleEnd(status, "Coder", elapsed);
-=======
   "coder:end": (event, _icon, elapsed, status) => {
     roleEnd(status, "Coder", elapsed, formatExecutor(event.detail));
->>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
   },
 
   "refactorer:start": (event, icon) => {
     roleStart(icon, "Refactorer", event.detail?.refactorer);
   },
 
-<<<<<<< HEAD
-  "refactorer:end": (_event, _icon, elapsed, status) => {
-    roleEnd(status, "Refactorer", elapsed);
-=======
   "refactorer:end": (event, _icon, elapsed, status) => {
     roleEnd(status, "Refactorer", elapsed, formatExecutor(event.detail));
->>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
   },
 
   "tdd:result": (event, icon) => {
     const tdd = event.detail || {};
     const label = tdd.ok ? `${ANSI.green}PASS${ANSI.reset}` : `${ANSI.red}FAIL${ANSI.reset}`;
     const files = tdd.sourceFiles === undefined ? "" : ` (${tdd.sourceFiles} src, ${tdd.testFiles} test)`;
-<<<<<<< HEAD
-    console.log(`  \u251c\u2500 ${icon} TDD policy: ${label}${files}`);
-=======
     const executor = formatExecutor(event.detail);
     console.log(`  \u251c\u2500 ${icon} TDD policy: ${label}${files}${executor}`);
->>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
   },
 
   "researcher:start": (event, icon) => {
     console.log(`  \u251c\u2500 ${icon} Researcher (${event.detail?.researcher || "?"}) investigating...`);
   },
 
-<<<<<<< HEAD
-  "researcher:end": (_event, _icon, elapsed, status) => {
-    roleEnd(status, "Researcher", elapsed);
-  },
-
-  "sonar:start": (_event, icon) => {
-    console.log(`  \u251c\u2500 ${icon} SonarQube scanning...`);
-=======
   "researcher:end": (event, _icon, elapsed, status) => {
     roleEnd(status, "Researcher", elapsed, formatExecutor(event.detail));
   },
@@ -382,18 +336,13 @@ const EVENT_HANDLERS = {
   "sonar:start": (event, icon) => {
     const executor = formatExecutor(event.detail);
     console.log(`  \u251c\u2500 ${icon} SonarQube scanning...${executor}`);
->>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
   },
 
   "sonar:end": (event, _icon, elapsed, status) => {
     const gate = event.detail?.gateStatus || "?";
     const gateColor = gate === "OK" ? ANSI.green : ANSI.red;
-<<<<<<< HEAD
-    console.log(`  \u251c\u2500 ${status} Quality gate: ${gateColor}${gate}${ANSI.reset}  ${elapsed}`);
-=======
     const executor = formatExecutor(event.detail);
     console.log(`  \u251c\u2500 ${status} Quality gate: ${gateColor}${gate}${ANSI.reset}${executor}  ${elapsed}`);
->>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
   },
 
   "reviewer:start": (event, icon) => {
@@ -402,20 +351,12 @@ const EVENT_HANDLERS = {
 
   "reviewer:end": (event, _icon, elapsed) => {
     const review = event.detail || {};
-<<<<<<< HEAD
-    if (review.approved) {
-      console.log(`  \u251c\u2500 ${ANSI.green}\u2705 Review: APPROVED${ANSI.reset}  ${elapsed}`);
-    } else {
-      const count = review.blockingCount || 0;
-      console.log(`  \u251c\u2500 ${ANSI.red}\u274c Review: REJECTED (${count} blocking)${ANSI.reset}`);
-=======
     const executor = formatExecutor(event.detail);
     if (review.approved) {
       console.log(`  \u251c\u2500 ${ANSI.green}\u2705 Review: APPROVED${ANSI.reset}${executor}  ${elapsed}`);
     } else {
       const count = review.blockingCount || 0;
       console.log(`  \u251c\u2500 ${ANSI.red}\u274c Review: REJECTED (${count} blocking)${ANSI.reset}${executor}`);
->>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
       if (review.issues) {
         for (const issue of review.issues) {
           console.log(`  \u2502   ${ANSI.dim}${issue}${ANSI.reset}`);
@@ -424,28 +365,18 @@ const EVENT_HANDLERS = {
     }
   },
 
-<<<<<<< HEAD
-  "tester:start": (_event, icon) => {
-    console.log(`  \u251c\u2500 ${icon} Tester evaluating...`);
-=======
   "tester:start": (event, icon) => {
     const executor = formatExecutor(event.detail);
     console.log(`  \u251c\u2500 ${icon} Tester evaluating...${executor}`);
->>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
   },
 
   "tester:end": (event, _icon, elapsed) => {
     passFailStage(event.detail, "Tester", "issues found", elapsed);
   },
 
-<<<<<<< HEAD
-  "security:start": (_event, icon) => {
-    console.log(`  \u251c\u2500 ${icon} Security auditing...`);
-=======
   "security:start": (event, icon) => {
     const executor = formatExecutor(event.detail);
     console.log(`  \u251c\u2500 ${icon} Security auditing...${executor}`);
->>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
   },
 
   "security:end": (event, _icon, elapsed) => {
@@ -453,12 +384,8 @@ const EVENT_HANDLERS = {
   },
 
   "solomon:start": (event, icon) => {
-<<<<<<< HEAD
-    console.log(`  \u251c\u2500 ${icon} Solomon arbitrating ${event.detail?.conflictStage || "?"} conflict...`);
-=======
     const executor = formatExecutor(event.detail);
     console.log(`  \u251c\u2500 ${icon} Solomon arbitrating ${event.detail?.conflictStage || "?"} conflict...${executor}`);
->>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
   },
 
   "solomon:end": (event, _icon, elapsed) => {
@@ -529,8 +456,6 @@ const EVENT_HANDLERS = {
     console.log(`${ANSI.dim}Resume with: kj resume ${event.sessionId} --answer "<response>"${ANSI.reset}`);
   },
 
-<<<<<<< HEAD
-=======
   "preflight:start": (event) => {
     const executor = formatExecutor(event.detail);
     console.log(`  \u251c\u2500 \ud83d\udee1\ufe0f Preflight checks running...${executor}`);
@@ -607,7 +532,6 @@ const EVENT_HANDLERS = {
     console.log(`  \u251c\u2500 \u26a1 ${event.message}${executor}`);
   },
 
->>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
   "pipeline:tracker": (event) => {
     const trackerStages = event.detail?.stages || [];
     console.log(`  ${ANSI.dim}\u250c Pipeline${ANSI.reset}`);

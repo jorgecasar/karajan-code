@@ -13,7 +13,9 @@ export async function codeCommand({ task, config, logger }) {
   if (config.coder_rules) {
     try {
       coderRules = await fs.readFile(config.coder_rules, "utf8");
-    } catch { /* no coder rules file, that's ok */ }
+    } catch {
+      try { coderRules = await fs.readFile("coder-rules.md", "utf8"); } catch { /* no coder rules file */ }
+    }
   }
   const prompt = buildCoderPrompt({ task, coderRules, methodology: config.development?.methodology || "tdd" });
   const onOutput = ({ line }) => process.stdout.write(`${line}\n`);

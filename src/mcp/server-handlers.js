@@ -482,7 +482,9 @@ export async function handleCodeDirect(a, server, extra) {
   if (config.coder_rules) {
     try {
       coderRules = await fs.readFile(config.coder_rules, "utf8");
-    } catch { /* no coder rules file */ }
+    } catch {
+      try { coderRules = await fs.readFile("coder-rules.md", "utf8"); } catch { /* no coder rules file */ }
+    }
   }
   const prompt = buildCoderPrompt({ task: a.task, coderRules, methodology: config.development?.methodology || "tdd" });
   sendTrackerLog(server, "coder", "running", coderRole.provider);

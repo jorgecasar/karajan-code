@@ -5,45 +5,14 @@ import os from "node:os";
  */
 export function getPlatform() {
   const platform = os.platform();
-<<<<<<< HEAD
-  return platform === "darwin" ? "macos" : "linux";
-=======
   if (platform === "win32") return "windows";
   if (platform === "darwin") return "macos";
   return "linux";
->>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
 }
 
 const INSTALL_COMMANDS = {
   rtk: {
     macos: "brew install rtk && rtk init --global",
-<<<<<<< HEAD
-    linux: "curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh && rtk init --global"
-  },
-  claude: {
-    macos: "npm install -g @anthropic-ai/claude-code",
-    linux: "npm install -g @anthropic-ai/claude-code"
-  },
-  codex: {
-    macos: "npm install -g @openai/codex",
-    linux: "npm install -g @openai/codex"
-  },
-  gemini: {
-    macos: "npm install -g @google/gemini-cli",
-    linux: "npm install -g @google/gemini-cli"
-  },
-  aider: {
-    macos: "pipx install aider-chat",
-    linux: "pipx install aider-chat || pip3 install aider-chat"
-  },
-  opencode: {
-    macos: "curl -fsSL https://opencode.ai/install | bash",
-    linux: "curl -fsSL https://opencode.ai/install | bash"
-  },
-  docker: {
-    macos: "brew install --cask docker",
-    linux: "sudo apt install docker.io docker-compose-v2 (or see https://docs.docker.com/engine/install/)"
-=======
     linux: "curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh && rtk init --global",
     windows: "Download from https://github.com/rtk-ai/rtk/releases and add to PATH"
   },
@@ -76,7 +45,6 @@ const INSTALL_COMMANDS = {
     macos: "brew install --cask docker",
     linux: "sudo apt install docker.io docker-compose-v2 (or see https://docs.docker.com/engine/install/)",
     windows: "Download Docker Desktop from https://www.docker.com/products/docker-desktop/"
->>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
   }
 };
 

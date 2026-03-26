@@ -119,8 +119,6 @@ export async function markPgCardToValidate({ pgCard, pgProject, config, session,
   }
 }
 
-<<<<<<< HEAD
-=======
 /**
  * Convert a PG card's structured data into HU stories for the hu-reviewer stage.
  * Returns an array of story objects ({id, text}) or null if the card lacks structured data.
@@ -158,7 +156,6 @@ export function buildHuStoriesFromPgCard(pgCard) {
   return [{ id: storyId, text: storyText }];
 }
 
->>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
 // --- Internal helpers ---
 
 async function markPgCardInProgress({ pgTaskId, pgProject, config, logger }) {

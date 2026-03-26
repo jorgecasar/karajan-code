@@ -27,7 +27,7 @@ vi.mock("node:fs/promises", () => ({
 function makeConfig(overrides = {}) {
   return {
     roles: { coder: { provider: "codex" } },
-    coder_rules: "coder-rules.md",
+    coder_rules: ".karajan/coder-rules.md",
     development: { methodology: "tdd" },
     ...overrides
   };

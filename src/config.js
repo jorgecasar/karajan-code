@@ -39,8 +39,8 @@ const DEFAULTS = {
   review_mode: "standard",
   max_iterations: 5,
   max_budget_usd: null,
-  review_rules: "./review-rules.md",
-  coder_rules: "./coder-rules.md",
+  review_rules: "./.karajan/review-rules.md",
+  coder_rules: "./.karajan/coder-rules.md",
   base_branch: "main",
   coder_options: { model: null, auto_approve: true, fallback_coder: null },
   reviewer_options: {

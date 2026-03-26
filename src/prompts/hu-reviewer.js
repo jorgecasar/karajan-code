@@ -132,8 +132,6 @@ export function normalizeAcceptanceCriteria(criteria) {
 }
 
 /**
-<<<<<<< HEAD
-=======
  * Build a prompt that asks the AI to decompose a complex task into 2-5 formal HUs.
  * Each HU follows the role/goal/benefit format with acceptance criteria and optional dependencies.
  * @param {string} task - The complex task description to decompose.
@@ -189,7 +187,6 @@ export function parseDecompositionOutput(raw) {
 }
 
 /**
->>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
  * Parse the raw output from the HU reviewer agent.
  * @param {string} raw - Raw text output from the agent.
  * @returns {object|null} Parsed result with evaluations and batch_summary, or null.
