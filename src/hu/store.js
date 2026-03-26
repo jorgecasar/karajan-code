@@ -4,6 +4,24 @@ import { getKarajanHome } from "../utils/paths.js";
 
 // FUTURE: hu-storage adapter for PG/Trello/etc — currently local files only
 
+<<<<<<< HEAD
+=======
+/**
+ * Valid HU story status values.
+ * @type {Readonly<{PENDING: "pending", CODING: "coding", REVIEWING: "reviewing", DONE: "done", FAILED: "failed", BLOCKED: "blocked", CERTIFIED: "certified", NEEDS_CONTEXT: "needs_context"}>}
+ */
+export const HU_STATUS = Object.freeze({
+  PENDING: "pending",
+  CODING: "coding",
+  REVIEWING: "reviewing",
+  DONE: "done",
+  FAILED: "failed",
+  BLOCKED: "blocked",
+  CERTIFIED: "certified",
+  NEEDS_CONTEXT: "needs_context"
+});
+
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
 /** @returns {string} Path to the hu-stories directory (evaluated at call time). */
 function getHuDir() {
   return path.join(getKarajanHome(), "hu-stories");
@@ -151,3 +169,48 @@ export function answerContextRequest(batch, storyId, answer) {
   story.updated_at = new Date().toISOString();
   return story;
 }
+<<<<<<< HEAD
+=======
+
+/**
+ * Create a lightweight history record for a pipeline run.
+ * Stores a minimal single-HU batch in the same hu-stories directory
+ * so the HU Board can pick it up alongside full batches.
+ * @param {string} sessionId - The session identifier.
+ * @param {{task: string, result: string, approved: boolean, summary?: string, timestamp?: string}} data
+ * @returns {Promise<object>} The created batch object.
+ */
+export async function createHistoryRecord(sessionId, { task, result, approved, summary, timestamp }) {
+  const ts = timestamp || new Date().toISOString();
+  const dir = path.join(getHuDir(), sessionId);
+  await fs.mkdir(dir, { recursive: true });
+
+  const batch = {
+    session_id: sessionId,
+    created_at: ts,
+    stories: [
+      {
+        id: `HU-hist-${sessionId}`,
+        status: approved ? "certified" : "failed",
+        original: { text: task },
+        blocked_by: [],
+        certified: approved ? { summary: summary || result } : null,
+        quality: null,
+        context_requests: [],
+        created_at: ts,
+        updated_at: ts
+      }
+    ],
+    history: {
+      task,
+      result,
+      approved,
+      summary: summary || null,
+      timestamp: ts
+    }
+  };
+
+  await fs.writeFile(path.join(dir, "batch.json"), JSON.stringify(batch, null, 2));
+  return batch;
+}
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920

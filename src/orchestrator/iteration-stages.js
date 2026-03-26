@@ -21,7 +21,11 @@ export async function runCoderStage({ coderRoleInstance, coderRole, config, logg
     emitter,
     makeEvent("coder:start", { ...eventBase, stage: "coder" }, {
       message: `Coder (${coderRole.provider}) running`,
+<<<<<<< HEAD
       detail: { coder: coderRole.provider }
+=======
+      detail: { coder: coderRole.provider, provider: coderRole.provider, executorType: "agent" }
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
     })
   );
 
@@ -89,7 +93,12 @@ export async function runCoderStage({ coderRoleInstance, coderRole, config, logg
           emitProgress(
             emitter,
             makeEvent("coder:end", { ...eventBase, stage: "coder" }, {
+<<<<<<< HEAD
               message: `Coder completed (fallback: ${fallbackCoder})`
+=======
+              message: `Coder completed (fallback: ${fallbackCoder})`,
+              detail: { provider: fallbackCoder, executorType: "agent" }
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
             })
           );
           return;
@@ -114,7 +123,12 @@ export async function runCoderStage({ coderRoleInstance, coderRole, config, logg
       emitter,
       makeEvent("coder:end", { ...eventBase, stage: "coder" }, {
         status: "fail",
+<<<<<<< HEAD
         message: `Coder failed: ${details}`
+=======
+        message: `Coder failed: ${details}`,
+        detail: { provider: coderRole.provider, executorType: "agent" }
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
       })
     );
     throw new Error(`Coder failed: ${details}`);
@@ -124,7 +138,12 @@ export async function runCoderStage({ coderRoleInstance, coderRole, config, logg
   emitProgress(
     emitter,
     makeEvent("coder:end", { ...eventBase, stage: "coder" }, {
+<<<<<<< HEAD
       message: "Coder completed"
+=======
+      message: "Coder completed",
+      detail: { provider: coderRole.provider, executorType: "agent" }
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
     })
   );
 }
@@ -135,7 +154,11 @@ export async function runRefactorerStage({ refactorerRole, config, logger, emitt
     emitter,
     makeEvent("refactorer:start", { ...eventBase, stage: "refactorer" }, {
       message: `Refactorer (${refactorerRole.provider}) running`,
+<<<<<<< HEAD
       detail: { refactorer: refactorerRole.provider }
+=======
+      detail: { refactorer: refactorerRole.provider, provider: refactorerRole.provider, executorType: "agent" }
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
     })
   );
   const refactorerOnOutput = ({ stream, line }) => {
@@ -184,7 +207,12 @@ export async function runRefactorerStage({ refactorerRole, config, logger, emitt
       emitter,
       makeEvent("refactorer:end", { ...eventBase, stage: "refactorer" }, {
         status: "fail",
+<<<<<<< HEAD
         message: `Refactorer failed: ${details}`
+=======
+        message: `Refactorer failed: ${details}`,
+        detail: { provider: refactorerRole.provider, executorType: "agent" }
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
       })
     );
     throw new Error(`Refactorer failed: ${details}`);
@@ -193,7 +221,12 @@ export async function runRefactorerStage({ refactorerRole, config, logger, emitt
   emitProgress(
     emitter,
     makeEvent("refactorer:end", { ...eventBase, stage: "refactorer" }, {
+<<<<<<< HEAD
       message: "Refactorer completed"
+=======
+      message: "Refactorer completed",
+      detail: { provider: refactorerRole.provider, executorType: "agent" }
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
     })
   );
 }
@@ -287,7 +320,12 @@ export async function runTddCheckStage({ config, logger, emitter, eventBase, ses
         ok: tddEval.ok,
         reason: tddEval.reason,
         sourceFiles: tddEval.sourceFiles?.length || 0,
+<<<<<<< HEAD
         testFiles: tddEval.testFiles?.length || 0
+=======
+        testFiles: tddEval.testFiles?.length || 0,
+        executorType: "local"
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
       }
     })
   );
@@ -386,7 +424,12 @@ export async function runSonarStage({ config, logger, emitter, eventBase, sessio
   emitProgress(
     emitter,
     makeEvent("sonar:start", { ...eventBase, stage: "sonar" }, {
+<<<<<<< HEAD
       message: "SonarQube scanning"
+=======
+      message: "SonarQube scanning",
+      detail: { provider: "sonarqube", executorType: "local" }
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
     })
   );
 
@@ -470,7 +513,11 @@ export async function runSonarStage({ config, logger, emitter, eventBase, sessio
     makeEvent("sonar:end", { ...eventBase, stage: "sonar" }, {
       status: sonarResult.blocking ? "fail" : "ok",
       message: `Quality gate: ${sonarResult.gateStatus}`,
+<<<<<<< HEAD
       detail: { projectKey: sonarResult.projectKey, gateStatus: sonarResult.gateStatus, openIssues: sonarResult.openIssuesTotal }
+=======
+      detail: { projectKey: sonarResult.projectKey, gateStatus: sonarResult.gateStatus, openIssues: sonarResult.openIssuesTotal, provider: "sonarqube", executorType: "local" }
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
     })
   );
 
@@ -498,7 +545,12 @@ export async function runSonarCloudStage({ config, logger, emitter, eventBase, s
   emitProgress(
     emitter,
     makeEvent("sonarcloud:start", { ...eventBase, stage: "sonarcloud" }, {
+<<<<<<< HEAD
       message: "SonarCloud scanning"
+=======
+      message: "SonarCloud scanning",
+      detail: { provider: "sonarcloud", executorType: "local" }
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
     })
   );
 
@@ -532,7 +584,11 @@ export async function runSonarCloudStage({ config, logger, emitter, eventBase, s
     makeEvent("sonarcloud:end", { ...eventBase, stage: "sonarcloud" }, {
       status,
       message,
+<<<<<<< HEAD
       detail: { projectKey: result.projectKey, exitCode: result.exitCode }
+=======
+      detail: { projectKey: result.projectKey, exitCode: result.exitCode, provider: "sonarcloud", executorType: "local" }
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
     })
   );
 
@@ -681,7 +737,11 @@ export async function runReviewerStage({ reviewerRole, config, logger, emitter, 
     emitter,
     makeEvent("reviewer:start", { ...eventBase, stage: "reviewer" }, {
       message: `Reviewer (${reviewerRole.provider}) running`,
+<<<<<<< HEAD
       detail: { reviewer: reviewerRole.provider }
+=======
+      detail: { reviewer: reviewerRole.provider, provider: reviewerRole.provider, executorType: "agent" }
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
     })
   );
 
@@ -692,6 +752,33 @@ export async function runReviewerStage({ reviewerRole, config, logger, emitter, 
     logger.warn(`Review diff generation failed: ${err.message}`);
     return { approved: false, blocking_issues: [{ description: `Diff generation failed: ${err.message}` }], non_blocking_suggestions: [], summary: `Reviewer failed: cannot generate diff — ${err.message}`, confidence: 0 };
   }
+<<<<<<< HEAD
+=======
+
+  // Injection guard: scan diff before sending to AI reviewer
+  const { scanDiff } = await import("../utils/injection-guard.js");
+  const guardResult = scanDiff(diff);
+  if (!guardResult.clean) {
+    logger.warn(`Injection guard: ${guardResult.summary}`);
+    emitProgress(emitter, makeEvent("guard:injection", { ...eventBase, stage: "reviewer" }, {
+      message: `Injection guard blocked review: ${guardResult.summary}`,
+      detail: { findings: guardResult.findings, summary: guardResult.summary }
+    }));
+    return {
+      approved: false,
+      blocking_issues: guardResult.findings.map((f) => ({
+        id: `INJECTION_${f.type.toUpperCase()}`,
+        severity: "critical",
+        description: `Potential prompt injection (${f.type}): ${f.snippet}`,
+        line: f.line,
+      })),
+      non_blocking_suggestions: [],
+      summary: `Review blocked by injection guard: ${guardResult.summary}`,
+      confidence: 1,
+    };
+  }
+
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
   const reviewerOnOutput = ({ stream, line }) => {
     emitProgress(emitter, makeEvent("agent:output", { ...eventBase, stage: "reviewer" }, {
       message: line,
@@ -754,7 +841,12 @@ export async function runReviewerStage({ reviewerRole, config, logger, emitter, 
       emitter,
       makeEvent("reviewer:end", { ...eventBase, stage: "reviewer" }, {
         status: "fail",
+<<<<<<< HEAD
         message: `Reviewer failed: ${details}`
+=======
+        message: `Reviewer failed: ${details}`,
+        detail: { provider: reviewerRole.provider, executorType: "agent" }
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
       })
     );
     throw new Error(`Reviewer failed: ${details}`);
@@ -836,7 +928,13 @@ export async function runReviewerStage({ reviewerRole, config, logger, emitter, 
         blockingCount: review.blocking_issues.length,
         issues: review.blocking_issues.map(
           (x) => `${x.id || "ISSUE"}: ${x.description || "Missing description"}`
+<<<<<<< HEAD
         )
+=======
+        ),
+        provider: reviewerRole.provider,
+        executorType: "agent"
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
       }
     })
   );

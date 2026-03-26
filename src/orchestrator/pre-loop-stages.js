@@ -9,6 +9,10 @@ import { createArchitectADRs } from "../planning-game/architect-adrs.js";
 import { addCheckpoint, markSessionStatus } from "../session-store.js";
 import { emitProgress, makeEvent } from "../utils/events.js";
 import { parsePlannerOutput } from "../prompts/planner.js";
+<<<<<<< HEAD
+=======
+import { buildDecompositionPrompt, parseDecompositionOutput } from "../prompts/hu-reviewer.js";
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
 import { selectModelsForRoles } from "../utils/model-selector.js";
 import { createStallDetector } from "../utils/stall-detector.js";
 import { createHuBatch, loadHuBatch, saveHuBatch, updateStoryStatus, updateStoryQuality, updateStoryCertified, addContextRequest, answerContextRequest } from "../hu/store.js";
@@ -48,6 +52,7 @@ function applyModelSelection(triageOutput, config, emitter, eventBase) {
 
 export async function runTriageStage({ config, logger, emitter, eventBase, session, coderRole, trackBudget }) {
   logger.setContext({ iteration: 0, stage: "triage" });
+<<<<<<< HEAD
   emitProgress(
     emitter,
     makeEvent("triage:start", { ...eventBase, stage: "triage" }, {
@@ -56,6 +61,18 @@ export async function runTriageStage({ config, logger, emitter, eventBase, sessi
   );
 
   const triageProvider = config?.roles?.triage?.provider || coderRole.provider;
+=======
+
+  const triageProvider = config?.roles?.triage?.provider || coderRole.provider;
+  emitProgress(
+    emitter,
+    makeEvent("triage:start", { ...eventBase, stage: "triage" }, {
+      message: "Triage classifying task complexity",
+      detail: { provider: triageProvider, executorType: "agent" }
+    })
+  );
+
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
   const triageOnOutput = ({ stream, line }) => {
     emitProgress(emitter, makeEvent("agent:output", { ...eventBase, stage: "triage" }, {
       message: line,
@@ -132,7 +149,11 @@ export async function runTriageStage({ config, logger, emitter, eventBase, sessi
     makeEvent("triage:end", { ...eventBase, stage: "triage" }, {
       status: triageOutput.ok ? "ok" : "fail",
       message: triageOutput.ok ? "Triage completed" : `Triage failed: ${triageOutput.summary}`,
+<<<<<<< HEAD
       detail: stageResult
+=======
+      detail: { ...stageResult, provider: triageProvider, executorType: "agent" }
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
     })
   );
 
@@ -141,6 +162,7 @@ export async function runTriageStage({ config, logger, emitter, eventBase, sessi
 
 export async function runResearcherStage({ config, logger, emitter, eventBase, session, coderRole, trackBudget }) {
   logger.setContext({ iteration: 0, stage: "researcher" });
+<<<<<<< HEAD
   emitProgress(
     emitter,
     makeEvent("researcher:start", { ...eventBase, stage: "researcher" }, {
@@ -149,6 +171,18 @@ export async function runResearcherStage({ config, logger, emitter, eventBase, s
   );
 
   const researcherProvider = config?.roles?.researcher?.provider || coderRole.provider;
+=======
+
+  const researcherProvider = config?.roles?.researcher?.provider || coderRole.provider;
+  emitProgress(
+    emitter,
+    makeEvent("researcher:start", { ...eventBase, stage: "researcher" }, {
+      message: "Researcher investigating codebase",
+      detail: { researcher: researcherProvider, provider: researcherProvider, executorType: "agent" }
+    })
+  );
+
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
   const researcherOnOutput = ({ stream, line }) => {
     emitProgress(emitter, makeEvent("agent:output", { ...eventBase, stage: "researcher" }, {
       message: line,
@@ -191,7 +225,12 @@ export async function runResearcherStage({ config, logger, emitter, eventBase, s
     emitter,
     makeEvent("researcher:end", { ...eventBase, stage: "researcher" }, {
       status: researchOutput.ok ? "ok" : "fail",
+<<<<<<< HEAD
       message: researchOutput.ok ? "Research completed" : `Research failed: ${researchOutput.summary}`
+=======
+      message: researchOutput.ok ? "Research completed" : `Research failed: ${researchOutput.summary}`,
+      detail: { provider: researcherProvider, executorType: "agent" }
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
     })
   );
 
@@ -260,6 +299,7 @@ async function handleArchitectClarification({ architectOutput, askQuestion, conf
 
 export async function runArchitectStage({ config, logger, emitter, eventBase, session, coderRole, trackBudget, researchContext = null, discoverResult = null, triageLevel = null, askQuestion = null }) {
   logger.setContext({ iteration: 0, stage: "architect" });
+<<<<<<< HEAD
   emitProgress(
     emitter,
     makeEvent("architect:start", { ...eventBase, stage: "architect" }, {
@@ -268,6 +308,16 @@ export async function runArchitectStage({ config, logger, emitter, eventBase, se
   );
 
   const architectProvider = config?.roles?.architect?.provider || coderRole.provider;
+=======
+  const architectProvider = config?.roles?.architect?.provider || coderRole.provider;
+  emitProgress(
+    emitter,
+    makeEvent("architect:start", { ...eventBase, stage: "architect" }, {
+      message: "Architect designing solution architecture",
+      detail: { architect: architectProvider, provider: architectProvider, executorType: "agent" }
+    })
+  );
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
   const architectOnOutput = ({ stream, line }) => {
     emitProgress(emitter, makeEvent("agent:output", { ...eventBase, stage: "architect" }, {
       message: line,
@@ -330,7 +380,11 @@ export async function runArchitectStage({ config, logger, emitter, eventBase, se
     makeEvent("architect:end", { ...eventBase, stage: "architect" }, {
       status: architectOutput.ok ? "ok" : "fail",
       message: architectOutput.ok ? "Architecture completed" : `Architecture failed: ${architectOutput.summary}`,
+<<<<<<< HEAD
       detail: stageResult
+=======
+      detail: { ...stageResult, provider: architectProvider, executorType: "agent" }
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
     })
   );
 
@@ -373,7 +427,11 @@ export async function runPlannerStage({ config, logger, emitter, eventBase, sess
     emitter,
     makeEvent("planner:start", { ...eventBase, stage: "planner" }, {
       message: `Planner (${plannerRole.provider}) running`,
+<<<<<<< HEAD
       detail: { planner: plannerRole.provider }
+=======
+      detail: { planner: plannerRole.provider, provider: plannerRole.provider, executorType: "agent" }
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
     })
   );
 
@@ -416,7 +474,12 @@ export async function runPlannerStage({ config, logger, emitter, eventBase, sess
       emitter,
       makeEvent("planner:end", { ...eventBase, stage: "planner" }, {
         status: "fail",
+<<<<<<< HEAD
         message: `Planner failed: ${details}`
+=======
+        message: `Planner failed: ${details}`,
+        detail: { provider: plannerRole.provider, executorType: "agent" }
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
       })
     );
     throw new Error(`Planner failed: ${details}`);
@@ -436,7 +499,12 @@ export async function runPlannerStage({ config, logger, emitter, eventBase, sess
   emitProgress(
     emitter,
     makeEvent("planner:end", { ...eventBase, stage: "planner" }, {
+<<<<<<< HEAD
       message: "Planner completed"
+=======
+      message: "Planner completed",
+      detail: { provider: plannerRole.provider, executorType: "agent" }
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
     })
   );
 
@@ -445,6 +513,7 @@ export async function runPlannerStage({ config, logger, emitter, eventBase, sess
 
 export async function runDiscoverStage({ config, logger, emitter, eventBase, session, coderRole, trackBudget }) {
   logger.setContext({ iteration: 0, stage: "discover" });
+<<<<<<< HEAD
   emitProgress(
     emitter,
     makeEvent("discover:start", { ...eventBase, stage: "discover" }, {
@@ -453,6 +522,16 @@ export async function runDiscoverStage({ config, logger, emitter, eventBase, ses
   );
 
   const discoverProvider = config?.roles?.discover?.provider || coderRole.provider;
+=======
+  const discoverProvider = config?.roles?.discover?.provider || coderRole.provider;
+  emitProgress(
+    emitter,
+    makeEvent("discover:start", { ...eventBase, stage: "discover" }, {
+      message: "Discover analyzing task for gaps",
+      detail: { discover: discoverProvider, provider: discoverProvider, executorType: "agent" }
+    })
+  );
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
   const discoverOnOutput = ({ stream, line }) => {
     emitProgress(emitter, makeEvent("agent:output", { ...eventBase, stage: "discover" }, {
       message: line,
@@ -504,7 +583,11 @@ export async function runDiscoverStage({ config, logger, emitter, eventBase, ses
     makeEvent("discover:end", { ...eventBase, stage: "discover" }, {
       status: discoverOutput.ok ? "ok" : "fail",
       message: discoverOutput.ok ? "Discovery completed" : `Discovery failed: ${discoverOutput.summary}`,
+<<<<<<< HEAD
       detail: stageResult
+=======
+      detail: { ...stageResult, provider: discoverProvider, executorType: "agent" }
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
     })
   );
 
@@ -512,6 +595,7 @@ export async function runDiscoverStage({ config, logger, emitter, eventBase, ses
 }
 
 /**
+<<<<<<< HEAD
  * Run the HU Reviewer stage: load stories from YAML, evaluate, certify, and return in topological order.
  * @param {object} params
  * @returns {Promise<{stageResult: object}>}
@@ -549,6 +633,142 @@ export async function runHuReviewerStage({ config, logger, emitter, eventBase, s
       status: "fail", message: stageResult.error
     }));
     return { stageResult };
+=======
+ * Use an AI agent to decompose a complex task into multiple formal HUs.
+ * Returns null if decomposition fails or the task is too simple.
+ * @param {object} params
+ * @returns {Promise<Array|null>} Array of decomposed HUs or null.
+ */
+async function decomposeTaskIntoHUs({ config, logger, emitter, eventBase, session, coderRole, trackBudget }) {
+  const provider = config?.roles?.hu_reviewer?.provider || coderRole.provider;
+  const prompt = buildDecompositionPrompt(session.task);
+
+  emitProgress(
+    emitter,
+    makeEvent("hu-reviewer:decompose-start", { ...eventBase, stage: "hu-reviewer" }, {
+      message: "Decomposing complex task into formal HUs",
+      detail: { provider }
+    })
+  );
+
+  const onOutput = ({ stream, line }) => {
+    emitProgress(emitter, makeEvent("agent:output", { ...eventBase, stage: "hu-reviewer" }, {
+      message: line,
+      detail: { stream, agent: provider }
+    }));
+  };
+  const stall = createStallDetector({
+    onOutput, emitter, eventBase, stage: "hu-reviewer", provider
+  });
+
+  const agent = createAgent(provider, config, logger);
+  const decompStart = Date.now();
+  let result;
+  try {
+    result = await agent.runTask({ prompt, role: "hu-reviewer", onOutput: stall.onOutput });
+  } catch (err) {
+    logger.warn(`HU decomposition threw: ${err.message}`);
+    return null;
+  } finally {
+    stall.stop();
+  }
+
+  trackBudget({
+    role: "hu-reviewer-decompose",
+    provider,
+    model: config?.roles?.hu_reviewer?.model || coderRole.model,
+    result,
+    duration_ms: Date.now() - decompStart
+  });
+
+  if (!result.ok) {
+    logger.warn(`HU decomposition failed: ${result.error || "unknown"}`);
+    return null;
+  }
+
+  const stories = parseDecompositionOutput(result.output);
+  if (!stories || stories.length < 2) {
+    logger.info("HU decomposition returned < 2 stories, falling back to single auto-story");
+    return null;
+  }
+
+  emitProgress(
+    emitter,
+    makeEvent("hu-reviewer:decompose-end", { ...eventBase, stage: "hu-reviewer" }, {
+      message: `Task decomposed into ${stories.length} HUs`,
+      detail: { count: stories.length, ids: stories.map(s => s.id) }
+    })
+  );
+
+  return stories;
+}
+
+/**
+ * Run the HU Reviewer stage: load stories from YAML or generate from task, evaluate, certify, and return in topological order.
+ * @param {object} params
+ * @returns {Promise<{stageResult: object}>}
+ */
+export async function runHuReviewerStage({ config, logger, emitter, eventBase, session, coderRole, trackBudget, huFile, askQuestion, pgStories = null }) {
+  logger.setContext({ iteration: 0, stage: "hu-reviewer" });
+  const huReviewerProvider = config?.roles?.hu_reviewer?.provider || coderRole.provider;
+  emitProgress(
+    emitter,
+    makeEvent("hu-reviewer:start", { ...eventBase, stage: "hu-reviewer" }, {
+      message: "HU Reviewer certifying user stories",
+      detail: { provider: huReviewerProvider, executorType: "agent" }
+    })
+  );
+
+  let stories;
+
+  if (huFile) {
+    // --- Load YAML file ---
+    const yaml = await import("js-yaml");
+    const fs = await import("node:fs/promises");
+    let rawYaml;
+    try {
+      rawYaml = await fs.readFile(huFile, "utf8");
+    } catch (err) {
+      const stageResult = { ok: false, error: `Could not read HU file: ${err.message}` };
+      emitProgress(emitter, makeEvent("hu-reviewer:end", { ...eventBase, stage: "hu-reviewer" }, {
+        status: "fail", message: stageResult.error
+      }));
+      return { stageResult };
+    }
+
+    try {
+      const parsed = yaml.load(rawYaml);
+      stories = Array.isArray(parsed) ? parsed : (parsed?.stories || []);
+    } catch (err) {
+      const stageResult = { ok: false, error: `Invalid YAML in HU file: ${err.message}` };
+      emitProgress(emitter, makeEvent("hu-reviewer:end", { ...eventBase, stage: "hu-reviewer" }, {
+        status: "fail", message: stageResult.error
+      }));
+      return { stageResult };
+    }
+  } else if (pgStories && pgStories.length > 0) {
+    // --- Use pre-built stories from Planning Game card structured data ---
+    stories = pgStories;
+    logger.info(`HU Reviewer: using ${pgStories.length} story(ies) from PG card`);
+    emitProgress(emitter, makeEvent("hu-reviewer:pg-feed", { ...eventBase, stage: "hu-reviewer" }, {
+      message: `Using ${pgStories.length} story(ies) from Planning Game card`,
+      detail: { source: "pg-card", storyIds: pgStories.map(s => s.id) }
+    }));
+  } else {
+    // --- Decompose task into formal HUs via AI, or fall back to single auto-story ---
+    const decomposed = await decomposeTaskIntoHUs({
+      config, logger, emitter, eventBase, session, coderRole, trackBudget
+    });
+    if (decomposed && decomposed.length > 1) {
+      stories = decomposed.map(hu => ({
+        id: hu.id,
+        text: `As a ${hu.role}, I want to ${hu.goal}, so that ${hu.benefit}\n\nTitle: ${hu.title}\nAcceptance Criteria:\n${hu.acceptanceCriteria.map(ac => `- ${ac}`).join("\n")}`,
+        blocked_by: hu.dependsOn || []
+      }));
+    } else {
+      stories = [{ id: "HU-AUTO-001", text: session.task }];
+    }
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
   }
 
   if (stories.length === 0) {
@@ -569,7 +789,10 @@ export async function runHuReviewerStage({ config, logger, emitter, eventBase, s
   }
 
   // --- Evaluate loop (re-evaluate entire batch until all certified or needs_context with no askQuestion) ---
+<<<<<<< HEAD
   const huReviewerProvider = config?.roles?.hu_reviewer?.provider || coderRole.provider;
+=======
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
   const huReviewerOnOutput = ({ stream, line }) => {
     emitProgress(emitter, makeEvent("agent:output", { ...eventBase, stage: "hu-reviewer" }, {
       message: line,
@@ -711,7 +934,11 @@ export async function runHuReviewerStage({ config, logger, emitter, eventBase, s
     makeEvent("hu-reviewer:end", { ...eventBase, stage: "hu-reviewer" }, {
       status: "ok",
       message: `HU Review complete: ${certifiedStories.length}/${batch.stories.length} certified`,
+<<<<<<< HEAD
       detail: stageResult
+=======
+      detail: { ...stageResult, provider: huReviewerProvider, executorType: "agent" }
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
     })
   );
 
