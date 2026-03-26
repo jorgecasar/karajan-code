@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+<<<<<<< HEAD
+=======
 ## [1.38.0] - 2026-03-26
 
 ### Added
@@ -46,6 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Propagate Solomon error details to escalation and activity log
 
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
 ## [1.36.0] - 2026-03-25
 
 ### Added
@@ -449,11 +452,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI/CD**: GitHub Actions workflow with validation and PR annotations
 - **716+ unit tests** with Vitest
 
+<<<<<<< HEAD
+[Unreleased]: https://github.com/manufosela/karajan-code/compare/v1.35.0...HEAD
+=======
 [Unreleased]: https://github.com/manufosela/karajan-code/compare/v1.38.0...HEAD
 [1.38.0]: https://github.com/manufosela/karajan-code/compare/v1.37.0...v1.38.0
 [1.37.0]: https://github.com/manufosela/karajan-code/compare/v1.36.1...v1.37.0
 [1.36.1]: https://github.com/manufosela/karajan-code/compare/v1.36.0...v1.36.1
 [1.36.0]: https://github.com/manufosela/karajan-code/compare/v1.35.0...v1.36.0
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
 [1.35.0]: https://github.com/manufosela/karajan-code/compare/v1.34.4...v1.35.0
 [1.34.4]: https://github.com/manufosela/karajan-code/compare/v1.34.3...v1.34.4
 [1.34.3]: https://github.com/manufosela/karajan-code/compare/v1.34.2...v1.34.3

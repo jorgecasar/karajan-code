@@ -33,7 +33,7 @@ function makeConfig(overrides = {}) {
     roles: { reviewer: { provider: "claude" } },
     reviewer_options: { fallback_reviewer: "codex" },
     base_branch: "main",
-    review_rules: "review-rules.md",
+    review_rules: ".karajan/review-rules.md",
     review_mode: "standard",
     ...overrides
   };

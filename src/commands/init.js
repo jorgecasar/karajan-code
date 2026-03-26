@@ -128,7 +128,7 @@ async function ensureReviewRules(reviewRulesPath, logger) {
     "# Review Rules\n\n- Focus on security, correctness, and test coverage.\n",
     "utf8"
   );
-  logger.info("Created review-rules.md");
+  logger.info("Created .karajan/review-rules.md");
 }
 
 async function ensureCoderRules(coderRulesPath, logger) {
@@ -150,7 +150,7 @@ async function ensureCoderRules(coderRulesPath, logger) {
     ].join("\n");
   }
   await fs.writeFile(coderRulesPath, content, "utf8");
-  logger.info("Created coder-rules.md");
+  logger.info("Created .karajan/coder-rules.md");
 }
 
 async function setupSonarQube(config, logger) {
@@ -271,8 +271,10 @@ export async function initCommand({ logger, flags = {} }) {
   logger.info(`Ensured ${karajanHome} exists`);
 
   const configPath = getConfigPath();
-  const reviewRulesPath = path.resolve(process.cwd(), "review-rules.md");
-  const coderRulesPath = path.resolve(process.cwd(), "coder-rules.md");
+  const karajanDir = path.join(process.cwd(), ".karajan");
+  await ensureDir(karajanDir);
+  const reviewRulesPath = path.resolve(karajanDir, "review-rules.md");
+  const coderRulesPath = path.resolve(karajanDir, "coder-rules.md");
 
   const { config, exists: configExists } = await loadConfig();
   const interactive = flags.noInteractive !== true && isTTY();

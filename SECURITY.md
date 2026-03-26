@@ -41,6 +41,8 @@ The following are out of scope:
 - Vulnerabilities in third-party AI CLIs (claude, codex, gemini, aider)
 - SonarQube Docker container security (report to SonarSource)
 - Denial of service via resource exhaustion (long-running tasks)
+<<<<<<< HEAD
+=======
 
 ---
 
@@ -87,3 +89,4 @@ Fuera del alcance:
 - Vulnerabilidades en CLIs de IA de terceros (claude, codex, gemini, aider)
 - Seguridad del contenedor Docker de SonarQube (reportar a SonarSource)
 - Denegacion de servicio por agotamiento de recursos (tareas de larga duracion)
+>>>>>>> 8792e49efcdc75995e024d81339b100c7b253920
