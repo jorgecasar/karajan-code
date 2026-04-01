@@ -33,6 +33,13 @@ function normalizeSubtasks(subtasks) {
     .slice(0, 5);
 }
 
+function normalizeDomainHints(hints) {
+  if (!Array.isArray(hints)) return [];
+  return hints
+    .map((h) => (typeof h === "string" ? h.trim().toLowerCase() : ""))
+    .filter(Boolean);
+}
+
 export class TriageRole extends BaseRole {
   constructor({ config, logger, emitter = null, createAgentFn = null }) {
     super({ name: "triage", config, logger, emitter });
@@ -90,11 +97,14 @@ export class TriageRole extends BaseRole {
       const subtasks = normalizeSubtasks(parsed.subtasks);
       const taskType = VALID_TASK_TYPES.has(parsed.taskType) ? parsed.taskType : FALLBACK_TASK_TYPE;
 
+      const domainHints = normalizeDomainHints(parsed.domainHints);
+
       const triageResult = {
         level,
         roles,
         reasoning,
         taskType,
+        domainHints,
         provider
       };
 

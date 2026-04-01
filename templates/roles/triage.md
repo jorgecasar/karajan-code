@@ -12,7 +12,8 @@ Return a single valid JSON object and nothing else:
   "roles": ["planner", "researcher", "refactorer", "reviewer", "tester", "security", "impeccable"],
   "reasoning": "brief practical justification",
   "shouldDecompose": false,
-  "subtasks": []
+  "subtasks": [],
+  "domainHints": []
 }
 ```
 
@@ -48,8 +49,21 @@ If the task involves frontend/UI work, include `"impeccable"` in `roles`. Detect
 
 The `impeccable` role audits and fixes frontend design quality (a11y, performance, theming, responsive, anti-patterns).
 
+## Domain detection
+Analyze the task for **real-world business domain** indicators — concepts that go beyond technical frameworks.
+Output them as `domainHints`: an array of lowercase keywords identifying the business domain(s) involved.
+
+Examples:
+- "Create a dental treatment workflow" → `["dental", "clinical", "treatment"]`
+- "Fix invoice calculation" → `["billing", "finance", "invoice"]`
+- "Add e-commerce cart" → `["e-commerce", "retail", "cart"]`
+- "Refactor the React component" → `[]` (purely technical, no business domain)
+
+`domainHints` are used by the Domain Curator to find relevant domain knowledge. Only include business-domain terms, not technical frameworks or tools.
+
 ## Rules
 - Keep `reasoning` short.
 - Recommend only roles that add clear value.
 - Do not include `coder` or `sonar` in `roles` (they are always active).
 - Subtask descriptions should be actionable and specific, not vague.
+- `domainHints` must always be an array (empty `[]` if no domain detected).

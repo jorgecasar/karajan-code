@@ -40,6 +40,9 @@ export class PipelineContext {
     // Product context (loaded from .karajan/context.md or product-vision.md)
     this.productContext = null;
 
+    // Domain context (synthesized by Domain Curator from ~/.karajan/domains/ and .karajan/domains/)
+    this.domainContext = null;
+
     // Planned task (may differ from original task after planner)
     this.plannedTask = null;
 
