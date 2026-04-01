@@ -31,7 +31,7 @@ describe("skill-loader", () => {
 
       const result = await loadAvailableSkills("/project");
 
-      expect(result).toEqual([{ name: "react", content: "React best practices content" }]);
+      expect(result).toEqual([{ name: "react", content: "React best practices content", type: "technical" }]);
       expect(readFile).toHaveBeenCalledWith(
         "/project/.agent/skills/react/SKILL.md",
         "utf-8"
@@ -49,7 +49,7 @@ describe("skill-loader", () => {
 
       const result = await loadAvailableSkills("/project");
 
-      expect(result).toEqual([{ name: "testing", content: "Testing guidelines" }]);
+      expect(result).toEqual([{ name: "testing", content: "Testing guidelines", type: "technical" }]);
     });
 
     it("reads from both directories and merges results", async () => {
@@ -71,8 +71,8 @@ describe("skill-loader", () => {
       const result = await loadAvailableSkills("/project");
 
       expect(result).toHaveLength(2);
-      expect(result[0]).toEqual({ name: "react", content: "React content" });
-      expect(result[1]).toEqual({ name: "testing", content: "Testing content" });
+      expect(result[0]).toEqual({ name: "react", content: "React content", type: "technical" });
+      expect(result[1]).toEqual({ name: "testing", content: "Testing content", type: "technical" });
     });
 
     it("skips entries that are not directories", async () => {
