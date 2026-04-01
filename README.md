@@ -168,15 +168,16 @@ $ claude                         $ kj-tail
 ## The pipeline
 
 ```
-hu-reviewer? → triage → discover? → architect? → planner? → coder → sonar? → impeccable? → reviewer → tester? → security? → solomon → commiter?
+hu-reviewer? → triage → domain-curator? → discover? → architect? → planner? → coder → sonar? → impeccable? → reviewer → tester? → security? → solomon → commiter?
 ```
 
-**15 roles**, each executed by the AI agent you choose:
+**16 roles**, each executed by the AI agent you choose:
 
 | Role | What it does | Default |
 |------|-------------|---------|
 | **hu-reviewer** | Certifies user stories before coding (6 dimensions, 7 antipatterns) | Auto (medium/complex) |
-| **triage** | Classifies complexity, activates roles, auto-simplifies for trivial tasks | **On** |
+| **triage** | Classifies complexity, activates roles, detects domain hints | **On** |
+| **domain-curator** | Discovers, proposes and synthesizes business-domain knowledge for the pipeline | Auto (when domains exist) |
 | **discover** | Detects gaps in requirements (Mom Test, Wendel, JTBD) | Off |
 | **architect** | Designs solution architecture before planning | Off |
 | **planner** | Generates structured implementation plans | Off |

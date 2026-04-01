@@ -141,15 +141,16 @@ kj-tail --help           # Todas las opciones
 ## El pipeline
 
 ```
-hu-reviewer? → triage → discover? → architect? → planner? → coder → sonar? → impeccable? → reviewer → tester? → security? → solomon → commiter?
+hu-reviewer? → triage → domain-curator? → discover? → architect? → planner? → coder → sonar? → impeccable? → reviewer → tester? → security? → solomon → commiter?
 ```
 
-**15 roles**, cada uno ejecutado por el agente de IA que elijas:
+**16 roles**, cada uno ejecutado por el agente de IA que elijas:
 
 | Rol | Que hace | Por defecto |
 |-----|----------|-------------|
 | **hu-reviewer** | Certifica historias de usuario antes de codificar (6 dimensiones, 7 antipatrones) | Auto (media/compleja) |
-| **triage** | Clasifica complejidad, activa roles, auto-simplifica para tareas triviales | **On** |
+| **triage** | Clasifica complejidad, activa roles, detecta domain hints | **On** |
+| **domain-curator** | Descubre, propone y sintetiza conocimiento de dominio de negocio para el pipeline | Auto (cuando existen dominios) |
 | **discover** | Detecta huecos en requisitos (Mom Test, Wendel, JTBD) | Off |
 | **architect** | Diseña la arquitectura de la solucion antes de planificar | Off |
 | **planner** | Genera planes de implementacion estructurados | Off |
