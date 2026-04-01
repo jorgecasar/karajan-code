@@ -18,17 +18,23 @@ Karajan looks for role instructions in this order (first found wins):
 
 | Role | File | Purpose |
 |------|------|---------|
-| coder | `coder.md` | Code generation and modification |
-| reviewer | `reviewer.md` | Code review and approval |
-| planner | `planner.md` | Task decomposition and planning |
+| triage | `triage.md` | Task complexity classification and domain hints detection |
+| domain-curator | `domain-curator.md` | Business-domain knowledge discovery, proposal and synthesis |
+| discover | `discover.md` | Pre-execution gap detection (Mom Test, Wendel, JTBD) |
+| hu-reviewer | `hu-reviewer.md` | User story certification (6 dimensions, 7 antipatterns) |
 | researcher | `researcher.md` | Codebase analysis before coding |
+| architect | `architect.md` | Solution architecture design (layers, patterns, data model, APIs) |
+| planner | `planner.md` | Task decomposition and planning |
+| coder | `coder.md` | Code generation and modification |
 | refactorer | `refactorer.md` | Code cleanup post-coding |
+| sonar | `sonar.md` | SonarQube analysis interpretation |
+| impeccable | `impeccable.md` | UI/UX design audit (a11y, performance, theming) |
+| reviewer | `reviewer.md` | Code review and approval |
 | tester | `tester.md` | Test quality evaluation |
 | security | `security.md` | Security audit |
-| commiter | `commiter.md` | Git commit message generation |
-| solomon | `solomon.md` | Conflict resolution between roles |
-| triage | `triage.md` | Task complexity classification |
-| sonar | `sonar.md` | SonarQube analysis interpretation |
+| solomon | `solomon.md` | Conflict resolution between roles (Pipeline Boss) |
+| commiter | `commiter.md` | Git commit, push and PR automation |
+| audit | `audit.md` | Read-only codebase health analysis (5 dimensions, A-F scores) |
 
 ### Example: Custom reviewer role
 
