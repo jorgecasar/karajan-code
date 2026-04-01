@@ -22,7 +22,7 @@ const DIMENSION_KEYS = [
  * @param {{stories: Array<{id: string, text: string}>, instructions: string|null, context?: string|null}} params
  * @returns {string} The assembled prompt.
  */
-export function buildHuReviewerPrompt({ stories, instructions, context = null, productContext = null, hu_language = "en" }) {
+export function buildHuReviewerPrompt({ stories, instructions, context = null, productContext = null, domainContext = null, hu_language = "en" }) {
   const langInstruction = getLanguageInstruction(hu_language);
   const sections = [SUBAGENT_PREAMBLE, ...(langInstruction ? [langInstruction] : [])];
 
@@ -43,6 +43,10 @@ export function buildHuReviewerPrompt({ stories, instructions, context = null, p
 
   if (productContext) {
     sections.push(`## Product Context\n${productContext}`);
+  }
+
+  if (domainContext) {
+    sections.push(`## Domain Context\n${domainContext}`);
   }
 
   if (context) {

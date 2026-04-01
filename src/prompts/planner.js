@@ -64,7 +64,7 @@ function formatArchitectContext(architectContext) {
   return lines.length > 1 ? lines.join("\n") : null;
 }
 
-export function buildPlannerPrompt({ task, context, architectContext, productContext = null }) {
+export function buildPlannerPrompt({ task, context, architectContext, productContext = null, domainContext = null }) {
   const parts = [
     "You are an expert software architect. Create an implementation plan for the following task.",
     "",
@@ -75,6 +75,10 @@ export function buildPlannerPrompt({ task, context, architectContext, productCon
 
   if (productContext) {
     parts.push("## Product Context", productContext, "");
+  }
+
+  if (domainContext) {
+    parts.push("## Domain Context", domainContext, "");
   }
 
   if (context) {
