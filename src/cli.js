@@ -28,6 +28,7 @@ import { undoCommand } from "./commands/undo.js";
 import { statusCommand } from "./commands/status.js";
 
 import { printUpdateNotice } from "./utils/update-check.js";
+import { printWelcomeScreen } from "./utils/welcome.js";
 
 const PKG_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../package.json");
 const PKG_VERSION = JSON.parse(readFileSync(PKG_PATH, "utf8")).version;
@@ -368,6 +369,12 @@ sonar
     }
     console.log(`Opened ${result.url}`);
   });
+
+// Show welcome screen when invoked with no subcommand
+program.action(async () => {
+  const { config } = await loadConfig().catch(() => ({ config: null }));
+  printWelcomeScreen({ version: PKG_VERSION, config });
+});
 
 try {
   await program.parseAsync();
