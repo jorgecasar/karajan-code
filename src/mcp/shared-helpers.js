@@ -104,11 +104,125 @@ export async function buildConfig(options, commandName = "run") {
   return merged;
 }
 
+/**
+ * Parse a structured response from free-text input.
+ * Exported for testing.
+ * @param {string} raw — user's raw text answer
+ * @param {string} type — question type: "multi-select" | "select" | "confirm" | "text"
+ * @param {Array<{id: string, label: string}>} [options] — available options (for select types)
+ * @returns {string[]|string|boolean|null} parsed response
+ */
+export function parseStructuredResponse(raw, type, options = []) {
+  const trimmed = (raw || "").trim();
+  const lower = trimmed.toLowerCase();
+
+  if (type === "confirm") {
+    return ["yes", "y", "si", "sí", "1", "true"].includes(lower) ? true : false;
+  }
+
+  if (type === "text") {
+    return trimmed;
+  }
+
+  if (type === "select") {
+    const num = parseInt(trimmed, 10);
+    if (!isNaN(num) && num >= 1 && num <= options.length) {
+      return options[num - 1].id;
+    }
+    // Try matching by id directly
+    const match = options.find(o => o.id.toLowerCase() === lower);
+    return match ? match.id : (options[0]?.id || null);
+  }
+
+  if (type === "multi-select") {
+    if (lower === "all") return options.map(o => o.id);
+    if (lower === "none" || lower === "0") return [];
+
+    // Parse comma-separated numbers or ids
+    const parts = trimmed.split(/[,;\s]+/).map(p => p.trim()).filter(Boolean);
+    const selected = [];
+
+    for (const part of parts) {
+      const num = parseInt(part, 10);
+      if (!isNaN(num) && num >= 1 && num <= options.length) {
+        selected.push(options[num - 1].id);
+      } else {
+        const match = options.find(o => o.id.toLowerCase() === part.toLowerCase());
+        if (match) selected.push(match.id);
+      }
+    }
+
+    return selected;
+  }
+
+  return trimmed || null;
+}
+
+/**
+ * Format a structured question into a text message for elicitInput.
+ * @param {Object} question
+ * @returns {string}
+ */
+function formatStructuredQuestion(question) {
+  const lines = [question.message, ""];
+
+  if (question.options?.length) {
+    for (let i = 0; i < question.options.length; i++) {
+      const opt = question.options[i];
+      const marker = opt.default ? "*" : " ";
+      lines.push(`  ${i + 1}.${marker} ${opt.label}`);
+    }
+    lines.push("");
+  }
+
+  if (question.type === "multi-select") {
+    lines.push("(Enter numbers separated by commas, 'all', or 'none')");
+  } else if (question.type === "select") {
+    lines.push("(Enter a number)");
+  } else if (question.type === "confirm") {
+    lines.push("(yes/no)");
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Build an askQuestion function from an MCP server.
+ * Detects host capabilities and adapts behavior accordingly.
+ *
+ * The returned function has an `.interactive` boolean property indicating
+ * whether the host supports elicitation.
+ *
+ * Accepts both plain string questions (backward compatible) and structured
+ * question objects ({message, type, options, defaults}).
+ *
+ * @param {Object} server — MCP server instance
+ * @returns {Function & {interactive: boolean}}
+ */
 export function buildAskQuestion(server) {
-  return async (question) => {
+  const canElicit = Boolean(server.getClientCapabilities?.()?.elicitation);
+
+  const askQuestion = async (question) => {
+    const isStructured = question && typeof question === "object" && question.message;
+
+    // Non-interactive: return defaults or null
+    if (!canElicit) {
+      if (!isStructured) return null;
+      if (question.defaults) return question.defaults;
+      if (question.type === "confirm") return false;
+      return null;
+    }
+
+    // Build the message text
+    const message = isStructured
+      ? formatStructuredQuestion(question)
+      : question;
+
+    // Call elicitInput
+    let rawAnswer;
     try {
       const result = await server.elicitInput({
-        message: question,
+        message,
         requestedSchema: {
           type: "object",
           properties: {
@@ -117,11 +231,25 @@ export function buildAskQuestion(server) {
           required: ["answer"]
         }
       });
-      return result.action === "accept" ? result.content?.answer || null : null;
+      rawAnswer = result.action === "accept" ? result.content?.answer || null : null;
     } catch {
-      return null;
+      return isStructured && question.defaults ? question.defaults : null;
     }
+
+    if (rawAnswer === null) {
+      return isStructured && question.defaults ? question.defaults : null;
+    }
+
+    // Parse structured response
+    if (isStructured && question.type) {
+      return parseStructuredResponse(rawAnswer, question.type, question.options);
+    }
+
+    return rawAnswer;
   };
+
+  askQuestion.interactive = canElicit;
+  return askQuestion;
 }
 
 const EVENT_LOG_LEVELS = {
