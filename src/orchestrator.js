@@ -34,6 +34,7 @@ import { invokeSolomon } from "./orchestrator/solomon-escalation.js";
 import { msg, getLang } from "./utils/messages.js";
 import { PipelineContext } from "./orchestrator/pipeline-context.js";
 import { runTriageStage, runResearcherStage, runArchitectStage, runPlannerStage, runDiscoverStage, runHuReviewerStage } from "./orchestrator/pre-loop-stages.js";
+import { runDomainCuratorStage } from "./orchestrator/stages/domain-curator-stage.js";
 import { runCoderStage, runRefactorerStage, runTddCheckStage, runSonarStage, runSonarCloudStage, runReviewerStage } from "./orchestrator/iteration-stages.js";
 import { runTesterStage, runSecurityStage, runImpeccableStage, runFinalAuditStage } from "./orchestrator/post-loop-stages.js";
 import { needsSubPipeline, runHuSubPipeline } from "./orchestrator/hu-sub-pipeline.js";
@@ -917,6 +918,23 @@ async function runPreLoopStages({ config, logger, emitter, eventBase, session, f
     }
   } catch (err) {
     logger.warn(`Skill auto-install failed (non-blocking): ${err.message}`);
+  }
+
+  // --- Domain Curator (after triage + skill auto-install, before planning phases) ---
+  const domainHints = triageResult.stageResult?.domainHints || [];
+  if (domainHints.length > 0 || config.projectDir) {
+    try {
+      const { domainContext, stageResult: dcStageResult } = await runDomainCuratorStage({
+        config, logger, emitter, eventBase, session, trackBudget,
+        domainHints, askQuestion
+      });
+      stageResults.domainCurator = dcStageResult;
+      if (domainContext) {
+        config = { ...config, domainContext };
+      }
+    } catch (err) {
+      logger.warn(`Domain Curator failed (non-blocking): ${err.message}`);
+    }
   }
 
   // --- HU Reviewer auto-activation from triage (post-triage, no huFile needed) ---
