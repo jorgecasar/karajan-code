@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.58.1] - 2026-04-01
+
+### Added
+- **CLI welcome screen**: running `kj` with no arguments shows a branded welcome with version, configured agents, and quick start commands. Uses Commander's `program.action()` so `kj --help` still works normally (#312, by @reiaguilera)
+
 ## [1.58.0] - 2026-04-01
 
 ### Added
