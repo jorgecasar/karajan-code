@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.58.0] - 2026-04-01
+
+### Added
+- **Domain Knowledge System**: new `domain-curator` role discovers, proposes and synthesizes business-domain knowledge from `~/.karajan/domains/` (user/company bank) and `.karajan/domains/` (project overrides). Domain context is injected into all downstream roles (Researcher, Architect, Planner, Coder, Reviewer, HU-Reviewer) as a `## Domain Context` section (#315)
+- **Domain Loader**: parses `DOMAIN.md` files with YAML frontmatter (name, description, tags, version, author, visibility) and markdown sections (Core Concepts, Terminology, Business Rules, Common Edge Cases). Cascading resolution: project-local overrides user-global by directory name
+- **Domain Registry**: local JSON index at `~/.karajan/domain-registry.json` with search by tags, name and description. Interface prepared for future remote registries
+- **Domain Synthesizer**: filters relevant domain sections by keyword overlap with task + hints, compacts output to token budget (default 4000 tokens)
+- **Enhanced askQuestion**: detects host MCP capabilities (`server.getClientCapabilities()?.elicitation`) and adapts behavior — `askQuestion.interactive` boolean, structured question types (multi-select, select, confirm, text), free-text response parser, default policies per stage
+- **Triage domainHints**: triage now detects business-domain keywords and outputs `domainHints[]` for the Domain Curator to search domains
+- **Skill-loader type discrimination**: `SKILL.md` files with `type: domain` frontmatter are loaded by the Domain Curator (injected globally) while `type: technical` (default) skills remain coder-only
+- **Pipeline**: 15 → 16 roles. Domain Curator slots after triage + skill auto-install and before researcher/architect/planner
+- 102 new tests across 8 test files
+
 ## [1.57.2] - 2026-04-01
 
 ### Added
