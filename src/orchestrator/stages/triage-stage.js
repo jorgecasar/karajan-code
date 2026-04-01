@@ -99,6 +99,8 @@ export async function runTriageStage({ config, logger, emitter, eventBase, sessi
   const shouldDecompose = triageOutput.result?.shouldDecompose || false;
   const subtasks = triageOutput.result?.subtasks || [];
 
+  const domainHints = triageOutput.result?.domainHints || [];
+
   const stageResult = {
     ok: triageOutput.ok,
     level: triageOutput.result?.level || null,
@@ -106,7 +108,8 @@ export async function runTriageStage({ config, logger, emitter, eventBase, sessi
     reasoning: triageOutput.result?.reasoning || null,
     taskType: triageOutput.result?.taskType || "sw",
     shouldDecompose,
-    subtasks
+    subtasks,
+    domainHints
   };
 
   const modelSelection = applyModelSelection(triageOutput, config, emitter, eventBase);

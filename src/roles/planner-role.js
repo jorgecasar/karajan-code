@@ -63,7 +63,7 @@ function appendArchitectSection(sections, architectContext) {
   sections.push("");
 }
 
-function buildPrompt({ task, instructions, research, triageDecomposition, architectContext, productContext = null }) {
+function buildPrompt({ task, instructions, research, triageDecomposition, architectContext, productContext = null, domainContext = null }) {
   const sections = [];
 
   if (instructions) {
@@ -78,6 +78,10 @@ function buildPrompt({ task, instructions, research, triageDecomposition, archit
 
   if (productContext) {
     sections.push("## Product Context", productContext, "");
+  }
+
+  if (domainContext) {
+    sections.push("## Domain Context", domainContext, "");
   }
 
   appendDecompositionSection(sections, triageDecomposition);
@@ -106,7 +110,7 @@ export class PlannerRole extends BaseRole {
     const provider = resolveProvider(this.config);
 
     const agent = this._createAgent(provider, this.config, this.logger);
-    const prompt = buildPrompt({ task: taskStr, instructions: this.instructions, research, triageDecomposition, architectContext, productContext: this.config?.productContext || null });
+    const prompt = buildPrompt({ task: taskStr, instructions: this.instructions, research, triageDecomposition, architectContext, productContext: this.config?.productContext || null, domainContext: this.config?.domainContext || null });
 
     const runArgs = { prompt, role: "planner" };
     if (onOutput) runArgs.onOutput = onOutput;

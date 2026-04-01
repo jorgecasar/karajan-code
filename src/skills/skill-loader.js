@@ -3,14 +3,37 @@ import { join } from "node:path";
 
 const SKILL_DIRS = [".agent/skills", ".claude/skills"];
 const SKILL_FILE = "SKILL.md";
+const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
+
+/**
+ * Extract the `type` field from SKILL.md frontmatter.
+ * Returns "technical" (default) or "domain".
+ * @param {string} content — raw SKILL.md content
+ * @returns {{type: string, body: string}}
+ */
+function parseSkillType(content) {
+  const match = content.match(FRONTMATTER_RE);
+  if (!match) return { type: "technical", body: content };
+
+  const frontmatter = match[1];
+  const body = match[2];
+
+  // Simple regex extraction — avoid full YAML parser for a single field
+  const typeMatch = frontmatter.match(/^type:\s*(.+)$/m);
+  const type = typeMatch ? typeMatch[1].trim().toLowerCase() : "technical";
+
+  return { type, body };
+}
 
 /**
  * Scans known skill directories for SKILL.md files.
  * @param {string} projectDir — absolute path to the project root
- * @returns {Promise<Array<{name: string, content: string}>>}
+ * @param {{type?: string}} [options] — filter by type: "technical" (default), "domain", or undefined (all)
+ * @returns {Promise<Array<{name: string, content: string, type: string}>>}
  */
-export async function loadAvailableSkills(projectDir) {
+export async function loadAvailableSkills(projectDir, options = {}) {
   const skills = [];
+  const filterType = options.type || null;
 
   for (const rel of SKILL_DIRS) {
     const dir = join(projectDir, rel);
@@ -25,8 +48,16 @@ export async function loadAvailableSkills(projectDir) {
       if (!entry.isDirectory()) continue;
       const skillPath = join(dir, entry.name, SKILL_FILE);
       try {
-        const content = await readFile(skillPath, "utf-8");
-        skills.push({ name: entry.name, content });
+        const raw = await readFile(skillPath, "utf-8");
+        const { type, body } = parseSkillType(raw);
+
+        // Filter by type if specified
+        if (filterType && type !== filterType) continue;
+
+        // For backward compat: existing callers get content without frontmatter for domain skills,
+        // but full content for technical skills (they never had frontmatter before)
+        const content = type === "domain" ? body.trim() : raw;
+        skills.push({ name: entry.name, content, type });
       } catch {
         // no SKILL.md in this subdirectory — skip
       }
