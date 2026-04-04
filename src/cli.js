@@ -57,7 +57,7 @@ program
   .command("init")
   .description("Initialize config, review rules and SonarQube")
   .option("--no-interactive", "Skip wizard, use defaults (for CI/scripts)")
-  .option("--scaffold-becaria", "Scaffold BecarIA Gateway workflow files")
+  .option("--scaffold-ci", "Scaffold Karajan CI Gateway workflow files")
   .action(async (flags) => {
     await withConfig("init", flags, async ({ config, logger }) => {
       await initCommand({ logger, flags });
@@ -111,13 +111,12 @@ program
   .option("--auto-commit")
   .option("--auto-push")
   .option("--auto-pr")
-  .option("--enable-becaria", "Enable BecarIA Gateway (early PR + dispatch comments/reviews)")
+  .option("--enable-ci", "Enable Karajan CI (early PR + dispatch comments/reviews)")
   .option("--branch-prefix <prefix>")
   .option("--task-type <type>", "Explicit task type: sw, infra, doc, add-tests, refactor")
   .option("--methodology <name>")
   .option("--no-auto-rebase")
   .option("--no-sonar")
-  .option("--no-proxy")
   .option("--enable-sonarcloud", "Enable SonarCloud scan (complementary to SonarQube)")
   .option("--no-sonarcloud")
   .option("--checkpoint-interval <n>", "Minutes between interactive checkpoints (default: 5)")

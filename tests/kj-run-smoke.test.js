@@ -46,7 +46,8 @@ vi.mock("../src/session-store.js", () => {
 vi.mock("../src/review/diff-generator.js", () => ({
   computeBaseRef: vi.fn().mockResolvedValue("abc123"),
   getUntrackedFiles: vi.fn().mockResolvedValue([]),
-  generateDiff: vi.fn().mockResolvedValue("diff content")
+  generateDiff: vi.fn().mockResolvedValue("diff content"),
+  setProjectDir: vi.fn()
 }));
 
 vi.mock("../src/review/schema.js", () => ({
@@ -194,11 +195,12 @@ describe("kj_run smoke", () => {
 
     expect(result.approved).toBe(true);
     expect(sonarUp).toHaveBeenCalledWith("http://localhost:9000");
-    expect(runCommand).toHaveBeenCalledTimes(2);
-    expect(runCommand.mock.calls[0][0]).toBe("git");
-    expect(runCommand.mock.calls[0][1]).toEqual(["config", "--get", "remote.origin.url"]);
-    expect(runCommand.mock.calls[1][0]).toBe("docker");
-    expect(runCommand.mock.calls[1][1]).toContain("sonarsource/sonar-scanner-cli");
+    // At least 2 calls: git config + docker scanner (journal may add git diff for tree)
+    expect(runCommand.mock.calls.length).toBeGreaterThanOrEqual(2);
+    const gitConfigCall = runCommand.mock.calls.find(c => c[0] === "git" && c[1]?.[0] === "config");
+    expect(gitConfigCall).toBeTruthy();
+    const dockerCall = runCommand.mock.calls.find(c => c[0] === "docker");
+    expect(dockerCall[1]).toContain("sonarsource/sonar-scanner-cli");
 
     const dockerCallIndex = runCommand.mock.calls.findIndex(
       ([bin, args]) => bin === "docker" && args.includes("sonarsource/sonar-scanner-cli")

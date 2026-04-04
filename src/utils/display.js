@@ -99,7 +99,10 @@ export function printHeader({ task, config }) {
   if (pipeline.researcher?.enabled) activeRoles.push(`Researcher (${config.roles?.researcher?.provider || "?"})`);
   if (pipeline.tester?.enabled) activeRoles.push("Tester");
   if (pipeline.security?.enabled) activeRoles.push("Security");
-  if (pipeline.solomon?.enabled) activeRoles.push(`Solomon (${config.roles?.solomon?.provider || "?"})`);
+  if (pipeline.solomon?.enabled) {
+    const solomonProvider = config.roles?.solomon?.provider;
+    activeRoles.push(solomonProvider ? `Solomon (${solomonProvider})` : "Solomon");
+  }
   if (activeRoles.length > 0) {
     const separator = ` ${ANSI.dim}|${ANSI.reset} `;
     console.log(`${ANSI.bold}Pipeline:${ANSI.reset} ${activeRoles.join(separator)}`);
@@ -256,17 +259,14 @@ function printSessionRtkSavings(rtkSavings) {
   const tokens = rtkSavings.estimatedTokensSaved ?? 0;
   const ratio = rtkSavings.savedPct ?? 0;
   const commands = rtkSavings.callCount ?? 0;
-  console.log(`  ${ANSI.dim}\u26a1 RTK: saved ~${tokens} tokens (${ratio}% compression, ${commands} commands)${ANSI.reset}`);
-}
+  const original = rtkSavings.originalBytes ?? 0;
+  const compressed = rtkSavings.rtkBytes ?? 0;
 
-function printSessionProxyStats(proxyStats) {
-  if (!proxyStats || !proxyStats.requests) return;
-  const reqs = proxyStats.requests;
-  const bytesIn = proxyStats.bytes_in ?? 0;
-  const bytesOut = proxyStats.bytes_out ?? 0;
-  const totalBytes = bytesIn + bytesOut;
-  const estTokens = Math.round(totalBytes / 4); // ~4 bytes per token
-  console.log(`  ${ANSI.dim}\ud83d\udee1\ufe0f Proxy: ${reqs} requests, ~${estTokens} tokens proxied (${(totalBytes / 1024).toFixed(0)}KB transferred)${ANSI.reset}`);
+  if (tokens === 0 || ratio === 0) {
+    console.log(`  ${ANSI.dim}⚡ RTK: ${commands} commands wrapped, 0% savings — output was already minimal (${original} bytes in, ${compressed} bytes out)${ANSI.reset}`);
+  } else {
+    console.log(`  ${ANSI.dim}⚡ RTK: saved ~${tokens.toLocaleString()} tokens (${ratio}% compression, ${commands} commands, ${original.toLocaleString()} → ${compressed.toLocaleString()} bytes)${ANSI.reset}`);
+  }
 }
 
 function printSessionBudget(budget) {
@@ -277,11 +277,15 @@ function printSessionBudget(budget) {
   }
   const estPrefix = budget.includes_estimates ? "~" : "";
   const estNote = budget.includes_estimates ? " (includes estimates)" : "";
-  console.log(`  ${ANSI.dim}\ud83d\udcb0 Total tokens: ${estPrefix}${budget.total_tokens ?? 0}${estNote}${ANSI.reset}`);
+  const fmtTokens = (n) => Number(n || 0).toLocaleString("en-US");
+  console.log(`  ${ANSI.dim}\ud83d\udcb0 Total tokens: ${estPrefix}${fmtTokens(budget.total_tokens)}${estNote}${ANSI.reset}`);
   console.log(`  ${ANSI.dim}\ud83d\udcb0 Total cost: ${estPrefix}$${Number(budget.total_cost_usd || 0).toFixed(2)}${ANSI.reset}`);
   for (const [role, metrics] of Object.entries(budget.breakdown_by_role || {})) {
+    const tokens = Number(metrics.total_tokens || 0);
+    const cost = Number(metrics.total_cost_usd || 0);
+    if (tokens === 0 && cost === 0) continue; // skip roles with no usage
     console.log(
-      `  ${ANSI.dim}   - ${role}: ${estPrefix}${metrics.total_tokens ?? 0} tokens, ${estPrefix}$${Number(metrics.total_cost_usd || 0).toFixed(2)}${ANSI.reset}`
+      `  ${ANSI.dim}   - ${role}: ${estPrefix}${fmtTokens(tokens)} tokens, ${estPrefix}$${cost.toFixed(2)}${ANSI.reset}`
     );
   }
 }
@@ -448,18 +452,16 @@ const EVENT_HANDLERS = {
     const max = Number(d.max_budget_usd);
     const pct = Number(d.pct_used ?? 0);
     const warn = Number(d.warn_threshold_pct ?? 80);
-    const hasEntries = (d.entries?.length ?? 0) > 0 || Object.keys(d.breakdown_by_role || {}).length > 0;
-    if (hasEntries && totalTokens === 0 && total === 0) {
-      console.log(`  \u251c\u2500 ${icon} Budget: ${ANSI.dim}N/A (provider does not report usage)${ANSI.reset}`);
-      return;
-    }
-    const tokenStr = totalTokens > 0 ? `${totalTokens.toLocaleString()} tokens` : "";
+    // Don't show N/A — just skip budget display when there's nothing to report
+    if (total === 0 && totalTokens === 0) return;
+    const fmtTokens = (n) => n.toLocaleString("en-US");
+    const tokenStr = totalTokens > 0 ? ` / ${fmtTokens(totalTokens)} tokens` : "";
     const costStr = `$${total.toFixed(2)}`;
     const color = budgetColor(max, pct, warn);
     if (Number.isFinite(max) && max > 0) {
-      console.log(`  \u251c\u2500 ${icon} Budget: ${color}${costStr} / $${max.toFixed(2)} (${pct.toFixed(1)}%)${ANSI.reset}${tokenStr ? `  ${ANSI.dim}${tokenStr}${ANSI.reset}` : ""}`);
-    } else if (total > 0 || totalTokens > 0) {
-      console.log(`  \u251c\u2500 ${icon} Budget: ${color}${costStr}${ANSI.reset}${tokenStr ? `  ${ANSI.dim}${tokenStr}${ANSI.reset}` : ""}`);
+      console.log(`  \u251c\u2500 ${icon} Budget: ${color}${costStr}${tokenStr} / $${max.toFixed(2)} (${pct.toFixed(1)}%)${ANSI.reset}`);
+    } else {
+      console.log(`  \u251c\u2500 ${icon} Budget: ${color}${costStr}${tokenStr}${ANSI.reset}`);
     }
   },
 
@@ -473,7 +475,6 @@ const EVENT_HANDLERS = {
     printSessionGit(event.detail?.git);
     printSessionBudget(event.detail?.budget);
     printSessionRtkSavings(event.detail?.rtk_savings);
-    printSessionProxyStats(event.detail?.proxy_stats);
     console.log(`${ANSI.dim}Session: ${event.sessionId}${ANSI.reset}`);
   },
 
@@ -587,9 +588,9 @@ const EVENT_HANDLERS = {
     }
   },
 
-  "becaria:pr-created": (event) => {
+  "ci:pr-created": (event) => {
     const url = event.detail?.prUrl || "";
-    console.log(`  \u251c\u2500 ${ANSI.green}\ud83d\ude80 BecarIA PR created: ${url}${ANSI.reset}`);
+    console.log(`  \u251c\u2500 ${ANSI.green}\ud83d\ude80 CI PR created: ${url}${ANSI.reset}`);
   },
 
   "solomon:alert": (event) => {
@@ -615,7 +616,6 @@ const QUIET_SUPPRESSED = new Set([
   "skills:auto-install",
   "context:loaded",
   "rtk:detected",
-  "proxy:started",
   "board:started",
   "plan:loaded",
   "tdd:auto-detect",

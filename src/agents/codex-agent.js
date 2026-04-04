@@ -1,7 +1,6 @@
 import { BaseAgent } from "./base-agent.js";
 import { runCommand } from "../utils/process.js";
 import { resolveBin } from "./resolve-bin.js";
-import { getProxyEnv } from "../proxy/proxy-lifecycle.js";
 
 /**
  * Extract token usage from Codex CLI stdout.
@@ -10,7 +9,7 @@ import { getProxyEnv } from "../proxy/proxy-lifecycle.js";
  * Since Codex doesn't split input/output, we assign the total to tokens_out
  * as a conservative estimate for cost calculation.
  */
-export function extractCodexTokens(stdout) {
+function extractCodexTokens(stdout) {
   const match = (stdout || "").match(/tokens?\s+used\s*\n\s*([\d,]+)/i);
   if (!match) return null;
   const total = Number(match[1].replace(/,/g, ""));
@@ -46,10 +45,7 @@ export class CodexAgent extends BaseAgent {
     if (model) args.push("--model", model);
     if (role !== "reviewer" && this.isAutoApproveEnabled(role)) args.push("--full-auto");
     args.push("-");
-    const proxyEnv = getProxyEnv();
-    const env = proxyEnv ? { ...process.env, ...proxyEnv } : undefined;
     const res = await runCommand(resolveBin("codex"), args, {
-      ...(env && { env }),
       onOutput: task.onOutput,
       silenceTimeoutMs: task.silenceTimeoutMs,
       timeout: task.timeoutMs,

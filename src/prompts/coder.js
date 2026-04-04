@@ -33,7 +33,7 @@ const SERENA_INSTRUCTIONS = [
   "Fall back to reading files only when Serena tools are not sufficient."
 ].join("\n");
 
-export async function buildCoderPrompt({ task, reviewerFeedback = null, sonarSummary = null, coderRules = null, methodology = "tdd", serenaEnabled = false, rtkAvailable = false, proxyEnabled = false, deferredContext = null, productContext = null, domainContext = null, plan = null, projectDir = null, language = "en" }) {
+export async function buildCoderPrompt({ task, reviewerFeedback = null, sonarSummary = null, coderRules = null, methodology = "tdd", serenaEnabled = false, rtkAvailable = false, deferredContext = null, productContext = null, domainContext = null, plan = null, projectDir = null, language = "en" }) {
   const langInstruction = getLanguageInstruction(language);
   const sections = [
     serenaEnabled ? SUBAGENT_PREAMBLE_SERENA : SUBAGENT_PREAMBLE,
@@ -41,6 +41,10 @@ export async function buildCoderPrompt({ task, reviewerFeedback = null, sonarSum
     `Task:\n${task}`,
     "Implement directly in the repository.",
     "Keep changes minimal and production-ready.",
+    "Follow SOLID principles. Write small, focused functions (< 30 lines).",
+    "Make atomic commits: 1 logical change = 1 commit. Keep PRs small and reviewable.",
+    "Security: use httpOnly cookies for auth tokens, validate all input, parameterize queries, never expose secrets.",
+    "No console.log — use a structured logger. No 'any' types — use JSDoc annotations.",
     SUBPROCESS_CONSTRAINTS
   ];
 
@@ -48,7 +52,7 @@ export async function buildCoderPrompt({ task, reviewerFeedback = null, sonarSum
     sections.push(SERENA_INSTRUCTIONS);
   }
 
-  const rtkSnippet = buildRtkInstructions({ rtkAvailable, proxyEnabled });
+  const rtkSnippet = buildRtkInstructions({ rtkAvailable });
   if (rtkSnippet) {
     sections.push(rtkSnippet);
   }
@@ -85,7 +89,17 @@ export async function buildCoderPrompt({ task, reviewerFeedback = null, sonarSum
   }
 
   if (reviewerFeedback) {
-    sections.push(`Reviewer blocking feedback:\n${reviewerFeedback}`);
+    sections.push(
+      `## Reviewer blocking feedback — YOU MUST FIX THESE BEFORE PROCEEDING`,
+      reviewerFeedback,
+      "",
+      "For each issue above:",
+      "1. Find the relevant file(s) in the project",
+      "2. Make the specific code change needed to resolve the issue",
+      "3. If tests are missing, write them",
+      "4. If dependencies are needed, install them (npm install)",
+      "5. Do NOT skip any issue — all must be resolved"
+    );
   }
 
   if (deferredContext) {

@@ -15,7 +15,7 @@ import { createStallDetector } from "../../utils/stall-detector.js";
 
 function categorizeIssues(issues) {
   const categories = { security: 0, correctness: 0, tests: 0, style: 0, other: 0 };
-  const securityKw = /inject|xss|csrf|secret|credential|auth|vulnerab|exploit/i;
+  const securityKw = /inject(?:ion)?|xss|csrf|secret.?leak|credential.?expos|auth(?:entication|orization).?(?:bypass|fail|miss|broken|weak)|vulnerab|exploit|httponly|token.?expos/i;
   const styleKw = /naming|name|rename|style|format|indent|spacing|convention|cosmetic|readability|comment|jsdoc|whitespace/i;
   const testKw = /test|coverage|assert|spec|mock/i;
 
@@ -37,6 +37,17 @@ function buildReviewHistory(session) {
 }
 
 async function handleReviewerStalledSolomon({ review, repeatCounts, repeatState, config, logger, emitter, eventBase, session, iteration, task, askQuestion, budgetSummary, repeatDetector }) {
+  // DETERMINISTIC GUARD: security issues NEVER go to Solomon — always return to coder
+  const categories = categorizeIssues(review.blocking_issues);
+  if (categories.security > 0) {
+    logger.info(`Reviewer found ${categories.security} security issue(s) — returning to coder (Solomon bypassed)`);
+    emitProgress(emitter, makeEvent("reviewer:security-block", { ...eventBase, stage: "reviewer" }, {
+      message: `${categories.security} security issue(s) detected — must be fixed before approval`,
+      detail: { securityCount: categories.security, blockingIssues: review.blocking_issues }
+    }));
+    return { review, solomonApproved: false };
+  }
+
   const logPrefix = repeatState.stalled
     ? `Reviewer stalled (${repeatCounts.reviewer} repeats)`
     : `Reviewer rejected (first rejection)`;
@@ -139,10 +150,10 @@ async function handleReviewerRejection({ review, repeatDetector, config, logger,
 }
 
 export async function fetchReviewDiff(session, logger) {
-  if (session.becaria_pr_number) {
-    const { getPrDiff } = await import("../../becaria/pr-diff.js");
-    const diff = await getPrDiff(session.becaria_pr_number);
-    logger.info(`Reviewer reading PR diff #${session.becaria_pr_number}`);
+  if (session.ci_pr_number) {
+    const { getPrDiff } = await import("../../ci/pr-diff.js");
+    const diff = await getPrDiff(session.ci_pr_number);
+    logger.info(`Reviewer reading PR diff #${session.ci_pr_number}`);
     return diff;
   }
   return generateDiff({ baseRef: session.session_start_sha, stageNewFiles: true });

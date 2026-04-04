@@ -72,7 +72,7 @@ function collectAssistantText(obj) {
  * usage.input_tokens/output_tokens, and modelUsage.
  * Returns an object with tokens_in, tokens_out, cost_usd, model or null if not found.
  */
-export function extractUsageFromStreamJson(raw) {
+function extractUsageFromStreamJson(raw) {
   const lines = (raw || "").split("\n").filter(Boolean);
   for (let i = lines.length - 1; i >= 0; i--) {
     const obj = tryParseJson(lines[i]);
@@ -165,9 +165,6 @@ function createStreamJsonFilter(onOutput) {
  */
 function cleanExecaOpts(extra = {}) {
   const { CLAUDECODE, ...env } = process.env;
-  // NOTE: Claude Code CLI does not respect ANTHROPIC_BASE_URL — proxy env
-  // injection is skipped for claude to avoid ECONNREFUSED errors.
-  // Other agents (codex, gemini, aider) use SDKs that do respect base URL vars.
   return { env, stdin: "ignore", ...extra };
 }
 

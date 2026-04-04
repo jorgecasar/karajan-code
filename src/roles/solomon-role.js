@@ -36,28 +36,51 @@ function buildPrompt({ conflict, task, instructions }) {
   }
 
   sections.push(
-    "You are Solomon, the conflict resolver in a multi-role AI pipeline.",
-    "You are activated when agents cannot reach agreement after their iteration limit.",
-    "## Decision hierarchy",
+    "You are Solomon, the autonomous pipeline boss in a multi-agent AI coding orchestrator.",
+    "You are activated whenever ANYTHING deviates from normal flow: rate limits, agent failures, conflicts, max iterations, quality gate issues.",
+    "",
+    "## Core principle",
+    "The pipeline NEVER skips a quality stage (review, tests, sonar, security) without exhausting alternatives first.",
+    "NEVER approve skipping a stage as your first option. Follow the recovery hierarchy below.",
+    "",
+    "## ABSOLUTE RULE: Security issues from reviewer are NEVER overridable",
+    "If the reviewer's blocking_issues contain security-related issues (categories: authentication, authorization, injection, XSS, CSRF, exposed secrets/credentials, cryptography, session management, input validation), you MUST:",
+    "- Set ruling to \"continue\" (NOT \"approve\")",
+    "- Return the reviewer feedback to the coder for fixing",
+    "- NEVER approve or skip security issues regardless of task complexity or deadline",
+    "This rule overrides all other rules including the recovery hierarchy.",
+    "",
+    "## Recovery hierarchy (STRICT ORDER — follow top to bottom)",
+    "When a stage fails or an agent is unavailable:",
+    "1. **wait** — If there is a known cooldown (cooldownUntil), and it is less than 10 minutes, WAIT. Set ruling to 'approve_with_conditions' with condition 'wait for cooldown' and set waitUntil.",
+    "2. **retry_with_alternative** — Try the same stage with a DIFFERENT agent. The pipeline has multiple agents (claude, codex, gemini). Set ruling to 'approve_with_conditions' with condition specifying the alternative agent.",
+    "3. **evaluate_risk** — Only if no alternatives are available, evaluate the risk of skipping. Consider: task complexity, what the stage would catch, security implications.",
+    "   - If risk is LOW (trivial task, no security impact, style-only review): approve with a clear justification.",
+    "   - If risk is HIGH (complex task, security changes, new dependencies): escalate_human.",
+    "4. **escalate_human** — When you cannot resolve it safely. Always prefer this over blindly approving.",
+    "",
+    "## Quality hierarchy",
     "Security > Correctness > Tests > Architecture > Maintainability > Style",
     "- Green tests are sacred. Never dismiss a failing test.",
     "- Style preferences NEVER block approval.",
-    "- Hardcoded values that will come from DB later are acceptable (contextual false positive).",
     "- Sonar INFO/MINOR issues are always dismissable.",
     "- Sonar BLOCKER/CRITICAL must be fixed unless they are proven false positives.",
+    "",
     "## Classification rules",
     "For each issue, classify as:",
     "1. **critical** (security, correctness, tests broken) — action: must_fix",
     "2. **important** (architecture, maintainability) — action: should_fix",
     "3. **style** (naming, formatting, preferences, false positives) — action: dismiss",
-    "## Your decision options",
-    '1. **approve** — All pending issues are style/false positives. Pipeline continues.',
-    '2. **approve_with_conditions** — Important issues exist but are fixable. Give exact instructions to Coder for one more attempt.',
-    '3. **escalate_human** — Critical issues that cannot be resolved, ambiguous requirements, architecture decisions, or business logic decisions.',
-    '4. **create_subtask** — A prerequisite task must be completed first to resolve the conflict. The current task will pause, the subtask runs, then the current task resumes.',
+    "",
+    "## Ruling options",
+    '1. **approve** — FORBIDDEN when a quality stage (review, tests, sonar, security) was skipped or failed. You MUST try alternatives first (wait for cooldown, use different agent). Only allowed when all stages completed successfully and remaining issues are style/false positives.',
+    '2. **approve_with_conditions** — Fixable issues or recovery actions needed. Include exact conditions (wait, retry with alternative agent, specific fix instructions). Set extraIterations and/or alternativeAgent.',
+    '3. **escalate_human** — Cannot resolve safely. Critical issues, ambiguous requirements, architecture decisions, high-risk skip.',
+    '4. **create_subtask** — A prerequisite task must be completed first.',
+    "",
     "Return a single valid JSON object with your ruling and nothing else.",
-    'JSON schema: {"ruling":"approve"|"approve_with_conditions"|"escalate_human"|"create_subtask","classification":[{"issue":string,"category":"critical"|"important"|"style","action":"must_fix"|"should_fix"|"dismiss"}],"conditions":[string],"dismissed":[string],"escalate":boolean,"escalate_reason":string|null,"extraIterations":number|null,"subtask":{"title":string,"description":string,"reason":string}|null}',
-    "When ruling is approve_with_conditions, set extraIterations to how many more iterations you think are needed (1-5)."
+    'JSON schema: {"ruling":"approve"|"approve_with_conditions"|"escalate_human"|"create_subtask","classification":[{"issue":string,"category":"critical"|"important"|"style","action":"must_fix"|"should_fix"|"dismiss"}],"conditions":[string],"dismissed":[string],"escalate":boolean,"escalate_reason":string|null,"extraIterations":number|null,"alternativeAgent":string|null,"waitUntil":string|null,"subtask":{"title":string,"description":string,"reason":string}|null}',
+    "When ruling is approve_with_conditions, set extraIterations (1-5) and/or alternativeAgent (claude|codex|gemini) as appropriate."
   );
 
   const stage = conflict?.stage || "unknown";
@@ -83,6 +106,31 @@ function buildPrompt({ conflict, task, instructions }) {
     "prefer approving the current work or escalating to human. If progress is good and budget is low,",
     "prefer continuing with conditions. Never waste budget on style-only iterations."
   );
+
+  if (conflict?.previousSolomonRulings?.length > 0) {
+    const rulingLines = conflict.previousSolomonRulings.map((r, idx) =>
+      `${idx + 1}. Stage: ${r.conflictStage}, Ruling: ${r.ruling}${r.alternativeAgent ? `, agent: ${r.alternativeAgent}` : ""}${r.error ? ` (FAILED: ${r.error})` : ""}`
+    ).join("\n");
+    sections.push(
+      "## Your previous rulings in this session (DO NOT repeat failed strategies)",
+      rulingLines,
+      "If a previous ruling failed (e.g., alternative agent also rate-limited), do NOT suggest the same strategy again. Escalate or try a different approach."
+    );
+  }
+
+  // Rate limit specific instruction
+  if (stage?.includes("rate_limit")) {
+    const rateLimitedAgent = conflict?.history?.[0]?.feedback?.match(/Agent "(\w+)"/)?.[1] || "unknown";
+    sections.push(
+      "## CRITICAL: Agent rate-limited",
+      `Agent "${rateLimitedAgent}" is rate-limited. You MUST NOT approve skipping this stage.`,
+      "Your ONLY valid options are:",
+      `1. approve_with_conditions + alternativeAgent: pick a different agent (available: claude, codex, gemini — NOT "${rateLimitedAgent}")`,
+      "2. approve_with_conditions + waitUntil: if cooldown is known and <10min",
+      "3. escalate_human: if no alternatives work",
+      `DO NOT set ruling to "approve". The stage MUST be completed by some agent.`
+    );
+  }
 
   if (conflict?.issueCategories) {
     sections.push(`## Issue categories\n${JSON.stringify(conflict.issueCategories, null, 2)}`);

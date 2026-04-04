@@ -1,8 +1,5 @@
-import fs from "node:fs/promises";
-import path from "node:path";
 import { createAgent } from "./agents/index.js";
 import {
-  createSession,
   loadSession,
   markSessionStatus,
   pauseSession,
@@ -10,28 +7,21 @@ import {
   saveSession,
   addCheckpoint
 } from "./session-store.js";
-import { computeBaseRef, generateDiff } from "./review/diff-generator.js";
-import { buildCoderPrompt } from "./prompts/coder.js";
-import { buildReviewerPrompt } from "./prompts/reviewer.js";
+import { generateDiff } from "./review/diff-generator.js";
 import { resolveRole } from "./config.js";
+import { resolveReviewProfile } from "./review/profiles.js";
+import { msg, getLang } from "./utils/messages.js";
 import { RepeatDetector, getRepeatThreshold } from "./repeat-detector.js";
 import { emitProgress, makeEvent } from "./utils/events.js";
-import { BudgetTracker, extractUsageMetrics } from "./utils/budget.js";
 import {
   prepareGitAutomation,
-  finalizeGitAutomation,
-  earlyPrCreation,
-  incrementalPush
+  finalizeGitAutomation
 } from "./git/automation.js";
-import { resolveRoleMdPath, loadFirstExisting } from "./roles/base-role.js";
-import { applyPolicies } from "./guards/policy-resolver.js";
 import { scanDiff } from "./guards/output-guard.js";
 import { scanPerfDiff } from "./guards/perf-guard.js";
 import { classifyIntent } from "./guards/intent-guard.js";
-import { resolveReviewProfile } from "./review/profiles.js";
 import { CoderRole } from "./roles/coder-role.js";
 import { invokeSolomon } from "./orchestrator/solomon-escalation.js";
-import { msg, getLang } from "./utils/messages.js";
 import { PipelineContext } from "./orchestrator/pipeline-context.js";
 import { runTriageStage, runResearcherStage, runArchitectStage, runPlannerStage, runDiscoverStage, runHuReviewerStage } from "./orchestrator/pre-loop-stages.js";
 import { runDomainCuratorStage } from "./orchestrator/stages/domain-curator-stage.js";
@@ -44,275 +34,42 @@ import { detectTestFramework } from "./utils/project-detect.js";
 import { runPreflightChecks } from "./orchestrator/preflight-checks.js";
 import { detectRtk } from "./utils/rtk-detect.js";
 import { createRtkRunner, RtkSavingsTracker } from "./utils/rtk-wrapper.js";
-import { setRunner as setDiffRunner } from "./review/diff-generator.js";
+import { setRunner as setDiffRunner, setProjectDir as setDiffProjectDir } from "./review/diff-generator.js";
 import { setRunner as setGitRunner } from "./utils/git.js";
 import { detectNeededSkills, autoInstallSkills, cleanupAutoInstalledSkills } from "./skills/skill-detector.js";
 import { isOpenSkillsAvailable } from "./skills/openskills-client.js";
-import { startProxy, stopProxy, getProxyStats } from "./proxy/proxy-lifecycle.js";
 
+// Extracted modules
+import {
+  loadProductContext as _loadProductContext,
+  resolvePipelineFlags, handleDryRun, createBudgetManager,
+  initializeSession, applyTriageOverrides, applyAutoSimplify,
+  applyFlagOverrides, resolvePipelinePolicies, autoInit,
+  updateGitignoreForStack
+} from "./orchestrator/config-init.js";
+import {
+  tryCiComment, handleCiEarlyPrOrPush, handleCiReviewDispatch,
+  formatBlockingIssues
+} from "./orchestrator/ci-integration.js";
+import {
+  shouldAutoContinueCheckpoint as _shouldAutoContinueCheckpoint,
+  parseCheckpointAnswer as _parseCheckpointAnswer,
+  handleCheckpoint, checkSessionTimeout, checkBudgetExceeded,
+  takeCheckpointSnapshot
+} from "./orchestrator/flow-control.js";
+import {
+  createJournalDir, writePreLoopJournal, writeIterationsJournal,
+  writeDecisionsJournal, writeTreeJournal, writeSummaryJournal,
+  formatIteration, formatDecision, buildPlanSummary
+} from "./orchestrator/session-journal.js";
 
-// --- Product Context loader ---
+// Re-export for external consumers
+export const loadProductContext = _loadProductContext;
+export const shouldAutoContinueCheckpoint = _shouldAutoContinueCheckpoint;
+export const parseCheckpointAnswer = _parseCheckpointAnswer;
 
-/**
- * Load product context from well-known file locations.
- * Returns the file content or null if no file is found.
- * @param {string|null} projectDir
- * @returns {Promise<{content: string|null, source: string|null}>}
- */
-export async function loadProductContext(projectDir) {
-  const base = projectDir || process.cwd();
-  const candidates = [
-    path.join(base, ".karajan", "context.md"),
-    path.join(base, "product-vision.md")
-  ];
-  for (const file of candidates) {
-    try {
-      const content = await fs.readFile(file, "utf8");
-      return { content, source: file };
-    } catch { /* not found, try next */ }
-  }
-  return { content: null, source: null };
-}
-
-// --- Extracted helper functions (pure refactoring, zero behavior change) ---
-
-function resolvePipelineFlags(config) {
-  return {
-    plannerEnabled: Boolean(config.pipeline?.planner?.enabled),
-    refactorerEnabled: Boolean(config.pipeline?.refactorer?.enabled),
-    researcherEnabled: Boolean(config.pipeline?.researcher?.enabled),
-    testerEnabled: Boolean(config.pipeline?.tester?.enabled),
-    securityEnabled: Boolean(config.pipeline?.security?.enabled),
-    impeccableEnabled: Boolean(config.pipeline?.impeccable?.enabled),
-    reviewerEnabled: config.pipeline?.reviewer?.enabled !== false,
-    discoverEnabled: Boolean(config.pipeline?.discover?.enabled),
-    architectEnabled: Boolean(config.pipeline?.architect?.enabled),
-    huReviewerEnabled: Boolean(config.pipeline?.hu_reviewer?.enabled),
-  };
-}
-
-async function handleDryRun({ task, config, flags, emitter, pipelineFlags }) {
-  const { plannerEnabled, refactorerEnabled, researcherEnabled, testerEnabled, securityEnabled, impeccableEnabled, reviewerEnabled, discoverEnabled, architectEnabled, huReviewerEnabled } = pipelineFlags;
-  const plannerRole = resolveRole(config, "planner");
-  const coderRole = resolveRole(config, "coder");
-  const reviewerRole = resolveRole(config, "reviewer");
-  const refactorerRole = resolveRole(config, "refactorer");
-  const triageEnabled = true;
-
-  const dryRunPolicies = applyPolicies({
-    taskType: flags.taskType || config.taskType || null,
-    policies: config.policies,
-  });
-  const projectDir = config.projectDir || process.cwd();
-  const { rules: reviewRules } = await resolveReviewProfile({ mode: config.review_mode, projectDir });
-  const coderRules = await loadFirstExisting(resolveRoleMdPath("coder", projectDir));
-  const coderPrompt = await buildCoderPrompt({ task, coderRules, methodology: config.development?.methodology, serenaEnabled: Boolean(config.serena?.enabled), rtkAvailable: Boolean(config.rtk?.available), proxyEnabled: Boolean(config.proxy?.enabled), productContext: config.productContext || null });
-  const reviewerPrompt = await buildReviewerPrompt({ task, diff: "(dry-run: no diff)", reviewRules, mode: config.review_mode, serenaEnabled: Boolean(config.serena?.enabled), rtkAvailable: Boolean(config.rtk?.available), proxyEnabled: Boolean(config.proxy?.enabled), productContext: config.productContext || null });
-
-  const summary = {
-    dry_run: true,
-    task,
-    policies: dryRunPolicies,
-    roles: { planner: plannerRole, coder: coderRole, reviewer: reviewerRole, refactorer: refactorerRole },
-    pipeline: {
-      discover_enabled: discoverEnabled,
-      architect_enabled: architectEnabled,
-      triage_enabled: triageEnabled,
-      planner_enabled: plannerEnabled,
-      refactorer_enabled: refactorerEnabled,
-      sonar_enabled: Boolean(config.sonarqube?.enabled),
-      reviewer_enabled: reviewerEnabled,
-      researcher_enabled: researcherEnabled,
-      tester_enabled: testerEnabled,
-      security_enabled: securityEnabled,
-      impeccable_enabled: impeccableEnabled,
-      solomon_enabled: Boolean(config.pipeline?.solomon?.enabled),
-      hu_reviewer_enabled: huReviewerEnabled
-    },
-    limits: {
-      max_iterations: config.max_iterations,
-      max_iteration_minutes: config.session?.max_iteration_minutes,
-      max_total_minutes: config.session?.max_total_minutes,
-      max_sonar_retries: config.session?.max_sonar_retries,
-      max_reviewer_retries: config.session?.max_reviewer_retries,
-      max_tester_retries: config.session?.max_tester_retries,
-      max_security_retries: config.session?.max_security_retries
-    },
-    prompts: { coder: coderPrompt, reviewer: reviewerPrompt },
-    git: config.git
-  };
-
-  emitProgress(
-    emitter,
-    makeEvent("dry-run:summary", { sessionId: null, iteration: 0, stage: "dry-run", startedAt: Date.now() }, {
-      message: "Dry-run complete — no changes made",
-      detail: summary
-    })
-  );
-
-  return summary;
-}
-
-function createBudgetManager({ config, emitter, eventBase }) {
-  const budgetTracker = new BudgetTracker({ pricing: config?.budget?.pricing });
-  const budgetLimit = Number(config?.max_budget_usd);
-  const hasBudgetLimit = Number.isFinite(budgetLimit) && budgetLimit >= 0;
-  const warnThresholdPct = Number(config?.budget?.warn_threshold_pct ?? 80);
-  let stageCounter = 0;
-
-  function budgetSummary() {
-    const s = budgetTracker.summary();
-    s.trace = budgetTracker.trace();
-    return s;
-  }
-
-  function trackBudget({ role, provider, model, result, duration_ms, promptSize }) {
-    // Attach promptSize to result if provided, so extractUsageMetrics can estimate tokens
-    const enrichedResult = promptSize && result ? { ...result, promptSize } : result;
-    const metrics = extractUsageMetrics(enrichedResult, model);
-    budgetTracker.record({ role, provider, ...metrics, duration_ms, stage_index: stageCounter++ });
-
-    if (!hasBudgetLimit) return;
-    const totalCost = budgetTracker.total().cost_usd;
-    const pctUsed = budgetLimit === 0 ? 100 : (totalCost / budgetLimit) * 100;
-    const warnOrOk = pctUsed >= warnThresholdPct ? "paused" : "ok";
-    const status = totalCost > budgetLimit ? "fail" : warnOrOk;
-    emitProgress(
-      emitter,
-      makeEvent("budget:update", { ...eventBase, stage: role }, {
-        status,
-        message: `Budget: $${totalCost.toFixed(2)} / $${budgetLimit.toFixed(2)}`,
-        detail: {
-          ...budgetSummary(),
-          max_budget_usd: budgetLimit,
-          warn_threshold_pct: warnThresholdPct,
-          pct_used: Number(pctUsed.toFixed(2)),
-          remaining_usd: budgetTracker.remaining(budgetLimit),
-          executorType: "system"
-        }
-      })
-    );
-  }
-
-  return { budgetTracker, budgetLimit, budgetSummary, trackBudget };
-}
-
-async function initializeSession({ task, config, flags, pgTaskId, pgProject }) {
-  const baseRef = await computeBaseRef({ baseBranch: config.base_branch, baseRef: flags.baseRef || null });
-
-  // Take filesystem snapshot for git-free diff fallback
-  if (baseRef === "__snapshot__") {
-    const { takeSnapshot } = await import("./review/snapshot-diff.js");
-    const { setSnapshot } = await import("./review/diff-generator.js");
-    const snapshot = await takeSnapshot(config.projectDir || process.cwd());
-    setSnapshot(snapshot);
-  }
-
-  const sessionInit = {
-    task,
-    config_snapshot: config,
-    base_ref: baseRef,
-    session_start_sha: baseRef,
-    last_reviewer_feedback: null,
-    repeated_issue_count: 0,
-    sonar_retry_count: 0,
-    reviewer_retry_count: 0,
-    standby_retry_count: 0,
-    last_sonar_issue_signature: null,
-    sonar_repeat_count: 0,
-    last_reviewer_issue_signature: null,
-    reviewer_repeat_count: 0,
-    deferred_issues: []
-  };
-  if (pgTaskId) sessionInit.pg_task_id = pgTaskId;
-  if (pgProject) sessionInit.pg_project_id = pgProject;
-  return createSession(sessionInit);
-}
 
 // PG card "In Progress" logic moved to src/planning-game/pipeline-adapter.js → initPgAdapter()
-
-function applyTriageOverrides(pipelineFlags, roleOverrides) {
-  const keys = ["plannerEnabled", "researcherEnabled", "architectEnabled", "refactorerEnabled", "reviewerEnabled", "testerEnabled", "securityEnabled", "impeccableEnabled"];
-  for (const key of keys) {
-    if (roleOverrides[key] !== undefined) {
-      pipelineFlags[key] = roleOverrides[key];
-    }
-  }
-}
-
-const SIMPLE_LEVELS = new Set(["trivial", "simple"]);
-
-function applyAutoSimplify({ pipelineFlags, triageLevel, config, flags, logger, emitter, eventBase }) {
-  if (!config.pipeline?.auto_simplify) return false;
-  if (!triageLevel || !SIMPLE_LEVELS.has(triageLevel)) return false;
-  if (flags.mode) return false;
-  if (flags.enableReviewer !== undefined || flags.enableTester !== undefined) return false;
-
-  pipelineFlags.reviewerEnabled = false;
-  pipelineFlags.testerEnabled = false;
-
-  const disabledRoles = ["reviewer", "tester"];
-  logger.info(`Simple task (${triageLevel}) — lightweight pipeline (disabled: ${disabledRoles.join(", ")})`);
-  emitProgress(
-    emitter,
-    makeEvent("pipeline:simplify", { ...eventBase, stage: "triage" }, {
-      message: `Simple task (${triageLevel}) — lightweight pipeline`,
-      detail: { level: triageLevel, disabledRoles }
-    })
-  );
-  return true;
-}
-
-// PG decomposition logic moved to src/planning-game/pipeline-adapter.js → handlePgDecomposition()
-
-function applyFlagOverrides(pipelineFlags, flags) {
-  if (flags.enablePlanner !== undefined) pipelineFlags.plannerEnabled = Boolean(flags.enablePlanner);
-  if (flags.enableResearcher !== undefined) pipelineFlags.researcherEnabled = Boolean(flags.enableResearcher);
-  if (flags.enableArchitect !== undefined) pipelineFlags.architectEnabled = Boolean(flags.enableArchitect);
-  if (flags.enableRefactorer !== undefined) pipelineFlags.refactorerEnabled = Boolean(flags.enableRefactorer);
-  if (flags.enableReviewer !== undefined) pipelineFlags.reviewerEnabled = Boolean(flags.enableReviewer);
-  if (flags.enableTester !== undefined) pipelineFlags.testerEnabled = Boolean(flags.enableTester);
-  if (flags.enableSecurity !== undefined) pipelineFlags.securityEnabled = Boolean(flags.enableSecurity);
-  if (flags.enableImpeccable !== undefined) pipelineFlags.impeccableEnabled = Boolean(flags.enableImpeccable);
-
-  // --design flag: force-enable impeccable in refactoring mode
-  if (flags.design) {
-    pipelineFlags.impeccableEnabled = true;
-    pipelineFlags.impeccableMode = "refactoring";
-  }
-}
-
-function resolvePipelinePolicies({ flags, config, stageResults, emitter, eventBase, session, pipelineFlags }) {
-  const resolvedPolicies = applyPolicies({
-    taskType: flags.taskType || config.taskType || stageResults.triage?.taskType || stageResults.intent?.taskType || null,
-    policies: config.policies,
-  });
-  session.resolved_policies = resolvedPolicies;
-
-  let updatedConfig = config;
-  if (!resolvedPolicies.tdd) {
-    updatedConfig = { ...updatedConfig, development: { ...updatedConfig.development, methodology: "standard", require_test_changes: false } };
-  }
-  if (!resolvedPolicies.sonar) {
-    updatedConfig = { ...updatedConfig, sonarqube: { ...updatedConfig.sonarqube, enabled: false } };
-  }
-  if (!resolvedPolicies.reviewer) {
-    pipelineFlags.reviewerEnabled = false;
-  }
-  if (resolvedPolicies.coderRequired === false) {
-    pipelineFlags.coderRequired = false;
-  }
-
-  emitProgress(
-    emitter,
-    makeEvent("policies:resolved", eventBase, {
-      message: `Policies resolved for taskType="${resolvedPolicies.taskType}"`,
-      detail: resolvedPolicies
-    })
-  );
-
-  return updatedConfig;
-}
 
 async function runPlanningPhases({ config, logger, emitter, eventBase, session, stageResults, pipelineFlags, coderRole, trackBudget, task, askQuestion }) {
   let researchContext = null;
@@ -345,7 +102,7 @@ async function runPlanningPhases({ config, logger, emitter, eventBase, session, 
     plannedTask = plannerResult.plannedTask;
     stageResults.planner = plannerResult.stageResult;
 
-    await tryBecariaComment({
+    await tryCiComment({
       config, session, logger,
       agent: "Planner",
       body: `Plan: ${plannerResult.stageResult?.summary || plannedTask}`
@@ -355,314 +112,92 @@ async function runPlanningPhases({ config, logger, emitter, eventBase, session, 
   return { plannedTask };
 }
 
-async function tryBecariaComment({ config, session, logger, agent, body }) {
-  if (!config.becaria?.enabled || !session.becaria_pr_number) return;
-  try {
-    const { dispatchComment } = await import("./becaria/dispatch.js");
-    const { detectRepo } = await import("./becaria/repo.js");
-    const repo = await detectRepo();
-    if (repo) {
-      await dispatchComment({
-        repo, prNumber: session.becaria_pr_number, agent,
-        body, becariaConfig: config.becaria
-      });
-    }
-  } catch { /* non-blocking */ }
-}
 
-function detectCheckpointProgress(session, lastCheckpointSnapshot) {
-  if (!lastCheckpointSnapshot) return true; // First checkpoint — assume progress
-  const currentIteration = session.reviewer_retry_count ?? 0;
-  const currentStages = Object.keys(session.resolved_policies || {}).length;
-  const currentCheckpoints = (session.checkpoints || []).length;
-
-  const iterationAdvanced = currentIteration !== lastCheckpointSnapshot.iteration;
-  const stagesChanged = currentStages !== lastCheckpointSnapshot.stagesCount;
-  const checkpointsChanged = currentCheckpoints !== lastCheckpointSnapshot.checkpointsCount;
-
-  return iterationAdvanced || stagesChanged || checkpointsChanged;
-}
-
-function takeCheckpointSnapshot(session) {
-  return {
-    iteration: session.reviewer_retry_count ?? 0,
-    stagesCount: Object.keys(session.resolved_policies || {}).length,
-    checkpointsCount: (session.checkpoints || []).length
-  };
-}
-
-/**
- * Determine if checkpoint should auto-continue without asking the user.
- * Exported for testing.
- */
-export function shouldAutoContinueCheckpoint(session, hasProgress) {
-  if (hasProgress) {
-    session._checkpoint_stall_count = 0;
-    return { autoContinue: true, reason: "progress_detected" };
-  }
-  const wasRateLimited = (session.standby_retry_count || 0) > 0;
-  const consecutiveStalls = (session._checkpoint_stall_count || 0) + 1;
-  session._checkpoint_stall_count = consecutiveStalls;
-  if (wasRateLimited && consecutiveStalls < 3) {
-    return { autoContinue: true, reason: "recoverable_stall" };
-  }
-  return { autoContinue: false, reason: consecutiveStalls >= 3 ? "max_stalls_reached" : "no_progress" };
-}
-
-async function handleCheckpoint({ checkpointDisabled, askQuestion, lastCheckpointAt, checkpointIntervalMs, elapsedMinutes, i, config, budgetTracker, stageResults, emitter, eventBase, session, budgetSummary, lastCheckpointSnapshot }) {
-  if (checkpointDisabled || !askQuestion || (Date.now() - lastCheckpointAt) < checkpointIntervalMs) {
-    return { action: "continue_loop", checkpointDisabled, lastCheckpointAt, lastCheckpointSnapshot };
-  }
-
-  const elapsedStr = elapsedMinutes.toFixed(1);
-  const stagesCompleted = Object.keys(stageResults).join(", ") || "none";
-
-  // Decide whether to auto-continue or ask the user
-  const hasProgress = detectCheckpointProgress(session, lastCheckpointSnapshot);
-  const newSnapshot = takeCheckpointSnapshot(session);
-  const decision = shouldAutoContinueCheckpoint(session, hasProgress);
-
-  if (decision.autoContinue) {
-    emitProgress(
-      emitter,
-      makeEvent("session:checkpoint", { ...eventBase, iteration: i, stage: "checkpoint" }, {
-        message: `Checkpoint: ${decision.reason === "progress_detected" ? "progress detected" : "stall caused by rate limit/cooldown"}, auto-continuing (${elapsedStr} min elapsed)`,
-        detail: { elapsed_minutes: Number(elapsedStr), iterations_done: i - 1, stages: stagesCompleted, auto_continued: true, reason: decision.reason }
-      })
-    );
-    return { action: "continue_loop", checkpointDisabled, lastCheckpointAt: Date.now(), lastCheckpointSnapshot: newSnapshot };
-  }
-
-  // No progress and not recoverable — ask human
-  const iterInfo = `${i - 1}/${config.max_iterations} iterations completed`;
-  const budgetInfo = budgetTracker.total().cost_usd > 0 ? ` | Budget: $${budgetTracker.total().cost_usd.toFixed(2)}` : "";
-  const checkpointMsg = `Checkpoint — ${elapsedStr} min elapsed | ${iterInfo}${budgetInfo} | Stages completed: ${stagesCompleted}. No progress since last checkpoint. What would you like to do?`;
-
-  emitProgress(
-    emitter,
-    makeEvent("session:checkpoint", { ...eventBase, iteration: i, stage: "checkpoint" }, {
-      message: `Interactive checkpoint at ${elapsedStr} min (stalled)`,
-      detail: { elapsed_minutes: Number(elapsedStr), iterations_done: i - 1, stages: stagesCompleted, auto_continued: false }
-    })
-  );
-
-  const lang = getLang(config);
-  const answer = await askQuestion(
-    `${checkpointMsg}\n\n${msg("checkpoint_options", lang)}`
-  );
-
-  await addCheckpoint(session, { stage: "interactive-checkpoint", elapsed_minutes: Number(elapsedStr), answer });
-
-  const trimmedAnswer = (answer || "").trim();
-  const isExplicitStop = trimmedAnswer === "4" || trimmedAnswer.toLowerCase().startsWith("stop");
-
-  if (isExplicitStop) {
-    await markSessionStatus(session, "stopped");
-    emitProgress(
-      emitter,
-      makeEvent("session:end", { ...eventBase, iteration: i, stage: "user-stop" }, {
-        status: "stopped",
-        message: "Session stopped by user at checkpoint",
-        detail: { approved: false, reason: "user_stopped", elapsed_minutes: Number(elapsedStr), budget: budgetSummary() }
-      })
-    );
-    return { action: "stop", result: { approved: false, sessionId: session.id, reason: "user_stopped", elapsed_minutes: Number(elapsedStr) } };
-  }
-
-  const parsed = parseCheckpointAnswer({ trimmedAnswer, checkpointDisabled, config });
-  parsed.lastCheckpointSnapshot = newSnapshot;
-  return parsed;
-}
-
-export function parseCheckpointAnswer({ trimmedAnswer, checkpointDisabled, config }) {
-  if (!trimmedAnswer) {
-    return { action: "continue_loop", checkpointDisabled, lastCheckpointAt: Date.now() };
-  }
-  if (trimmedAnswer === "2" || trimmedAnswer.toLowerCase().startsWith("continue until")) {
-    return { action: "continue_loop", checkpointDisabled: true, lastCheckpointAt: Date.now() };
-  }
-  if (trimmedAnswer === "1" || trimmedAnswer.toLowerCase().includes("5 m")) {
-    return { action: "continue_loop", checkpointDisabled, lastCheckpointAt: Date.now() };
-  }
-  const customMinutes = Number.parseInt(trimmedAnswer.replaceAll(/\D/g, ""), 10);
-  if (customMinutes > 0) {
-    config.session.checkpoint_interval_minutes = customMinutes;
-    return { action: "continue_loop", checkpointDisabled, lastCheckpointAt: Date.now() };
-  }
-  return { action: "continue_loop", checkpointDisabled, lastCheckpointAt: Date.now() };
-}
-
-async function checkSessionTimeout({ askQuestion, elapsedMinutes, config, session, emitter, eventBase, i, budgetSummary }) {
-  if (askQuestion || elapsedMinutes <= config.session.max_total_minutes) return;
-
-  await markSessionStatus(session, "failed");
-  emitProgress(
-    emitter,
-    makeEvent("session:end", { ...eventBase, iteration: i, stage: "timeout" }, {
-      status: "fail",
-      message: "Session timed out",
-      detail: { approved: false, reason: "timeout", budget: budgetSummary() }
-    })
-  );
-  throw new Error("Session timed out");
-}
-
-async function checkBudgetExceeded({ budgetTracker, config, session, emitter, eventBase, i, budgetLimit, budgetSummary }) {
-  if (!budgetTracker.isOverBudget(config?.max_budget_usd)) return;
-
-  await markSessionStatus(session, "failed");
-  const totalCost = budgetTracker.total().cost_usd;
-  const message = `Budget exceeded: $${totalCost.toFixed(2)} > $${budgetLimit.toFixed(2)}`;
-  emitProgress(
-    emitter,
-    makeEvent("session:end", { ...eventBase, iteration: i, stage: "budget" }, {
-      status: "fail",
-      message,
-      detail: { approved: false, reason: "budget_exceeded", budget: budgetSummary(), max_budget_usd: budgetLimit }
-    })
-  );
-  throw new Error(message);
-}
 
 async function handleStandbyResult({ stageResult, session, emitter, eventBase, i, stage, logger, config, askQuestion }) {
   if (stageResult?.action !== "standby") {
     return { handled: false };
   }
 
-  const standbyRetries = session.standby_retry_count || 0;
   const isOutage = stageResult.standbyInfo.isProviderOutage;
   const agent = stageResult.standbyInfo.agent;
+  const cooldownUntil = stageResult.standbyInfo.cooldownUntil;
+  const cooldownMs = stageResult.standbyInfo.cooldownMs;
 
-  if (standbyRetries >= MAX_STANDBY_RETRIES) {
-    // Standby exhausted — let Solomon decide: switch agent, skip stage, or escalate
-    const solomonResult = await invokeSolomon({
-      config, logger, emitter, eventBase, stage: `${stage}_rate_limit`, askQuestion, session,
-      iteration: i,
-      conflict: {
-        stage: `${stage}_rate_limit`,
-        task: session.task,
-        iterationCount: i,
-        maxIterations: config?.max_iterations || 5,
-        history: [{
-          agent: stage,
-          feedback: `Agent "${agent}" rate-limited after ${standbyRetries} retries. ${isOutage ? "Provider outage (5xx)." : "API rate limit (429)."}`
-        }]
+  // Rate limit = out of normal flow → Solomon decides immediately
+  const solomonResult = await invokeSolomon({
+    config, logger, emitter, eventBase, stage: `${stage}_rate_limit`, askQuestion, session,
+    iteration: i,
+    conflict: {
+      stage: `${stage}_rate_limit`,
+      task: session.task,
+      iterationCount: i,
+      maxIterations: config?.max_iterations || 5,
+      cooldownUntil,
+      cooldownMs,
+      history: [{
+        agent: stage,
+        feedback: `Agent "${agent}" rate-limited. ${isOutage ? "Provider outage (5xx)." : "API rate limit (429)."} ${cooldownUntil ? `Cooldown until ${cooldownUntil}.` : ""}`
+      }]
+    }
+  });
+
+  if (solomonResult.action === "approve") {
+    // Solomon says skip is safe — only allowed after exhausting alternatives
+    logger.info(`Solomon: skip ${stage} after evaluating risk (agent "${agent}" rate-limited)`);
+    emitProgress(emitter, makeEvent(`${stage}:rate_limit`, { ...eventBase, stage }, {
+      status: "ok",
+      message: `Solomon: skip ${stage} (low risk, agent "${agent}" unavailable)`,
+      detail: { agent, solomonAction: "approve" }
+    }));
+    return { handled: true, action: "skip" };
+  }
+
+  if (solomonResult.action === "continue") {
+    // Solomon says: wait for cooldown, or retry with alternative agent
+    const altAgent = solomonResult.alternativeAgent;
+    const waitTarget = solomonResult.waitUntil;
+
+    if (waitTarget) {
+      const waitMs = Math.max(0, new Date(waitTarget).getTime() - Date.now());
+      if (waitMs > 0 && waitMs < 10 * 60 * 1000) {
+        logger.info(`Solomon: wait ${Math.round(waitMs / 1000)}s for cooldown, then retry ${stage}`);
+        await new Promise(r => setTimeout(r, waitMs));
       }
-    });
+    }
 
-    session.standby_retry_count = 0;
+    if (altAgent) {
+      logger.info(`Solomon: retry ${stage} with alternative agent "${altAgent}"`);
+      session._alternative_agent = { stage, provider: altAgent };
+    }
+
+    if (solomonResult.humanGuidance) {
+      session.last_reviewer_feedback = `Solomon guidance: ${solomonResult.humanGuidance}`;
+    }
     await saveSession(session);
+    return { handled: true, action: "retry_reviewer_only" };
+  }
 
-    if (solomonResult.action === "approve") {
-      // Solomon says: skip this stage, work is good enough
-      logger.info(`Solomon approved skipping ${stage} after rate limit exhaustion`);
-      emitProgress(emitter, makeEvent(`${stage}:rate_limit`, { ...eventBase, stage }, {
-        status: "ok",
-        message: `Solomon: skip ${stage} (rate-limited agent "${agent}")`,
-        detail: { agent, solomonAction: "approve" }
-      }));
-      return { handled: true, action: "skip" };
-    }
-
-    if (solomonResult.action === "continue") {
-      // Solomon says: retry with guidance (possibly different approach)
-      if (solomonResult.humanGuidance) {
-        session.last_reviewer_feedback = `Solomon guidance: ${solomonResult.humanGuidance}`;
-      }
-      return { handled: true, action: "retry_reviewer_only" };
-    }
-
-    if (solomonResult.action === "pause") {
-      return {
-        handled: true,
-        action: "return",
-        result: { paused: true, sessionId: session.id, question: solomonResult.question, context: "standby_exhausted" }
-      };
-    }
-
-    // Solomon couldn't resolve — pause
-    await pauseSession(session, {
-      question: `Rate limit standby exhausted for ${agent}. Solomon could not resolve.`,
-      context: { iteration: i, stage, reason: "standby_exhausted" }
-    });
+  if (solomonResult.action === "pause") {
     return {
       handled: true,
       action: "return",
-      result: { paused: true, sessionId: session.id, question: `Standby exhausted for ${agent}`, context: "standby_exhausted" }
+      result: { paused: true, sessionId: session.id, question: solomonResult.question, context: "rate_limit" }
     };
   }
-  session.standby_retry_count = standbyRetries + 1;
-  await saveSession(session);
-  await waitForCooldown({ ...stageResult.standbyInfo, retryCount: standbyRetries, emitter, eventBase, logger, session });
-  return { handled: true, action: "retry" };
-}
 
-function formatCommitList(commits) {
-  return commits.map((c) => `- \`${c.hash.slice(0, 7)}\` ${c.message}`).join("\n");
-}
-
-async function becariaIncrementalPush({ config, session, gitCtx, task, logger, repo, dispatchComment }) {
-  const pushResult = await incrementalPush({ gitCtx, task, logger, session });
-  if (!pushResult) return;
-
-  // Accumulate commits for PG card lifecycle tracking
-  const { accumulateCommit } = await import("./planning-game/pipeline-adapter.js");
-  for (const c of pushResult.commits) accumulateCommit(session, c);
-
-  session.becaria_commits = [...(session.becaria_commits ?? []), ...pushResult.commits];
-  await saveSession(session);
-
-  if (!repo) return;
-  const feedback = session.last_reviewer_feedback || "N/A";
-  await dispatchComment({
-    repo, prNumber: session.becaria_pr_number, agent: "Coder",
-    body: `Issues corregidos:\n${feedback}\n\nCommits:\n${formatCommitList(pushResult.commits)}`,
-    becariaConfig: config.becaria
+  // Solomon couldn't resolve — pause
+  await pauseSession(session, {
+    question: `Agent "${agent}" rate-limited. Solomon could not resolve.`,
+    context: { iteration: i, stage, reason: "rate_limit" }
   });
+  return {
+    handled: true,
+    action: "return",
+    result: { paused: true, sessionId: session.id, question: `Agent "${agent}" rate-limited`, context: "rate_limit" }
+  };
 }
 
-async function becariaCreateEarlyPr({ config, session, emitter, eventBase, gitCtx, task, logger, stageResults, i, repo, dispatchComment }) {
-  const earlyPr = await earlyPrCreation({ gitCtx, task, logger, session, stageResults });
-  if (!earlyPr) return;
-
-  // Accumulate commits for PG card lifecycle tracking
-  const { accumulateCommit } = await import("./planning-game/pipeline-adapter.js");
-  for (const c of earlyPr.commits) accumulateCommit(session, c);
-
-  session.becaria_pr_number = earlyPr.prNumber;
-  session.becaria_pr_url = earlyPr.prUrl;
-  session.becaria_commits = earlyPr.commits;
-  await saveSession(session);
-  emitProgress(emitter, makeEvent("becaria:pr-created", { ...eventBase, stage: "becaria" }, {
-    message: `Early PR created: #${earlyPr.prNumber}`,
-    detail: { prNumber: earlyPr.prNumber, prUrl: earlyPr.prUrl }
-  }));
-
-  if (!repo) return;
-  await dispatchComment({
-    repo, prNumber: earlyPr.prNumber, agent: "Coder",
-    body: `Iteración ${i} completada.\n\nCommits:\n${formatCommitList(earlyPr.commits)}`,
-    becariaConfig: config.becaria
-  });
-}
-
-async function handleBecariaEarlyPrOrPush({ becariaEnabled, config, session, emitter, eventBase, gitCtx, task, logger, stageResults, i }) {
-  if (!becariaEnabled) return;
-
-  try {
-    const { dispatchComment } = await import("./becaria/dispatch.js");
-    const { detectRepo } = await import("./becaria/repo.js");
-    const repo = await detectRepo();
-
-    if (session.becaria_pr_number) {
-      await becariaIncrementalPush({ config, session, gitCtx, task, logger, repo, dispatchComment });
-    } else {
-      await becariaCreateEarlyPr({ config, session, emitter, eventBase, gitCtx, task, logger, stageResults, i, repo, dispatchComment });
-    }
-  } catch (err) {
-    logger.warn(`BecarIA early PR/push failed (non-blocking): ${err.message}`);
-  }
-}
 
 function emitSolomonAlerts(alerts, emitter, eventBase, logger) {
   for (const alert of alerts) {
@@ -675,7 +210,7 @@ function emitSolomonAlerts(alerts, emitter, eventBase, logger) {
   }
 }
 
-async function handleSolomonCheck({ config, session, emitter, eventBase, logger, task, i, askQuestion, becariaEnabled, blockingIssues }) {
+async function handleSolomonCheck({ config, session, emitter, eventBase, logger, task, i, askQuestion, ciEnabled, blockingIssues }) {
   if (config.pipeline?.solomon?.enabled === false) return { action: "continue" };
 
   try {
@@ -689,15 +224,15 @@ async function handleSolomonCheck({ config, session, emitter, eventBase, logger,
       if (pauseResult) return pauseResult;
     }
 
-    if (becariaEnabled && session.becaria_pr_number) {
+    if (ciEnabled && session.ci_pr_number) {
       const alerts = rulesResult.alerts || [];
       const alertMsg = alerts.length > 0
         ? alerts.map(a => `- [${a.severity}] ${a.message}`).join("\n")
         : "No anomalies detected";
-      await tryBecariaComment({
+      await tryCiComment({
         config, session, logger,
         agent: "Solomon",
-        body: `Supervisor check iteración ${i}: ${alertMsg}`
+        body: `Supervisor check iteration ${i}: ${alertMsg}`
       });
     }
   } catch (err) {
@@ -740,59 +275,8 @@ async function checkSolomonCriticalAlerts({ rulesResult, askQuestion, session, i
   return null;
 }
 
-function formatBlockingIssues(issues) {
-  return issues?.map((x) => `- ${x.id || "ISSUE"} [${x.severity || ""}] ${x.description}`).join("\n") || "";
-}
 
-function formatSuggestions(suggestions) {
-  return suggestions?.map((s) => {
-    const detail = typeof s === "string" ? s : `${s.id || ""} ${s.description || s}`;
-    return `- ${detail}`;
-  }).join("\n") || "";
-}
-
-function buildReviewCommentBody(review, i) {
-  const status = review.approved ? "APPROVED" : "REQUEST_CHANGES";
-  const blocking = formatBlockingIssues(review.blocking_issues);
-  const suggestions = formatSuggestions(review.non_blocking_suggestions);
-  let body = `Review iteración ${i}: ${status}`;
-  if (blocking) body += `\n\n**Blocking:**\n${blocking}`;
-  if (suggestions) body += `\n\n**Suggestions:**\n${suggestions}`;
-  return body;
-}
-
-async function handleBecariaReviewDispatch({ becariaEnabled, config, session, review, i, logger }) {
-  if (!becariaEnabled || !session.becaria_pr_number) return;
-
-  try {
-    const { dispatchReview, dispatchComment } = await import("./becaria/dispatch.js");
-    const { detectRepo } = await import("./becaria/repo.js");
-    const repo = await detectRepo();
-    if (!repo) return;
-
-    const bc = config.becaria;
-    const reviewEvent = review.approved ? "APPROVE" : "REQUEST_CHANGES";
-    const reviewBody = review.approved
-      ? (review.summary || "Approved")
-      : (formatBlockingIssues(review.blocking_issues) || review.summary || "Changes requested");
-
-    await dispatchReview({
-      repo, prNumber: session.becaria_pr_number,
-      event: reviewEvent, body: reviewBody, agent: "Reviewer", becariaConfig: bc
-    });
-
-    await dispatchComment({
-      repo, prNumber: session.becaria_pr_number, agent: "Reviewer",
-      body: buildReviewCommentBody(review, i), becariaConfig: bc
-    });
-
-    logger.info(`BecarIA: dispatched review for PR #${session.becaria_pr_number}`);
-  } catch (err) {
-    logger.warn(`BecarIA dispatch failed (non-blocking): ${err.message}`);
-  }
-}
-
-async function handlePostLoopStages({ config, session, emitter, eventBase, coderRole, trackBudget, i, task, stageResults, becariaEnabled, testerEnabled, securityEnabled, askQuestion, logger }) {
+async function handlePostLoopStages({ config, session, emitter, eventBase, coderRole, trackBudget, i, task, stageResults, ciEnabled, testerEnabled, securityEnabled, askQuestion, logger }) {
   const postLoopDiff = await generateDiff({ baseRef: session.session_start_sha });
 
   if (testerEnabled) {
@@ -801,10 +285,16 @@ async function handlePostLoopStages({ config, session, emitter, eventBase, coder
       iteration: i, task, diff: postLoopDiff, askQuestion
     });
     if (testerResult.action === "pause") return { action: "return", result: testerResult.result };
-    if (testerResult.action === "continue") return { action: "continue" };
+    if (testerResult.action === "continue") {
+      const summary = testerResult.stageResult?.summary || "Tester found issues";
+      session.last_reviewer_feedback = `Tester FAILED — fix these issues:\n${summary}`;
+      await saveSession(session);
+      if (testerResult.stageResult) stageResults.tester = testerResult.stageResult;
+      return { action: "continue" };
+    }
     if (testerResult.stageResult) {
       stageResults.tester = testerResult.stageResult;
-      await tryBecariaComment({ config, session, logger, agent: "Tester", body: `Tests: ${testerResult.stageResult.summary || "completed"}` });
+      await tryCiComment({ config, session, logger, agent: "Tester", body: `Tests: ${testerResult.stageResult.summary || "completed"}` });
     }
   }
 
@@ -814,10 +304,16 @@ async function handlePostLoopStages({ config, session, emitter, eventBase, coder
       iteration: i, task, diff: postLoopDiff, askQuestion
     });
     if (securityResult.action === "pause") return { action: "return", result: securityResult.result };
-    if (securityResult.action === "continue") return { action: "continue" };
+    if (securityResult.action === "continue") {
+      const summary = securityResult.stageResult?.summary || "Security found issues";
+      session.last_reviewer_feedback = `Security FAILED — fix these issues:\n${summary}`;
+      await saveSession(session);
+      if (securityResult.stageResult) stageResults.security = securityResult.stageResult;
+      return { action: "continue" };
+    }
     if (securityResult.stageResult) {
       stageResults.security = securityResult.stageResult;
-      await tryBecariaComment({ config, session, logger, agent: "Security", body: `Security scan: ${securityResult.stageResult.summary || "completed"}` });
+      await tryCiComment({ config, session, logger, agent: "Security", body: `Security scan: ${securityResult.stageResult.summary || "completed"}` });
     }
   }
 
@@ -828,7 +324,7 @@ async function handlePostLoopStages({ config, session, emitter, eventBase, coder
   });
   if (auditResult.stageResult) {
     stageResults.audit = auditResult.stageResult;
-    await tryBecariaComment({ config, session, logger, agent: "Audit", body: `Final audit: ${auditResult.stageResult.summary || "completed"}` });
+    await tryCiComment({ config, session, logger, agent: "Audit", body: `Final audit: ${auditResult.stageResult.summary || "completed"}` });
   }
   if (auditResult.action === "retry") {
     // Audit found actionable issues — loop back to coder
@@ -863,10 +359,33 @@ async function finalizeApprovedSession({ config, gitCtx, task, logger, session, 
   if (rtkSavings) session.rtk_savings = rtkSavings;
   await saveSession(session);
 
-  const proxyStats = getProxyStats();
+  // --- Journal: write final files ---
+  const journalDir = session._journalDir;
+  if (journalDir) {
+    try {
+      await writeIterationsJournal(journalDir, session._journalIterations || []);
+      await writeDecisionsJournal(journalDir, session._journalDecisions || []);
+      const hasTree = await writeTreeJournal(journalDir, session.session_start_sha);
+
+      const journalFiles = [...(session._journalFiles || [])];
+      if (session._journalIterations?.length) journalFiles.push("iterations.md");
+      if (session._journalDecisions?.length) journalFiles.push("decisions.md");
+      if (hasTree) journalFiles.push("tree.txt");
+
+      await writeSummaryJournal(journalDir, {
+        task: session.task, result: "APPROVED", sessionId: session.id,
+        iterations: i, durationMs: Date.now() - (session._startedAt || Date.now()),
+        budget: budgetSummary(), stages: stageResults,
+        commits: gitResult?.commits || [], files: journalFiles
+      });
+      logger.info(`Session journal written to ${journalDir}`);
+    } catch (err) {
+      logger.warn(`Journal write failed (non-blocking): ${err.message}`);
+    }
+  }
+
   const endDetail = { approved: true, iterations: i, stages: stageResults, git: gitResult, budget: budgetSummary(), deferredIssues };
   if (rtkSavings) endDetail.rtk_savings = rtkSavings;
-  if (proxyStats) endDetail.proxy_stats = proxyStats;
   emitProgress(
     emitter,
     makeEvent("session:end", { ...eventBase, stage: "done" }, {
@@ -885,8 +404,13 @@ async function finalizeApprovedSession({ config, gitCtx, task, logger, session, 
 
 async function handleReviewerRetryAndSolomon({ config, session, emitter, eventBase, logger, review, task, i, askQuestion }) {
   session.last_reviewer_feedback = review.blocking_issues
-    .map((x) => `${x.id || "ISSUE"}: ${x.description || "Missing description"}`)
-    .join("\n");
+    .map((x) => {
+      const parts = [`[${x.severity || "high"}] ${x.id || "ISSUE"}: ${x.description || "Missing description"}`];
+      if (x.file) parts.push(`  File: ${x.file}${x.line ? `:${x.line}` : ""}`);
+      if (x.suggested_fix) parts.push(`  Fix: ${x.suggested_fix}`);
+      return parts.join("\n");
+    })
+    .join("\n\n");
   session.reviewer_retry_count = (session.reviewer_retry_count || 0) + 1;
   await saveSession(session);
 
@@ -965,29 +489,6 @@ async function runPreLoopStages({ config, logger, emitter, eventBase, session, f
   const triageResult = await runTriageStage({ config, logger, emitter, eventBase, session, coderRole, trackBudget });
   applyTriageOverrides(pipelineFlags, triageResult.roleOverrides);
   stageResults.triage = triageResult.stageResult;
-
-  // --- Auto-install skills based on task + project detection ---
-  const projectDir = config.projectDir || process.cwd();
-  try {
-    const osAvailable = await isOpenSkillsAvailable();
-    if (osAvailable) {
-      const neededSkills = await detectNeededSkills(task, projectDir);
-      if (neededSkills.length > 0) {
-        const skillResult = await autoInstallSkills(neededSkills, projectDir);
-        if (skillResult.installed.length > 0) {
-          session.autoInstalledSkills = skillResult.installed;
-        }
-        emitProgress(emitter, makeEvent("skills:auto-install", { ...eventBase, stage: "triage" }, {
-          message: skillResult.installed.length > 0
-            ? `Auto-installed ${skillResult.installed.length} skill(s): ${skillResult.installed.join(", ")}`
-            : `Skills detected (${neededSkills.join(", ")}) — all already installed or unavailable`,
-          detail: skillResult
-        }));
-      }
-    }
-  } catch (err) {
-    logger.warn(`Skill auto-install failed (non-blocking): ${err.message}`);
-  }
 
   // --- Persist inline domain if provided via --domain flag ---
   if (flags?.domain) {
@@ -1127,6 +628,36 @@ async function runPreLoopStages({ config, logger, emitter, eventBase, session, f
   // --- Researcher → Planner ---
   const { plannedTask } = await runPlanningPhases({ config: updatedConfig, logger, emitter, eventBase, session, stageResults, pipelineFlags, coderRole, trackBudget, task, askQuestion });
 
+  // --- Update .gitignore with stack-specific entries based on planner/architect output ---
+  const projectDir = updatedConfig.projectDir || process.cwd();
+  await updateGitignoreForStack(projectDir, { stageResults, task, logger });
+
+  // --- Auto-install skills based on task + planner output + project detection ---
+  // Runs AFTER triage and planner so that the planned task text (which includes
+  // planner output like implementation steps) is available for keyword detection.
+  // This ensures greenfield projects with no package.json still get correct skills.
+  const skillProjectDir = updatedConfig.projectDir || process.cwd();
+  try {
+    const osAvailable = await isOpenSkillsAvailable();
+    if (osAvailable) {
+      const neededSkills = await detectNeededSkills(plannedTask, skillProjectDir);
+      if (neededSkills.length > 0) {
+        const skillResult = await autoInstallSkills(neededSkills, skillProjectDir);
+        if (skillResult.installed.length > 0) {
+          session.autoInstalledSkills = skillResult.installed;
+        }
+        emitProgress(emitter, makeEvent("skills:auto-install", { ...eventBase, stage: "skills" }, {
+          message: skillResult.installed.length > 0
+            ? `Auto-installed ${skillResult.installed.length} skill(s): ${skillResult.installed.join(", ")}`
+            : `Skills detected (${neededSkills.join(", ")}) — all already installed or unavailable`,
+          detail: skillResult
+        }));
+      }
+    }
+  } catch (err) {
+    logger.warn(`Skill auto-install failed (non-blocking): ${err.message}`);
+  }
+
   return { plannedTask, updatedConfig };
 }
 
@@ -1236,7 +767,7 @@ async function runQualityGateStages({ config, logger, emitter, eventBase, sessio
     if (sonarResult.action === "continue") return { action: "continue" };
     if (sonarResult.stageResult) {
       stageResults.sonar = sonarResult.stageResult;
-      await tryBecariaComment({ config, session, logger, agent: "Sonar", body: `SonarQube scan: ${sonarResult.stageResult.summary || "completed"}` });
+      await tryCiComment({ config, session, logger, agent: "Sonar", body: `SonarQube scan: ${sonarResult.stageResult.summary || "completed"}` });
     }
   }
 
@@ -1285,8 +816,16 @@ async function runReviewerGateStage({ pipelineFlags, reviewerRole, config, logge
       return { action: "ok", review: { approved: true, blocking_issues: [], non_blocking_suggestions: [], summary: "Review skipped (agent rate-limited, Solomon approved)", confidence: 0.7 } };
     }
     if (revStandby.action === "retry_reviewer_only") {
-      // Retry just the reviewer, not the whole iteration
-      return runReviewerGateStage({ pipelineFlags: { reviewerEnabled: true }, reviewerRole, config, logger, emitter, eventBase, session, trackBudget, i, reviewRules, task, repeatDetector, budgetSummary, askQuestion });
+      // Retry just the reviewer — use alternative agent if Solomon recommended one
+      let retryReviewerRole = reviewerRole;
+      const alt = session._alternative_agent;
+      if (alt?.stage === "reviewer" && alt?.provider) {
+        const { createAgent } = await import("./agents/index.js");
+        retryReviewerRole = { provider: alt.provider, model: null };
+        logger.info(`Retrying reviewer with alternative agent: ${alt.provider}`);
+        delete session._alternative_agent;
+      }
+      return runReviewerGateStage({ pipelineFlags: { reviewerEnabled: true }, reviewerRole: retryReviewerRole, config, logger, emitter, eventBase, session, trackBudget, i, reviewRules, task, repeatDetector, budgetSummary, askQuestion });
     }
     return { action: "retry" };
   }
@@ -1298,7 +837,7 @@ async function handleApprovedReview({ config, session, emitter, eventBase, coder
   session.reviewer_retry_count = 0;
   const postLoopResult = await handlePostLoopStages({
     config, session, emitter, eventBase, coderRole, trackBudget, i, task, stageResults,
-    becariaEnabled: Boolean(config.becaria?.enabled), testerEnabled: pipelineFlags.testerEnabled, securityEnabled: pipelineFlags.securityEnabled, askQuestion, logger
+    ciEnabled: Boolean(config.ci?.enabled), testerEnabled: pipelineFlags.testerEnabled, securityEnabled: pipelineFlags.securityEnabled, askQuestion, logger
   });
   if (postLoopResult.action === "return") return { action: "return", result: postLoopResult.result };
   if (postLoopResult.action === "continue") return { action: "continue" };
@@ -1352,10 +891,8 @@ async function handleMaxIterationsReached({ session, budgetSummary, emitter, eve
   const rtkSavings = rtkTracker?.hasData() ? rtkTracker.summary() : undefined;
   if (rtkSavings) session.rtk_savings = rtkSavings;
   await markSessionStatus(session, "failed");
-  const proxyStats = getProxyStats();
   const failDetail = { approved: false, reason: "max_iterations", iterations: config.max_iterations, stages: stageResults, budget: budgetSummary() };
   if (rtkSavings) failDetail.rtk_savings = rtkSavings;
-  if (proxyStats) failDetail.proxy_stats = proxyStats;
   emitProgress(
     emitter,
     makeEvent("session:end", { ...eventBase, stage: "done" }, {
@@ -1386,6 +923,44 @@ async function tryAutoStartBoard(config, logger, emitter, eventBase) {
 }
 
 async function initFlowContext({ task, config, logger, emitter, askQuestion, pgTaskId, pgProject, flags }) {
+  // Auto-init .karajan/ if missing (copies coder-rules, review-rules, role templates)
+  const initProjectDir = config.projectDir || process.cwd();
+  await autoInit(initProjectDir, logger);
+
+  // Smart role assignment: detect installed AIs and assign to roles
+  // Only runs if: (a) no roles configured AND (b) not in test environment
+  const needsAssignment = !config.roles?.coder?.provider && !config.coder && process.env.NODE_ENV !== "test" && !process.env.VITEST;
+  if (needsAssignment) {
+    try {
+      const { autoAssignRoles, applyRoleAssignments } = await import("./utils/role-assigner.js");
+      const { assignments } = await autoAssignRoles(logger);
+      if (assignments) config = applyRoleAssignments({ ...config }, assignments);
+    } catch { /* non-blocking — defaults will be used */ }
+  }
+
+  // Scope all git diffs to projectDir (prevents leaking unrelated branch changes)
+  // When running from a subdirectory of a git repo, use relative path as scope
+  let diffScope = config.projectDir || null;
+  if (!diffScope) {
+    try {
+      const { execSync } = await import("node:child_process");
+      const repoRoot = execSync("git rev-parse --show-toplevel", { encoding: "utf8" }).trim();
+      const cwd = process.cwd();
+      if (cwd !== repoRoot && cwd.startsWith(repoRoot)) {
+        diffScope = cwd.slice(repoRoot.length + 1);
+        logger.info(`Running from subdirectory — diff scoped to ${diffScope}/`);
+      }
+    } catch { /* git not available */ }
+  }
+  setDiffProjectDir(diffScope);
+
+  // Auto-detect Chrome DevTools MCP
+  const { detectDevToolsMcp } = await import("./webperf/devtools-detect.js");
+  const devToolsAvailable = await detectDevToolsMcp(logger);
+  if (devToolsAvailable) {
+    config = { ...config, webperf: { ...config.webperf, devtools_mcp: true } };
+  }
+
   const ctx = new PipelineContext({ config, session: null, logger, emitter, task, flags });
   ctx.askQuestion = askQuestion;
   ctx.pgTaskId = pgTaskId;
@@ -1406,23 +981,19 @@ async function initFlowContext({ task, config, logger, emitter, askQuestion, pgT
   ctx.trackBudget = trackBudget;
 
   // --- RTK detection ---
-  if (config.proxy?.enabled) {
-    logger.info("Proxy compression active, RTK not needed");
-  } else {
-    const rtkResult = await detectRtk();
-    if (rtkResult.available) {
-      config = { ...config, rtk: { available: true, version: rtkResult.version } };
-      const rtkTracker = new RtkSavingsTracker();
-      const rtkRunner = createRtkRunner(true, rtkTracker);
-      setDiffRunner(rtkRunner);
-      setGitRunner(rtkRunner);
-      ctx.rtkTracker = rtkTracker;
-      logger.info(`RTK detected (${rtkResult.version}) — wrapping internal git/diff commands with rtk`);
-      emitProgress(emitter, makeEvent("rtk:detected", ctx.eventBase, {
-        message: "RTK detected — internal commands wrapped for token optimization",
-        detail: { version: rtkResult.version, executorType: "local" }
-      }));
-    }
+  const rtkResult = await detectRtk();
+  if (rtkResult.available) {
+    config = { ...config, rtk: { available: true, version: rtkResult.version } };
+    const rtkTracker = new RtkSavingsTracker();
+    const rtkRunner = createRtkRunner(true, rtkTracker);
+    setDiffRunner(rtkRunner);
+    setGitRunner(rtkRunner);
+    ctx.rtkTracker = rtkTracker;
+    logger.info(`RTK detected (${rtkResult.version}) — wrapping internal git/diff commands with rtk`);
+    emitProgress(emitter, makeEvent("rtk:detected", ctx.eventBase, {
+      message: "RTK detected — internal commands wrapped for token optimization",
+      detail: { version: rtkResult.version, executorType: "local" }
+    }));
   }
 
   // --- HU Board auto-start ---
@@ -1448,21 +1019,6 @@ async function initFlowContext({ task, config, logger, emitter, askQuestion, pgT
   ctx.pgCard = pgAdapterResult.pgCard;
   ctx.session.pg_card = ctx.pgCard || null;
 
-  // --- Proxy startup ---
-  if (config.proxy?.enabled !== false) {
-    try {
-      const proxyResult = await startProxy({ config: config.proxy || {}, sessionId: ctx.session.id });
-      ctx.proxyPort = proxyResult.port;
-      logger.info(`Proxy started on 127.0.0.1:${proxyResult.port}`);
-      emitProgress(emitter, makeEvent("proxy:started", ctx.eventBase, {
-        message: `Proxy started on port ${proxyResult.port}`,
-        detail: { port: proxyResult.port, baseUrls: proxyResult.baseUrls }
-      }));
-    } catch (err) {
-      logger.warn(`Proxy startup failed (non-blocking): ${err.message}`);
-    }
-  }
-
   emitProgress(
     emitter,
     makeEvent("session:start", ctx.eventBase, {
@@ -1478,6 +1034,38 @@ async function initFlowContext({ task, config, logger, emitter, askQuestion, pgT
   ctx.plannedTask = preLoopResult.plannedTask;
   ctx.config = preLoopResult.updatedConfig;
 
+  // --- Session Journal: persist pre-loop outputs + display plan summary ---
+  const reportDir = ctx.config.output?.report_dir || ".reviews";
+  try {
+    ctx.journalDir = await createJournalDir(reportDir, ctx.session.id);
+    const journalFiles = await writePreLoopJournal(ctx.journalDir, ctx.stageResults);
+    ctx.journalFiles = journalFiles;
+    ctx.journalIterations = [];
+    ctx.journalDecisions = [];
+
+    // Attach journal state to session so finalizeApprovedSession can access it
+    ctx.session._journalDir = ctx.journalDir;
+    ctx.session._journalFiles = journalFiles;
+    ctx.session._journalIterations = ctx.journalIterations;
+    ctx.session._journalDecisions = ctx.journalDecisions;
+    ctx.session._startedAt = ctx.startedAt;
+
+    // Display plan summary in console before iteration loop
+    const planSummary = buildPlanSummary({
+      pipelineFlags: ctx.pipelineFlags,
+      config: ctx.config,
+      stageResults: ctx.stageResults,
+      task
+    });
+    console.log(planSummary);
+  } catch (err) {
+    logger.warn(`Journal init failed (non-blocking): ${err.message}`);
+    ctx.journalDir = null;
+    ctx.journalFiles = [];
+    ctx.journalIterations = [];
+    ctx.journalDecisions = [];
+  }
+
   ctx.gitCtx = await prepareGitAutomation({ config: ctx.config, task, logger, session: ctx.session });
   const projectDir = ctx.config.projectDir || process.cwd();
   ctx.reviewRules = (await resolveReviewProfile({ mode: ctx.config.review_mode, projectDir })).rules;
@@ -1490,7 +1078,7 @@ async function runSingleIteration(ctx) {
   const { config, logger, emitter, eventBase, session, task, iteration: i } = ctx;
 
   const iterStart = Date.now();
-  const becariaEnabled = Boolean(config.becaria?.enabled) && ctx.gitCtx?.enabled;
+  const ciEnabled = Boolean(config.ci?.enabled) && ctx.gitCtx?.enabled;
   logger.setContext({ iteration: i, stage: "iteration" });
 
   const reviewerRetryCount = session.reviewer_retry_count || 0;
@@ -1521,8 +1109,8 @@ async function runSingleIteration(ctx) {
   });
   if (qgResult.action === "return" || qgResult.action === "continue") return qgResult;
 
-  await handleBecariaEarlyPrOrPush({
-    becariaEnabled, config, session, emitter, eventBase, gitCtx: ctx.gitCtx, task, logger,
+  await handleCiEarlyPrOrPush({
+    ciEnabled, config, session, emitter, eventBase, gitCtx: ctx.gitCtx, task, logger,
     stageResults: ctx.stageResults, i
   });
 
@@ -1540,13 +1128,26 @@ async function runSingleIteration(ctx) {
   }));
   session.standby_retry_count = 0;
 
+  // --- Journal: record iteration ---
+  if (ctx.journalIterations) {
+    ctx.journalIterations.push(formatIteration({
+      iteration: i,
+      coderSummary: ctx.stageResults.coder?.summary || null,
+      reviewerSummary: review?.approved ? `Approved: ${review.raw_summary || ""}` : `Rejected: ${(review?.blocking_issues || []).length} blocking issue(s)`,
+      sonarSummary: ctx.stageResults.sonar?.summary || null,
+      testerSummary: ctx.stageResults.tester?.summary || null,
+      securitySummary: ctx.stageResults.security?.summary || null,
+      durationMs: iterDuration
+    }));
+  }
+
   const solomonResult = await handleSolomonCheck({
     config, session, emitter, eventBase, logger, task, i, askQuestion: ctx.askQuestion,
-    becariaEnabled, blockingIssues: review?.blocking_issues
+    ciEnabled, blockingIssues: review?.blocking_issues
   });
   if (solomonResult.action === "pause") return { action: "return", result: solomonResult.result };
 
-  await handleBecariaReviewDispatch({ becariaEnabled, config, session, review, i, logger });
+  await handleCiReviewDispatch({ ciEnabled, config, session, review, i, logger });
 
   if (review.approved) {
     const approvedResult = await handleApprovedReview({
@@ -1566,8 +1167,13 @@ async function runSingleIteration(ctx) {
   } else {
     // Solomon is enabled — feed back the blocking issues for the next coder iteration
     session.last_reviewer_feedback = review.blocking_issues
-      .map((x) => `${x.id || "ISSUE"}: ${x.description || "Missing description"}`)
-      .join("\n");
+      .map((x) => {
+        const parts = [`[${x.severity || "high"}] ${x.id || "ISSUE"}: ${x.description || "Missing description"}`];
+        if (x.file) parts.push(`  File: ${x.file}${x.line ? `:${x.line}` : ""}`);
+        if (x.suggested_fix) parts.push(`  Fix: ${x.suggested_fix}`);
+        return parts.join("\n");
+      })
+      .join("\n\n");
     await saveSession(session);
   }
 
@@ -1625,7 +1231,43 @@ async function runIterationLoop(ctx, { task: loopTask, askQuestion, emitter, log
     ctx.eventBase.iteration = i;
     ctx.iteration = i;
 
-    const iterResult = await runSingleIteration(ctx);
+    let iterResult;
+    try {
+      iterResult = await runSingleIteration(ctx);
+    } catch (stageError) {
+      // ANY unhandled error in a stage = out of normal flow → Solomon decides
+      logger.warn(`Stage error caught — escalating to Solomon: ${stageError.message}`);
+      const solomonResult = await invokeSolomon({
+        config: ctx.config, logger, emitter, eventBase: ctx.eventBase,
+        stage: "stage_error", askQuestion, session: ctx.session, iteration: i,
+        conflict: {
+          stage: "stage_error",
+          task: loopTask,
+          iterationCount: i,
+          maxIterations: ctx.config.max_iterations,
+          budget_usd: ctx.budgetSummary()?.total_cost_usd || 0,
+          history: [{ agent: "pipeline", feedback: `Stage threw: ${stageError.message}` }]
+        }
+      });
+
+      if (solomonResult.action === "approve") {
+        logger.info("Solomon approved despite stage error");
+        return { approved: true, sessionId: ctx.session.id, reason: "solomon_approved_after_error" };
+      }
+      if (solomonResult.action === "continue") {
+        if (solomonResult.humanGuidance) {
+          ctx.session.last_reviewer_feedback = `Solomon guidance: ${solomonResult.humanGuidance}`;
+        }
+        continue; // next iteration
+      }
+      if (solomonResult.action === "pause") {
+        return { paused: true, sessionId: ctx.session.id, question: solomonResult.question, context: "stage_error" };
+      }
+      // Solomon couldn't resolve — fail
+      await markSessionStatus(ctx.session, "failed");
+      return { approved: false, sessionId: ctx.session.id, reason: "stage_error", error: stageError.message };
+    }
+
     if (iterResult.action === "return") {
       return iterResult.result;
     }
@@ -1685,7 +1327,29 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
     return handleDryRun({ task, config, flags, emitter, pipelineFlags });
   }
 
-  const ctx = await initFlowContext({ task, config, logger, emitter, askQuestion, pgTaskId, pgProject, flags });
+  let ctx;
+  try {
+    ctx = await initFlowContext({ task, config, logger, emitter, askQuestion, pgTaskId, pgProject, flags });
+  } catch (initError) {
+    // Pre-loop stage failure → Solomon decides
+    logger.warn(`Init/pre-loop error — escalating to Solomon: ${initError.message}`);
+    const tempSession = { id: "init-error", task, status: "failed" };
+    const solomonResult = await invokeSolomon({
+      config, logger, emitter, eventBase: { sessionId: "init-error", iteration: 0, stage: "init", startedAt: Date.now() },
+      stage: "init_error", askQuestion, session: tempSession, iteration: 0,
+      conflict: {
+        stage: "init_error",
+        task,
+        iterationCount: 0,
+        maxIterations: config.max_iterations || 5,
+        history: [{ agent: "pipeline", feedback: `Initialization failed: ${initError.message}` }]
+      }
+    });
+    if (solomonResult.action === "pause") {
+      return { paused: true, sessionId: "init-error", question: solomonResult.question, context: "init_error" };
+    }
+    throw initError; // Solomon couldn't resolve — propagate
+  }
 
   try {
     // --- Analysis-only flow: skip coder/reviewer when coderRequired === false ---
@@ -1775,14 +1439,6 @@ export async function runFlow({ task, config, logger, flags = {}, emitter = null
     await writeHistoryRecord({ sessionId: ctx.session.id, task, result, logger });
     return result;
   } finally {
-    // --- Proxy shutdown ---
-    try {
-      await stopProxy();
-      if (ctx.proxyPort) {
-        logger.info("Proxy stopped");
-      }
-    } catch { /* non-blocking */ }
-
     // --- Cleanup auto-installed skills ---
     const autoSkills = ctx.session?.autoInstalledSkills;
     if (autoSkills && autoSkills.length > 0) {
