@@ -203,6 +203,12 @@ describe("applyRunOverrides", () => {
       "Missing provider for required role 'planner'. Set 'roles.planner.provider' or pass '--planner <name>'"
     );
   });
+
+  it("throws Valibot error when configuration types are invalid", () => {
+    const base = { max_iterations: 5 };
+    // Pass a string instead of a number for iterations flag
+    expect(() => applyRunOverrides(base, { iterations: "not-a-number" })).toThrow();
+  });
 });
 
 describe("DEFAULTS pipeline", () => {

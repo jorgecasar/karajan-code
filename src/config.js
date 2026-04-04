@@ -1,242 +1,12 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import yaml from "js-yaml";
+import * as v from "valibot";
 import { ensureDir, exists } from "./utils/fs.js";
 import { getKarajanHome } from "./utils/paths.js";
+import { ConfigSchema } from "./config/schema.js";
 
-const DEFAULTS = {
-  coder: "claude",
-  reviewer: "codex",
-  roles: {
-    planner: { provider: null, model: null },
-    coder: { provider: null, model: null },
-    reviewer: { provider: null, model: null },
-    refactorer: { provider: null, model: null },
-    solomon: { provider: null, model: null },
-    researcher: { provider: null, model: null },
-    tester: { provider: null, model: null },
-    security: { provider: null, model: null },
-    impeccable: { provider: null, model: null },
-    triage: { provider: null, model: null },
-    discover: { provider: null, model: null },
-    architect: { provider: null, model: null },
-    hu_reviewer: { provider: null, model: null }
-  },
-  pipeline: {
-    planner: { enabled: false },
-    refactorer: { enabled: false },
-    solomon: { enabled: true },
-    researcher: { enabled: false },
-    tester: { enabled: true },
-    security: { enabled: true },
-    impeccable: { enabled: false },
-    triage: { enabled: true },
-    discover: { enabled: false },
-    architect: { enabled: false },
-    hu_reviewer: { enabled: false },
-    auto_simplify: true
-  },
-  review_mode: "standard",
-  max_iterations: 5,
-  max_budget_usd: null,
-  review_rules: "./.karajan/review-rules.md",
-  coder_rules: "./.karajan/coder-rules.md",
-  base_branch: "main",
-  coder_options: { model: null, auto_approve: true, fallback_coder: null },
-  reviewer_options: {
-    output_format: "json",
-    require_schema: true,
-    model: null,
-    deterministic: true,
-    retries: 1,
-    fallback_reviewer: null
-  },
-  development: {
-    methodology: "tdd",
-    require_test_changes: true,
-    test_file_patterns: ["/tests/", "/__tests__/", ".test.", ".spec."],
-    source_file_extensions: [".js", ".jsx", ".ts", ".tsx", ".py", ".go", ".java", ".rb", ".php", ".cs"]
-  },
-  sonarqube: {
-    enabled: true,
-    host: "http://localhost:9000",
-    external: false,
-    container_name: "karajan-sonarqube",
-    network: "karajan_sonar_net",
-    volumes: {
-      data: "karajan_sonar_data",
-      logs: "karajan_sonar_logs",
-      extensions: "karajan_sonar_extensions"
-    },
-    timeouts: {
-      healthcheck_seconds: 5,
-      compose_up_ms: 300000,
-      compose_control_ms: 120000,
-      logs_ms: 30000,
-      scanner_ms: 900000
-    },
-    token: null,
-    project_key: null,
-    admin_user: null,
-    admin_password: null,
-    coverage: {
-      enabled: false,
-      command: null,
-      timeout_ms: 300000,
-      block_on_failure: true,
-      lcov_report_path: null
-    },
-    quality_gate: true,
-    enforcement_profile: "pragmatic",
-    gate_block_on: [
-      "new_reliability_rating=E",
-      "new_security_rating=E",
-      "new_maintainability_rating=E",
-      "new_coverage<80",
-      "new_duplicated_lines_density>5"
-    ],
-    fail_on: ["BLOCKER", "CRITICAL"],
-    ignore_on: ["INFO"],
-    max_scan_retries: 3,
-    scanner: {
-      sources: "src,public,lib",
-      exclusions: "**/node_modules/**,**/fake-apps/**,**/scripts/**,**/playground/**,**/dist/**,**/build/**,**/*.min.js",
-      test_inclusions: "**/*.test.js,**/*.spec.js,**/tests/**,**/__tests__/**",
-      coverage_exclusions: "**/tests/**,**/__tests__/**,**/*.test.js,**/*.spec.js",
-      disabled_rules: ["javascript:S1116", "javascript:S3776"]
-    }
-  },
-  sonarcloud: {
-    enabled: false,
-    organization: null,
-    token: null,
-    project_key: null,
-    host: "https://sonarcloud.io",
-    scanner: {
-      sources: "src,public,lib",
-      exclusions: "**/node_modules/**,**/dist/**,**/build/**,**/*.min.js",
-      test_inclusions: "**/*.test.js,**/*.spec.js,**/tests/**,**/__tests__/**"
-    }
-  },
-  hu_board: {
-    enabled: false,
-    port: 4000,
-    auto_start: false
-  },
-  language: "en",
-  hu_language: "en",
-  policies: {},
-  serena: { enabled: false },
-  planning_game: { enabled: false, project_id: null, codeveloper: null },
-  becaria: { enabled: false, review_event: "becaria-review", comment_event: "becaria-comment", comment_prefix: true },
-  git: { auto_commit: false, auto_push: false, auto_pr: false, auto_rebase: true, branch_prefix: "feat/" },
-  output: { report_dir: "./.reviews", log_level: "info", quiet: true },
-  budget: {
-    warn_threshold_pct: 80,
-    currency: "usd",
-    exchange_rate_eur: 0.92
-  },
-  model_selection: {
-    enabled: true,
-    tiers: {},
-    role_overrides: {}
-  },
-  session: {
-    max_iteration_minutes: 30,
-    max_total_minutes: 120,
-    max_planner_minutes: 60,
-    checkpoint_interval_minutes: 5,
-    max_agent_silence_minutes: 20,
-    fail_fast_repeats: 2,
-    repeat_detection_threshold: 2,
-    max_sonar_retries: 3,
-    max_reviewer_retries: 3,
-    max_tester_retries: 1,
-    max_security_retries: 1,
-    max_auto_resumes: 2,
-    expiry_days: 30
-  },
-  failFast: {
-    repeatThreshold: 2
-  },
-  retry: {
-    max_attempts: 3,
-    initial_backoff_ms: 1000,
-    max_backoff_ms: 30000,
-    backoff_multiplier: 2,
-    jitter_factor: 0.1
-  },
-  webperf: {
-    enabled: true,
-    devtools_mcp: false,
-    thresholds: { lcp: 2500, cls: 0.1, inp: 200 }
-  },
-  telemetry: true,
-  proxy: {
-    enabled: true,
-    port: "auto",
-    compression: {
-      enabled: true,
-      ai_compression: false,
-      ai_model: "haiku",
-      ai_provider: "anthropic",
-      layers: {
-        git: true,
-        tests: true,
-        build: true,
-        infra: true,
-        packages: true,
-        read_dedup: true,
-        glob_truncate: true,
-        grep_collapse: true,
-      },
-      pressure_thresholds: {
-        low: 0.5,
-        medium: 0.8,
-        high: 0.9,
-      },
-    },
-    cache: {
-      persist_to_disk: true,
-      flush_interval_ms: 5000,
-    },
-    inject_prompts: true,
-    monitor: true,
-  },
-  guards: {
-    output: {
-      enabled: true,
-      patterns: [],
-      protected_files: [],
-      on_violation: "block"
-    },
-    perf: {
-      enabled: true,
-      patterns: [],
-      block_on_warning: false,
-      frontend_extensions: []
-    },
-    intent: {
-      enabled: false,
-      patterns: [],
-      confidence_threshold: 0.85
-    }
-  }
-};
-
-function mergeDeep(base, override) {
-  const output = { ...base };
-  for (const [key, value] of Object.entries(override || {})) {
-    if (Array.isArray(value)) {
-      output[key] = value;
-    } else if (value && typeof value === "object") {
-      output[key] = mergeDeep(base[key] || {}, value);
-    } else {
-      output[key] = value;
-    }
-  }
-  return output;
-}
+/** @typedef {v.InferOutput<typeof ConfigSchema>} KarajanConfig */
 
 export function getConfigPath() {
   return path.join(getKarajanHome(), "kj.config.yml");
@@ -271,6 +41,27 @@ async function loadProjectPricingOverrides(projectDir = process.cwd()) {
   return pricing;
 }
 
+/**
+ * Deep merge two objects natively without a dedicated utility function.
+ */
+function nativeDeepMerge(target, source) {
+  const output = { ...target };
+  if (source && typeof source === "object") {
+    Object.keys(source).forEach((key) => {
+      if (source[key] && typeof source[key] === "object" && !Array.isArray(source[key])) {
+        if (!(key in target)) {
+          Object.assign(output, { [key]: source[key] });
+        } else {
+          output[key] = nativeDeepMerge(target[key], source[key]);
+        }
+      } else {
+        Object.assign(output, { [key]: source[key] });
+      }
+    });
+  }
+  return output;
+}
+
 export async function loadConfig(projectDir) {
   const configPath = getConfigPath();
   const projectPricing = await loadProjectPricingOverrides(projectDir);
@@ -286,17 +77,17 @@ export async function loadConfig(projectDir) {
   // Load project config (.karajan/kj.config.yml)
   const projectConfig = await loadProjectConfig(projectDir);
 
-  // Merge: DEFAULTS < global < project
-  let merged = mergeDeep(DEFAULTS, globalConfig);
-  if (projectConfig) {
-    merged = mergeDeep(merged, projectConfig);
-  }
+  // Merge: global < project
+  // We use a local deep merge to preserve nested properties between global and project config
+  let rawMerged = nativeDeepMerge(globalConfig, projectConfig || {});
 
   if (projectPricing) {
-    merged.budget = mergeDeep(merged.budget || {}, { pricing: projectPricing });
+    rawMerged.budget = nativeDeepMerge(rawMerged.budget || {}, { pricing: projectPricing });
   }
 
-  return { config: merged, path: configPath, exists: globalExists, hasProjectConfig: !!projectConfig };
+  const validatedConfig = v.parse(ConfigSchema, rawMerged);
+
+  return { config: validatedConfig, path: configPath, exists: globalExists, hasProjectConfig: !!projectConfig };
 }
 
 export async function writeConfig(configPath, config) {
@@ -308,230 +99,277 @@ export async function writeConfig(configPath, config) {
 
 // Role provider flags: [flagName, roleName] — truthy check
 const ROLE_PROVIDER_FLAGS = [
-  ["planner", "planner"], ["coder", "coder"], ["reviewer", "reviewer"],
-  ["refactorer", "refactorer"], ["solomon", "solomon"], ["researcher", "researcher"],
-  ["tester", "tester"], ["security", "security"], ["triage", "triage"],
-  ["discover", "discover"], ["architect", "architect"]
+  ["planner", "planner"],
+  ["coder", "coder"],
+  ["reviewer", "reviewer"],
+  ["refactorer", "refactorer"],
+  ["solomon", "solomon"],
+  ["researcher", "researcher"],
+  ["tester", "tester"],
+  ["security", "security"],
+  ["triage", "triage"],
+  ["discover", "discover"],
+  ["architect", "architect"],
 ];
 
 // Role model flags: [flagName, roleName] — truthy check, String coercion
 const ROLE_MODEL_FLAGS = [
-  ["plannerModel", "planner"], ["coderModel", "coder"], ["reviewerModel", "reviewer"],
-  ["refactorerModel", "refactorer"], ["solomonModel", "solomon"], ["discoverModel", "discover"],
-  ["architectModel", "architect"]
+  ["plannerModel", "planner"],
+  ["coderModel", "coder"],
+  ["reviewerModel", "reviewer"],
+  ["refactorerModel", "refactorer"],
+  ["solomonModel", "solomon"],
+  ["discoverModel", "discover"],
+  ["architectModel", "architect"],
 ];
 
 // Pipeline enable flags: [flagName, pipelineKey] — !== undefined check, Boolean coercion
 const PIPELINE_ENABLE_FLAGS = [
-  ["enablePlanner", "planner"], ["enableRefactorer", "refactorer"],
-  ["enableSolomon", "solomon"], ["enableResearcher", "researcher"],
-  ["enableTester", "tester"], ["enableSecurity", "security"], ["enableImpeccable", "impeccable"],
-  ["enableTriage", "triage"], ["enableDiscover", "discover"],
+  ["enablePlanner", "planner"],
+  ["enableRefactorer", "refactorer"],
+  ["enableSolomon", "solomon"],
+  ["enableResearcher", "researcher"],
+  ["enableTester", "tester"],
+  ["enableSecurity", "security"],
+  ["enableImpeccable", "impeccable"],
+  ["enableTriage", "triage"],
+  ["enableDiscover", "discover"],
   ["enableArchitect", "architect"],
-  ["enableHuReviewer", "hu_reviewer"]
+  ["enableHuReviewer", "hu_reviewer"],
 ];
 
 const AUTO_SIMPLIFY_FLAG = "autoSimplify";
 
 // Scalar flags: [flagName, setter] — truthy check
 const SCALAR_FLAGS = [
-  ["mode", (out, v) => { out.review_mode = v; }],
-  ["maxIterations", (out, v) => { out.max_iterations = Number(v); }],
-  ["maxIterationMinutes", (out, v) => { out.session.max_iteration_minutes = Number(v); }],
-  ["maxTotalMinutes", (out, v) => { out.session.max_total_minutes = Number(v); }],
-  ["checkpointInterval", (out, v) => { out.session.checkpoint_interval_minutes = Number(v); }],
-  ["baseBranch", (out, v) => { out.base_branch = v; }],
-  ["coderFallback", (out, v) => { out.coder_options.fallback_coder = v; }],
-  ["reviewerFallback", (out, v) => { out.reviewer_options.fallback_reviewer = v; }],
-  ["taskType", (out, v) => { out.taskType = String(v); }],
-  ["branchPrefix", (out, v) => { out.git.branch_prefix = String(v); }]
+  [
+    "mode",
+    (out, v) => {
+      out.review_mode = v;
+    },
+  ],
+  [
+    "baseBranch",
+    (out, v) => {
+      out.base_branch = v;
+    },
+  ],
+  [
+    "maxIterationMinutes",
+    (out, v) => {
+      out.session.max_iteration_minutes = Number(v);
+    },
+  ],
+  [
+    "maxTotalMinutes",
+    (out, v) => {
+      out.session.max_total_minutes = Number(v);
+    },
+  ],
+  [
+    "reviewerFallback",
+    (out, v) => {
+      out.reviewer_options.fallback_reviewer = String(v);
+    },
+  ],
+  [
+    "reviewerRetries",
+    (out, v) => {
+      out.reviewer_options.retries = Number(v);
+    },
+  ],
+  [
+    "autoCommit",
+    (out, v) => {
+      out.git.auto_commit = Boolean(v);
+    },
+  ],
+  [
+    "autoPush",
+    (out, v) => {
+      out.git.auto_push = Boolean(v);
+    },
+  ],
+  [
+    "autoPr",
+    (out, v) => {
+      out.git.auto_pr = Boolean(v);
+    },
+  ],
+  [
+    "noRebase",
+    (out, v) => {
+      out.git.auto_rebase = !v;
+    },
+  ],
+  [
+    "autoRebase",
+    (out, v) => {
+      out.git.auto_rebase = Boolean(v);
+    },
+  ],
+  [
+    "branchPrefix",
+    (out, v) => {
+      out.git.branch_prefix = String(v);
+    },
+  ],
+  [
+    "iterations",
+    (out, v) => {
+      out.max_iterations = Number(v);
+    },
+  ],
+  [
+    "methodology",
+    (out, v) => {
+      out.development.methodology = v;
+      if (v === "standard") out.development.require_test_changes = false;
+    },
+  ],
+  [
+    "verbose",
+    (out, v) => {
+      out.output.quiet = !v;
+    },
+  ],
+  [
+    "quiet",
+    (out, v) => {
+      out.output.quiet = Boolean(v);
+    },
+  ],
+  [
+    "proxyPort",
+    (out, v) => {
+      out.proxy.port = String(v);
+    },
+  ],
 ];
-
-// Boolean/undefined-check flags: [flagName, setter] — !== undefined check
-const UNDEF_CHECK_FLAGS = [
-  ["reviewerRetries", (out, v) => { out.reviewer_options.retries = Number(v); }],
-  ["autoCommit", (out, v) => { out.git.auto_commit = Boolean(v); }],
-  ["autoPush", (out, v) => { out.git.auto_push = Boolean(v); }],
-  ["autoPr", (out, v) => { out.git.auto_pr = Boolean(v); }],
-  ["autoRebase", (out, v) => { out.git.auto_rebase = Boolean(v); }],
-  ["enableSerena", (out, v) => { out.serena.enabled = Boolean(v); }]
-];
-
-function applyRoleOverrides(out, flags) {
-  for (const [flag, role] of ROLE_PROVIDER_FLAGS) {
-    if (flags[flag]) out.roles[role].provider = flags[flag];
-  }
-  // coder/reviewer also update top-level aliases
-  if (flags.coder) out.coder = flags.coder;
-  if (flags.reviewer) out.reviewer = flags.reviewer;
-
-  for (const [flag, role] of ROLE_MODEL_FLAGS) {
-    if (flags[flag]) out.roles[role].model = String(flags[flag]);
-  }
-  // reviewerModel also updates reviewer_options
-  if (flags.reviewerModel) out.reviewer_options.model = String(flags.reviewerModel);
-}
-
-function applyPipelineOverrides(out, flags) {
-  for (const [flag, key] of PIPELINE_ENABLE_FLAGS) {
-    if (flags[flag] !== undefined) out.pipeline[key].enabled = Boolean(flags[flag]);
-  }
-  if (flags.enableReviewer !== undefined) {
-    out.pipeline.reviewer = out.pipeline.reviewer || {};
-    out.pipeline.reviewer.enabled = Boolean(flags.enableReviewer);
-  }
-}
-
-function applyScalarAndBooleanOverrides(out, flags) {
-  for (const [flag, setter] of SCALAR_FLAGS) {
-    if (flags[flag]) setter(out, flags[flag]);
-  }
-  for (const [flag, setter] of UNDEF_CHECK_FLAGS) {
-    if (flags[flag] !== undefined) setter(out, flags[flag]);
-  }
-}
-
-function applyMethodologyOverride(out, flags) {
-  if (!flags.methodology) return;
-  const methodology = String(flags.methodology).toLowerCase();
-  out.development.methodology = methodology;
-  out.development.require_test_changes = methodology === "tdd";
-}
-
-function applyBecariaOverride(out, flags) {
-  out.becaria = out.becaria || { enabled: false };
-  if (flags.enableBecaria === undefined) return;
-  out.becaria.enabled = Boolean(flags.enableBecaria);
-  // BecarIA requires git automation (commit + push + PR)
-  if (out.becaria.enabled) {
-    out.git.auto_commit = true;
-    out.git.auto_push = true;
-    out.git.auto_pr = true;
-  }
-}
-
-function applyOutputModeOverrides(out, flags) {
-  out.output = out.output || {};
-  // --verbose explicitly overrides quiet
-  if (flags.verbose === true) {
-    out.output.quiet = false;
-  } else if (flags.quiet === true) {
-    out.output.quiet = true;
-  }
-  // quiet defaults to true (set in DEFAULTS)
-}
-
-function applyMiscOverrides(out, flags) {
-  if (flags[AUTO_SIMPLIFY_FLAG] !== undefined) out.pipeline.auto_simplify = Boolean(flags[AUTO_SIMPLIFY_FLAG]);
-  if (flags.noSonar || flags.sonar === false) out.sonarqube.enabled = false;
-  out.sonarcloud = out.sonarcloud || {};
-  if (flags.enableSonarcloud === true) out.sonarcloud.enabled = true;
-  if (flags.noSonarcloud === true || flags.sonarcloud === false) out.sonarcloud.enabled = false;
-
-  out.planning_game = out.planning_game || {};
-  if (flags.pgTask) out.planning_game.enabled = true;
-  if (flags.pgProject) out.planning_game.project_id = flags.pgProject;
-
-  out.proxy = out.proxy || {};
-  if (flags.noProxy) out.proxy.enabled = false;
-  if (flags.proxyPort) out.proxy.port = flags.proxyPort;
-
-  out.model_selection = out.model_selection || { enabled: true, tiers: {}, role_overrides: {} };
-  if (flags.smartModels === true) out.model_selection.enabled = true;
-  if (flags.smartModels === false || flags.noSmartModels === true) out.model_selection.enabled = false;
-}
-
-export function applyRunOverrides(config, flags) {
-  const out = mergeDeep(config, {});
-  out.coder_options = out.coder_options || {};
-  out.reviewer_options = out.reviewer_options || {};
-  out.session = out.session || {};
-  out.git = out.git || {};
-  out.development = out.development || {};
-  out.sonarqube = out.sonarqube || {};
-  if (out.max_budget_usd === undefined || out.max_budget_usd === null) {
-    out.max_budget_usd = out.session.max_budget_usd ?? null;
-  }
-  out.budget = mergeDeep(DEFAULTS.budget, out.budget || {});
-  out.roles = mergeDeep(DEFAULTS.roles, out.roles || {});
-  out.pipeline = mergeDeep(DEFAULTS.pipeline, out.pipeline || {});
-  out.serena = out.serena || { enabled: false };
-
-  applyRoleOverrides(out, flags);
-  applyPipelineOverrides(out, flags);
-  applyScalarAndBooleanOverrides(out, flags);
-  applyMethodologyOverride(out, flags);
-  applyBecariaOverride(out, flags);
-  applyMiscOverrides(out, flags);
-  applyOutputModeOverrides(out, flags);
-
-  return out;
-}
 
 /**
- * Check if a model string is compatible with an agent provider.
- * Only returns false when the model clearly belongs to a DIFFERENT provider.
- * Returns true if we can't determine or if the model is ambiguous.
+ * Applies CLI flag overrides to a base configuration object.
+ * Returns a new object with merged values.
  */
-const AGENT_MODEL_SIGNATURES = {
-  claude: ["claude", "sonnet", "opus", "haiku"],
-  codex: ["o4-", "o3-", "gpt-", "codex"],
-  gemini: ["gemini", "flash-"]
-};
+export function applyRunOverrides(base, flags) {
+  // We don't use ConfigSchema.parse(base) here because 'base' might be incomplete
+  // or a mock during tests. Valibot will be called in loadConfig.
+  const out = nativeDeepMerge({}, base);
 
-export function isModelCompatible(agent, model) {
-  if (!model || !agent) return true;
-  const lower = model.toLowerCase();
-
-  // Check if model clearly belongs to a different provider
-  for (const [provider, signatures] of Object.entries(AGENT_MODEL_SIGNATURES)) {
-    if (provider === agent) continue;
-    if (signatures.some(s => lower.includes(s))) {
-      // Model belongs to a different provider — incompatible
-      return false;
+  // 1. Roles: Provider and Model
+  out.roles = out.roles || {};
+  for (const [flag, role] of ROLE_PROVIDER_FLAGS) {
+    if (flags[flag]) {
+      out.roles[role] = nativeDeepMerge(out.roles[role] || {}, { provider: String(flags[flag]) });
+    }
+  }
+  for (const [flag, role] of ROLE_MODEL_FLAGS) {
+    if (flags[flag]) {
+      out.roles[role] = nativeDeepMerge(out.roles[role] || {}, { model: String(flags[flag]) });
     }
   }
 
-  // Model doesn't clearly belong to any other provider — allow it
-  return true;
-}
-
-// Roles that inherit provider/model from the coder when not explicitly configured
-const CODER_INHERITED_ROLES = new Set([
-  "planner", "refactorer", "solomon", "researcher", "tester", "security",
-  "impeccable", "triage", "discover", "architect", "audit", "hu_reviewer", "hu-reviewer"
-]);
-
-function resolveProvider(roleConfig, role, roles, legacyCoder, legacyReviewer) {
-  if (roleConfig.provider) return roleConfig.provider;
-
-  // If model has "provider/model" format (e.g. "gemini/pro"), extract the provider
-  if (roleConfig.model && roleConfig.model.includes("/")) {
-    const inferredProvider = roleConfig.model.split("/")[0].toLowerCase();
-    if (AGENT_MODEL_SIGNATURES[inferredProvider]) return inferredProvider;
+  // 2. Pipeline: Enable/Disable
+  out.pipeline = out.pipeline || {};
+  for (const [flag, key] of PIPELINE_ENABLE_FLAGS) {
+    if (flags[flag] !== undefined) {
+      out.pipeline[key] = nativeDeepMerge(out.pipeline[key] || {}, { enabled: Boolean(flags[flag]) });
+    }
   }
 
-  if (role === "coder") return legacyCoder;
-  if (role === "reviewer") return legacyReviewer;
-  if (CODER_INHERITED_ROLES.has(role)) return roles.coder?.provider || legacyCoder;
+  // noSonar shorthand
+  if (flags.noSonar !== undefined) {
+    out.sonarqube = nativeDeepMerge(out.sonarqube || {}, { enabled: !flags.noSonar });
+  }
+
+  // noRebase shorthand
+  if (flags.noRebase !== undefined) {
+    out.git = nativeDeepMerge(out.git || {}, { auto_rebase: !flags.noRebase });
+  }
+
+  // noProxy shorthand
+  if (flags.noProxy !== undefined) {
+    out.proxy = nativeDeepMerge(out.proxy || {}, { enabled: !flags.noProxy });
+  }
+
+  // autoSimplify
+  if (flags[AUTO_SIMPLIFY_FLAG] !== undefined) {
+    out.pipeline.auto_simplify = Boolean(flags[AUTO_SIMPLIFY_FLAG]);
+  }
+
+  // 3. Scalar fields and nested setters
+  out.session = out.session || {};
+  out.reviewer_options = out.reviewer_options || {};
+  out.git = out.git || {};
+  out.development = out.development || {};
+  out.output = out.output || {};
+  out.proxy = out.proxy || {};
+
+  for (const [flag, setter] of SCALAR_FLAGS) {
+    if (flags[flag] !== undefined) {
+      setter(out, flags[flag]);
+    }
+  }
+
+  // Final validation and default filling via Valibot
+  return v.parse(ConfigSchema, out);
+}
+
+/**
+ * Identify the provider from a string that might be "provider/model" or just "model".
+ */
+function resolveProvider(roleConfig, roleName, allRoles, legacyCoder, legacyReviewer) {
+  if (roleConfig.provider) return roleConfig.provider;
+
+  // Inference from model field: "gemini/pro" -> "gemini"
+  if (roleConfig.model?.includes("/")) {
+    return roleConfig.model.split("/")[0];
+  }
+
+  // Legacy fallbacks for coder/reviewer
+  if (roleName === "coder" && legacyCoder) return legacyCoder;
+  if (roleName === "reviewer" && legacyReviewer) return legacyReviewer;
+
+  // Fallback to roles.coder.provider for other roles (planner, researcher, etc.)
+  if (roleName !== "coder" && allRoles.coder?.provider) {
+    return allRoles.coder.provider;
+  }
+
   return null;
 }
 
-function resolveModel(roleConfig, role, config) {
-  if (roleConfig.model) {
-    // Strip "provider/" prefix from models like "gemini/pro" → "pro"
-    const model = roleConfig.model.includes("/")
-      ? roleConfig.model.split("/").slice(1).join("/")
-      : roleConfig.model;
-    return { model, inherited: false };
+/**
+ * Identify the model for a role, considering explicit config and global options.
+ */
+function resolveModel(roleConfig, roleName, config) {
+  let model = roleConfig.model || null;
+  let inherited = false;
+
+  // Strip provider prefix if present: "gemini/pro" -> "pro"
+  if (model?.includes("/")) {
+    model = model.split("/").slice(1).join("/");
   }
-  if (role === "coder") return { model: config?.coder_options?.model ?? null, inherited: false };
-  if (role === "reviewer") return { model: config?.reviewer_options?.model ?? null, inherited: false };
-  if (CODER_INHERITED_ROLES.has(role)) {
-    const model = config?.coder_options?.model ?? null;
-    return { model, inherited: !!model };
+
+  // Fallback to legacy options
+  if (!model) {
+    if (roleName === "reviewer") {
+      model = config.reviewer_options?.model || null;
+    } else {
+      model = config.coder_options?.model || null;
+    }
+    if (model) inherited = true;
   }
-  return { model: null, inherited: false };
+
+  return { model, inherited };
+}
+
+/**
+ * Check if a model is compatible with a provider.
+ */
+function isModelCompatible(provider, model) {
+  if (provider === "claude" && model.includes("gemini")) return false;
+  if (provider === "gemini" && (model.includes("claude") || model.includes("gpt"))) return false;
+  return true;
 }
 
 export function resolveRole(config, role) {
@@ -541,9 +379,9 @@ export function resolveRole(config, role) {
   const legacyReviewer = config?.reviewer || null;
 
   const provider = resolveProvider(roleConfig, role, roles, legacyCoder, legacyReviewer);
-  let { model, inherited: modelIsInherited } = resolveModel(roleConfig, role, config);
+  let { model } = resolveModel(roleConfig, role, config);
 
-  // Drop model if incompatible with the resolved provider (inherited or explicit)
+  // Drop model if incompatible with the resolved provider
   if (provider && model && !isModelCompatible(provider, model)) {
     model = null;
   }
@@ -551,19 +389,24 @@ export function resolveRole(config, role) {
   return { provider, model };
 }
 
-// Pipeline roles checked when commandName is "run": [pipelineKey, roleName]
+// Pipeline roles checked when commandName is "run"
 const RUN_PIPELINE_ROLES = [
-  ["reviewer", "reviewer"], ["triage", "triage"], ["planner", "planner"],
-  ["refactorer", "refactorer"], ["researcher", "researcher"],
-  ["tester", "tester"], ["security", "security"], ["impeccable", "impeccable"]
+  ["reviewer", "reviewer"],
+  ["triage", "triage"],
+  ["planner", "planner"],
+  ["refactorer", "refactorer"],
+  ["researcher", "researcher"],
+  ["tester", "tester"],
+  ["security", "security"],
+  ["impeccable", "impeccable"],
 ];
 
-// Direct command-to-role mapping for non-"run" commands
+// Direct command-to-role mapping
 const COMMAND_ROLE_MAP = {
   discover: ["discover"],
   plan: ["planner"],
   code: ["coder"],
-  review: ["reviewer"]
+  review: ["reviewer"],
 };
 
 function requiredRolesFor(commandName, config) {
@@ -573,9 +416,10 @@ function requiredRolesFor(commandName, config) {
   const required = ["coder"];
   for (const [pipelineKey, roleName] of RUN_PIPELINE_ROLES) {
     const pipelineEntry = config?.pipeline?.[pipelineKey];
-    // reviewer defaults to enabled (only excluded if explicitly false)
-    const isEnabled = pipelineKey === "reviewer"
-      ? pipelineEntry?.enabled !== false
+    // If pipeline block is missing, it's disabled (legacy behavior)
+    // Reviewer is enabled by default unless explicitly disabled
+    const isEnabled = pipelineKey === "reviewer" 
+      ? pipelineEntry?.enabled !== false 
       : Boolean(pipelineEntry?.enabled);
     if (isEnabled) required.push(roleName);
   }
@@ -584,20 +428,25 @@ function requiredRolesFor(commandName, config) {
 
 export function validateConfig(config, commandName = "run") {
   const errors = [];
-  if (!new Set(["paranoid", "strict", "standard", "relaxed", "custom"]).has(config.review_mode)) {
-    errors.push(`Invalid review_mode: ${config.review_mode}`);
-  }
-  if (!new Set(["tdd", "standard"]).has(config.development?.methodology)) {
-    errors.push(`Invalid development.methodology: ${config.development?.methodology}`);
+
+  // 1. Structural and type validation via Valibot
+  // We use the raw input for role check to avoid default filling triggering required roles
+  const requiredRoles = requiredRolesFor(commandName, config);
+  
+  // 2. Perform Valibot validation
+  let validatedConfig;
+  try {
+    validatedConfig = v.parse(ConfigSchema, config);
+  } catch (err) {
+    // Re-throw as a combined error string for compatibility with existing tests
+    throw new Error(err.message || "Invalid configuration");
   }
 
-  const requiredRoles = requiredRolesFor(commandName, config);
+  // 3. Logic validation (required roles) on validatedConfig
   for (const role of requiredRoles) {
-    const { provider } = resolveRole(config, role);
+    const { provider } = resolveRole(validatedConfig, role);
     if (!provider) {
-      errors.push(
-        `Missing provider for required role '${role}'. Set 'roles.${role}.provider' or pass '--${role} <name>'`
-      );
+      errors.push(`Missing provider for required role '${role}'. Set 'roles.${role}.provider' or pass '--${role} <name>'`);
     }
   }
 
@@ -605,5 +454,5 @@ export function validateConfig(config, commandName = "run") {
     throw new Error(errors.join("\n"));
   }
 
-  return config;
+  return validatedConfig;
 }
