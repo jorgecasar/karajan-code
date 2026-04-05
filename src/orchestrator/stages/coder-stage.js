@@ -16,7 +16,7 @@ import { invokeSolomon } from "../solomon-escalation.js";
 import { detectRateLimit } from "../../utils/rate-limit-detector.js";
 import { createStallDetector } from "../../utils/stall-detector.js";
 
-export async function runCoderStage({ coderRoleInstance, coderRole, config, logger, emitter, eventBase, session, plannedTask, trackBudget, iteration }) {
+export async function runCoderStage({ coderRoleInstance, coderRole, config, logger, emitter, eventBase, session, plannedTask, trackBudget, iteration, brainCtx }) {
   logger.setContext({ iteration, stage: "coder" });
   emitProgress(
     emitter,
@@ -25,6 +25,17 @@ export async function runCoderStage({ coderRoleInstance, coderRole, config, logg
       detail: { coder: coderRole.provider, provider: coderRole.provider, executorType: "agent" }
     })
   );
+
+  // Brain: if enabled and queue has entries, use enriched feedback instead of flat string
+  let reviewerFeedback = session.last_reviewer_feedback;
+  if (brainCtx?.enabled) {
+    const { buildCoderFeedbackPrompt } = await import("../brain-coordinator.js");
+    const enriched = buildCoderFeedbackPrompt(brainCtx);
+    if (enriched) {
+      reviewerFeedback = enriched;
+      logger.info(`Brain: using enriched feedback (${brainCtx.feedbackQueue.entries.length} entries)`);
+    }
+  }
 
   const coderOnOutput = ({ stream, line }) => {
     emitProgress(emitter, makeEvent("agent:output", { ...eventBase, stage: "coder" }, {
@@ -40,7 +51,7 @@ export async function runCoderStage({ coderRoleInstance, coderRole, config, logg
   try {
     coderExecResult = await coderRoleInstance.execute({
       task: plannedTask,
-      reviewerFeedback: session.last_reviewer_feedback,
+      reviewerFeedback,
       sonarSummary: session.last_sonar_summary,
       deferredContext: buildDeferredContext(session.deferred_issues),
       onOutput: coderStall.onOutput
@@ -123,14 +134,48 @@ export async function runCoderStage({ coderRoleInstance, coderRole, config, logg
     throw new Error(`Coder failed: ${details}`);
   }
 
-  await addCheckpoint(session, { stage: "coder", iteration, note: "Coder applied changes", provider: coderRole.provider, model: coderRole.model || null });
+  // Measure files changed so stale detection (solomon-rules) has accurate data
+  let filesChanged = 0;
+  try {
+    const { verifyCoderOutput } = await import("../verification-gate.js");
+    const verif = verifyCoderOutput({
+      baseRef: session.session_start_sha,
+      projectDir: config.projectDir || process.cwd()
+    });
+    filesChanged = verif.filesChanged || 0;
+  } catch { /* ignore verification errors */ }
+
+  await addCheckpoint(session, { stage: "coder", iteration, note: "Coder applied changes", provider: coderRole.provider, model: coderRole.model || null, filesChanged });
   emitProgress(
     emitter,
     makeEvent("coder:end", { ...eventBase, stage: "coder" }, {
       message: "Coder completed",
-      detail: { provider: coderRole.provider, executorType: "agent" }
+      detail: { provider: coderRole.provider, executorType: "agent", filesChanged }
     })
   );
+
+  // Brain: verify coder produced real changes + clear feedback queue (now addressed)
+  if (brainCtx?.enabled) {
+    const { verifyCoderRan, clearFeedback } = await import("../brain-coordinator.js");
+    const result = verifyCoderRan(brainCtx, {
+      baseRef: session.session_start_sha,
+      projectDir: config.projectDir || process.cwd()
+    });
+    const maxFailures = config.brain?.max_consecutive_verification_failures ?? 2;
+    if (!result.passed) {
+      logger.warn(`Brain verification: coder made 0 changes (consecutive failures: ${brainCtx.verificationTracker.consecutiveFailures}/${maxFailures})`);
+      emitProgress(emitter, makeEvent("brain:verification", { ...eventBase, stage: "coder" }, {
+        message: `Brain: coder produced no changes (${brainCtx.verificationTracker.consecutiveFailures}/${maxFailures} consecutive failures)`,
+        detail: { filesChanged: result.filesChanged, consecutiveFailures: brainCtx.verificationTracker.consecutiveFailures }
+      }));
+      if (brainCtx.verificationTracker.consecutiveFailures >= maxFailures) {
+        await markSessionStatus(session, "stalled");
+        throw new Error(`Brain: ${maxFailures} consecutive coder iterations with 0 file changes — pipeline stalled`);
+      }
+    } else {
+      clearFeedback(brainCtx);
+    }
+  }
 }
 
 export async function runRefactorerStage({ refactorerRole, config, logger, emitter, eventBase, session, plannedTask, trackBudget, iteration }) {

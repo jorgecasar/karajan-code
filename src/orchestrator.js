@@ -210,7 +210,7 @@ function emitSolomonAlerts(alerts, emitter, eventBase, logger) {
   }
 }
 
-async function handleSolomonCheck({ config, session, emitter, eventBase, logger, task, i, askQuestion, ciEnabled, blockingIssues }) {
+async function handleSolomonCheck({ config, session, emitter, eventBase, logger, task, i, askQuestion, ciEnabled, blockingIssues, brainCtx }) {
   if (config.pipeline?.solomon?.enabled === false) return { action: "continue" };
 
   try {
@@ -220,8 +220,45 @@ async function handleSolomonCheck({ config, session, emitter, eventBase, logger,
 
     if (rulesResult.alerts.length > 0) {
       emitSolomonAlerts(rulesResult.alerts, emitter, eventBase, logger);
-      const pauseResult = await checkSolomonCriticalAlerts({ rulesResult, askQuestion, session, i });
-      if (pauseResult) return pauseResult;
+      // Brain gateway: when Brain is the orchestrator, rule alerts are telemetry.
+      // On critical alerts Brain consults Solomon (AI judge). Only if Solomon can't
+      // resolve does Brain escalate to human. Solomon-rules never prompts directly.
+      if (!brainCtx?.enabled) {
+        const pauseResult = await checkSolomonCriticalAlerts({ rulesResult, askQuestion, session, i });
+        if (pauseResult) return pauseResult;
+      } else if (rulesResult.hasCritical) {
+        const criticalAlerts = rulesResult.alerts.filter(a => a.severity === "critical");
+        brainCtx.ruleAlerts = brainCtx.ruleAlerts || [];
+        brainCtx.ruleAlerts.push(...criticalAlerts);
+        logger.info(`Brain: ${criticalAlerts.length} critical rule alert(s) — consulting Solomon`);
+
+        const { invokeSolomon } = await import("./orchestrator/solomon-escalation.js");
+        const alertSummary = criticalAlerts.map(a => a.message).join("; ");
+        const solomonOpinion = await invokeSolomon({
+          config, logger, emitter, eventBase, stage: "brain-dilemma", askQuestion, session, iteration: i,
+          conflict: {
+            stage: "brain-dilemma",
+            task,
+            iterationCount: i,
+            maxIterations: config.max_iterations,
+            dilemma: `Brain detected critical rule alerts: ${alertSummary}. Should we continue iterating, pause for human, or stop?`,
+            ruleAlerts: criticalAlerts,
+            blockingIssues: blockingIssues || [],
+            history: (session.checkpoints || []).filter(cp => cp.stage === "reviewer").slice(-5).map(cp => ({ iteration: cp.iteration, feedback: cp.note || "" }))
+          }
+        });
+
+        if (solomonOpinion.action === "pause") {
+          logger.info("Brain: Solomon advised pause — escalating to human");
+          return { action: "return", result: { paused: true, sessionId: session.id, question: solomonOpinion.question || `Brain+Solomon paused: ${alertSummary}`, context: "brain_solomon_dilemma" } };
+        }
+        if (solomonOpinion.action === "approve") {
+          logger.info("Brain: Solomon advised proceeding — treating as approved");
+          return { action: "continue", approved: true };
+        }
+        // action === "continue" | "subtask" | fallback → Brain continues the loop
+        logger.info(`Brain: Solomon said '${solomonOpinion.action}' — continuing loop`);
+      }
     }
 
     if (ciEnabled && session.ci_pr_number) {
@@ -661,8 +698,8 @@ async function runPreLoopStages({ config, logger, emitter, eventBase, session, f
   return { plannedTask, updatedConfig };
 }
 
-async function runCoderAndRefactorerStages({ coderRoleInstance, coderRole, refactorerRole, pipelineFlags, config, logger, emitter, eventBase, session, plannedTask, trackBudget, i }) {
-  const coderResult = await runCoderStage({ coderRoleInstance, coderRole, config, logger, emitter, eventBase, session, plannedTask, trackBudget, iteration: i });
+async function runCoderAndRefactorerStages({ coderRoleInstance, coderRole, refactorerRole, pipelineFlags, config, logger, emitter, eventBase, session, plannedTask, trackBudget, i, brainCtx }) {
+  const coderResult = await runCoderStage({ coderRoleInstance, coderRole, config, logger, emitter, eventBase, session, plannedTask, trackBudget, iteration: i, brainCtx });
   if (coderResult?.action === "pause") return { action: "return", result: coderResult.result };
   const coderStandby = await handleStandbyResult({ stageResult: coderResult, session, emitter, eventBase, i, stage: "coder", logger, config });
   if (coderStandby.handled) {
@@ -795,7 +832,7 @@ async function runQualityGateStages({ config, logger, emitter, eventBase, sessio
   return { action: "ok" };
 }
 
-async function runReviewerGateStage({ pipelineFlags, reviewerRole, config, logger, emitter, eventBase, session, trackBudget, i, reviewRules, task, repeatDetector, budgetSummary, askQuestion }) {
+async function runReviewerGateStage({ pipelineFlags, reviewerRole, config, logger, emitter, eventBase, session, trackBudget, i, reviewRules, task, repeatDetector, budgetSummary, askQuestion, brainCtx }) {
   if (!pipelineFlags.reviewerEnabled) {
     return {
       action: "ok",
@@ -805,7 +842,7 @@ async function runReviewerGateStage({ pipelineFlags, reviewerRole, config, logge
 
   const reviewerResult = await runReviewerStage({
     reviewerRole, config, logger, emitter, eventBase, session, trackBudget,
-    iteration: i, reviewRules, task, repeatDetector, budgetSummary, askQuestion
+    iteration: i, reviewRules, task, repeatDetector, budgetSummary, askQuestion, brainCtx
   });
   if (reviewerResult.action === "pause") return { action: "return", result: reviewerResult.result };
   const revStandby = await handleStandbyResult({ stageResult: reviewerResult, session, emitter, eventBase, i, stage: "reviewer", logger, config, askQuestion });
@@ -1014,6 +1051,13 @@ async function initFlowContext({ task, config, logger, emitter, askQuestion, pgT
   ctx.session = await initializeSession({ task, config, flags, pgTaskId, pgProject });
   ctx.eventBase.sessionId = ctx.session.id;
 
+  // Karajan Brain: initialize runtime context (opt-in via config.brain.enabled)
+  const { createBrainContext, isBrainEnabled } = await import("./orchestrator/brain-coordinator.js");
+  ctx.brainCtx = createBrainContext({ enabled: isBrainEnabled(config) });
+  if (ctx.brainCtx.enabled) {
+    logger.info("Karajan Brain enabled — feedback queue, verification, compression active");
+  }
+
   const { initPgAdapter } = await import("./planning-game/pipeline-adapter.js");
   const pgAdapterResult = await initPgAdapter({ session: ctx.session, config, logger, pgTaskId, pgProject });
   ctx.pgCard = pgAdapterResult.pgCard;
@@ -1094,7 +1138,7 @@ async function runSingleIteration(ctx) {
   const crResult = await runCoderAndRefactorerStages({
     coderRoleInstance: ctx.coderRoleInstance, coderRole: ctx.coderRole, refactorerRole: ctx.refactorerRole,
     pipelineFlags: ctx.pipelineFlags, config, logger, emitter, eventBase, session,
-    plannedTask: ctx.plannedTask, trackBudget: ctx.trackBudget, i
+    plannedTask: ctx.plannedTask, trackBudget: ctx.trackBudget, i, brainCtx: ctx.brainCtx
   });
   if (crResult.action === "return" || crResult.action === "retry") return crResult;
 
@@ -1117,7 +1161,8 @@ async function runSingleIteration(ctx) {
   const revResult = await runReviewerGateStage({
     pipelineFlags: ctx.pipelineFlags, reviewerRole: ctx.reviewerRole, config, logger, emitter, eventBase,
     session, trackBudget: ctx.trackBudget, i, reviewRules: ctx.reviewRules, task,
-    repeatDetector: ctx.repeatDetector, budgetSummary: ctx.budgetSummary, askQuestion: ctx.askQuestion
+    repeatDetector: ctx.repeatDetector, budgetSummary: ctx.budgetSummary, askQuestion: ctx.askQuestion,
+    brainCtx: ctx.brainCtx
   });
   if (revResult.action === "return" || revResult.action === "retry") return revResult;
   const review = revResult.review;
@@ -1143,7 +1188,7 @@ async function runSingleIteration(ctx) {
 
   const solomonResult = await handleSolomonCheck({
     config, session, emitter, eventBase, logger, task, i, askQuestion: ctx.askQuestion,
-    ciEnabled, blockingIssues: review?.blocking_issues
+    ciEnabled, blockingIssues: review?.blocking_issues, brainCtx: ctx.brainCtx
   });
   if (solomonResult.action === "pause") return { action: "return", result: solomonResult.result };
 
