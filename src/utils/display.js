@@ -45,6 +45,7 @@ const ICONS = {
   "solomon:escalate": "\u26a0\ufe0f",
   "coder:standby": "\u23f3",
   "coder:standby_heartbeat": "\u23f3",
+  "agent:heartbeat": "\u23f3",
   "coder:standby_resume": "\u25b6\ufe0f",
   "budget:update": "\ud83d\udcb8",
   "iteration:end": "\u23f1\ufe0f",
@@ -438,6 +439,15 @@ const EVENT_HANDLERS = {
     console.log(`  \u251c\u2500 ${ANSI.yellow}${icon} Standby: ${remaining}s remaining${ANSI.reset}`);
   },
 
+  "agent:heartbeat": (event, icon) => {
+    const d = event.detail || {};
+    const provider = d.provider || "?";
+    const elapsed = d.elapsedMs ? Math.round(d.elapsedMs / 1000) : 0;
+    const silent = d.silenceMs ? Math.round(d.silenceMs / 1000) : 0;
+    const status = d.status === "waiting" ? `${ANSI.yellow}waiting (silent ${silent}s)` : `${ANSI.green}working`;
+    console.log(`  \u251c\u2500 ${ANSI.dim}${icon} ${provider} ${status}${ANSI.dim} — ${elapsed}s elapsed${ANSI.reset}`);
+  },
+
   "coder:standby_resume": (event, icon) => {
     console.log(`  \u251c\u2500 ${ANSI.green}${icon} Cooldown expired \u2014 resuming with ${event.detail?.coder || event.detail?.provider || "?"}${ANSI.reset}`);
   },
@@ -594,12 +604,16 @@ const EVENT_HANDLERS = {
     console.log(`  \u251c\u2500 ${ANSI.green}\ud83d\ude80 CI PR created: ${url}${ANSI.reset}`);
   },
 
-  "solomon:alert": (event) => {
-    console.log(`  \u251c\u2500 ${ANSI.yellow}\u2696\ufe0f Solomon alert: ${event.message || "conflict detected"}${ANSI.reset}`);
+  "brain:rules-alert": (event) => {
+    console.log(`  \u251c\u2500 ${ANSI.yellow}\u26a0\ufe0f  Rules alert: ${event.message || "anomaly detected"}${ANSI.reset}`);
   },
 
   "agent:output": (event) => {
     console.log(`  \u2502 ${ANSI.dim}${event.message}${ANSI.reset}`);
+  },
+
+  "agent:action": (event) => {
+    console.log(`  \u2502 ${ANSI.dim}\u2937 ${event.message}${ANSI.reset}`);
   }
 };
 
@@ -609,7 +623,6 @@ const EVENT_HANDLERS = {
 const QUIET_SUPPRESSED = new Set([
   "agent:output",
   "agent:stall",
-  "agent:heartbeat",
   "pipeline:simplify",
   "pipeline:analysis-only",
   "policies:resolved",

@@ -71,14 +71,20 @@ export const parseCheckpointAnswer = _parseCheckpointAnswer;
 
 // PG card "In Progress" logic moved to src/planning-game/pipeline-adapter.js → initPgAdapter()
 
-async function runPlanningPhases({ config, logger, emitter, eventBase, session, stageResults, pipelineFlags, coderRole, trackBudget, task, askQuestion }) {
+async function runPlanningPhases({ config, logger, emitter, eventBase, session, stageResults, pipelineFlags, coderRole, trackBudget, task, askQuestion, brainCtx }) {
   let researchContext = null;
   let plannedTask = task;
+
+  // Brain: track compression across pre-loop roles
+  const brainCompress = brainCtx?.enabled
+    ? (await import("./orchestrator/brain-coordinator.js")).processRoleOutput
+    : null;
 
   if (pipelineFlags.researcherEnabled) {
     const researcherResult = await runResearcherStage({ config, logger, emitter, eventBase, session, coderRole, trackBudget });
     researchContext = researcherResult.researchContext;
     stageResults.researcher = researcherResult.stageResult;
+    if (brainCompress) brainCompress(brainCtx, { roleName: "researcher", output: researcherResult.stageResult, iteration: 0 });
   }
 
   // --- Architect (between researcher and planner) ---
@@ -93,6 +99,7 @@ async function runPlanningPhases({ config, logger, emitter, eventBase, session, 
     });
     architectContext = architectResult.architectContext;
     stageResults.architect = architectResult.stageResult;
+    if (brainCompress) brainCompress(brainCtx, { roleName: "architect", output: architectResult.stageResult, iteration: 0 });
   }
 
   const triageDecomposition = stageResults.triage?.shouldDecompose ? stageResults.triage.subtasks : null;
@@ -101,6 +108,7 @@ async function runPlanningPhases({ config, logger, emitter, eventBase, session, 
     const plannerResult = await runPlannerStage({ config, logger, emitter, eventBase, session, plannerRole, researchContext, architectContext, triageDecomposition, trackBudget });
     plannedTask = plannerResult.plannedTask;
     stageResults.planner = plannerResult.stageResult;
+    if (brainCompress) brainCompress(brainCtx, { roleName: "planner", output: plannerResult.stageResult, iteration: 0 });
 
     await tryCiComment({
       config, session, logger,
@@ -201,12 +209,12 @@ async function handleStandbyResult({ stageResult, session, emitter, eventBase, i
 
 function emitSolomonAlerts(alerts, emitter, eventBase, logger) {
   for (const alert of alerts) {
-    emitProgress(emitter, makeEvent("solomon:alert", { ...eventBase, stage: "solomon" }, {
+    emitProgress(emitter, makeEvent("brain:rules-alert", { ...eventBase, stage: "brain" }, {
       status: alert.severity === "critical" ? "fail" : "warn",
       message: alert.message,
       detail: alert.detail
     }));
-    logger.warn(`Solomon alert [${alert.rule}]: ${alert.message}`);
+    logger.warn(`Rules alert [${alert.rule}]: ${alert.message}`);
   }
 }
 
@@ -313,7 +321,7 @@ async function checkSolomonCriticalAlerts({ rulesResult, askQuestion, session, i
 }
 
 
-async function handlePostLoopStages({ config, session, emitter, eventBase, coderRole, trackBudget, i, task, stageResults, ciEnabled, testerEnabled, securityEnabled, askQuestion, logger }) {
+async function handlePostLoopStages({ config, session, emitter, eventBase, coderRole, trackBudget, i, task, stageResults, ciEnabled, testerEnabled, securityEnabled, askQuestion, logger, brainCtx }) {
   const postLoopDiff = await generateDiff({ baseRef: session.session_start_sha });
 
   if (testerEnabled) {
@@ -327,6 +335,11 @@ async function handlePostLoopStages({ config, session, emitter, eventBase, coder
       session.last_reviewer_feedback = `Tester FAILED — fix these issues:\n${summary}`;
       await saveSession(session);
       if (testerResult.stageResult) stageResults.tester = testerResult.stageResult;
+      // Brain: push tester failure into feedback queue + compress for next coder iteration
+      if (brainCtx?.enabled) {
+        const { processRoleOutput } = await import("./orchestrator/brain-coordinator.js");
+        processRoleOutput(brainCtx, { roleName: "tester", output: testerResult.stageResult, iteration: i });
+      }
       return { action: "continue" };
     }
     if (testerResult.stageResult) {
@@ -346,6 +359,11 @@ async function handlePostLoopStages({ config, session, emitter, eventBase, coder
       session.last_reviewer_feedback = `Security FAILED — fix these issues:\n${summary}`;
       await saveSession(session);
       if (securityResult.stageResult) stageResults.security = securityResult.stageResult;
+      // Brain: push security findings into feedback queue + compress for next coder iteration
+      if (brainCtx?.enabled) {
+        const { processRoleOutput } = await import("./orchestrator/brain-coordinator.js");
+        processRoleOutput(brainCtx, { roleName: "security", output: securityResult.stageResult, iteration: i });
+      }
       return { action: "continue" };
     }
     if (securityResult.stageResult) {
@@ -494,7 +512,7 @@ async function handleReviewerRetryAndSolomon({ config, session, emitter, eventBa
 }
 
 
-async function runPreLoopStages({ config, logger, emitter, eventBase, session, flags, pipelineFlags, coderRole, trackBudget, task, askQuestion, pgTaskId, pgProject, stageResults }) {
+async function runPreLoopStages({ config, logger, emitter, eventBase, session, flags, pipelineFlags, coderRole, trackBudget, task, askQuestion, pgTaskId, pgProject, stageResults, brainCtx }) {
   // --- HU Reviewer (first stage, before everything else, opt-in) ---
   const huFile = flags.huFile || null;
   if (flags.enableHuReviewer !== undefined) pipelineFlags.huReviewerEnabled = Boolean(flags.enableHuReviewer);
@@ -663,7 +681,7 @@ async function runPreLoopStages({ config, logger, emitter, eventBase, session, f
   }
 
   // --- Researcher → Planner ---
-  const { plannedTask } = await runPlanningPhases({ config: updatedConfig, logger, emitter, eventBase, session, stageResults, pipelineFlags, coderRole, trackBudget, task, askQuestion });
+  const { plannedTask } = await runPlanningPhases({ config: updatedConfig, logger, emitter, eventBase, session, stageResults, pipelineFlags, coderRole, trackBudget, task, askQuestion, brainCtx });
 
   // --- Update .gitignore with stack-specific entries based on planner/architect output ---
   const projectDir = updatedConfig.projectDir || process.cwd();
@@ -870,11 +888,11 @@ async function runReviewerGateStage({ pipelineFlags, reviewerRole, config, logge
   return { action: "ok", review: reviewerResult.review };
 }
 
-async function handleApprovedReview({ config, session, emitter, eventBase, coderRole, trackBudget, i, task, stageResults, pipelineFlags, askQuestion, logger, gitCtx, budgetSummary, pgCard, pgProject, review, rtkTracker }) {
+async function handleApprovedReview({ config, session, emitter, eventBase, coderRole, trackBudget, i, task, stageResults, pipelineFlags, askQuestion, logger, gitCtx, budgetSummary, pgCard, pgProject, review, rtkTracker, brainCtx }) {
   session.reviewer_retry_count = 0;
   const postLoopResult = await handlePostLoopStages({
     config, session, emitter, eventBase, coderRole, trackBudget, i, task, stageResults,
-    ciEnabled: Boolean(config.ci?.enabled), testerEnabled: pipelineFlags.testerEnabled, securityEnabled: pipelineFlags.securityEnabled, askQuestion, logger
+    ciEnabled: Boolean(config.ci?.enabled), testerEnabled: pipelineFlags.testerEnabled, securityEnabled: pipelineFlags.securityEnabled, askQuestion, logger, brainCtx
   });
   if (postLoopResult.action === "return") return { action: "return", result: postLoopResult.result };
   if (postLoopResult.action === "continue") return { action: "continue" };
@@ -883,8 +901,72 @@ async function handleApprovedReview({ config, session, emitter, eventBase, coder
   return { action: "return", result };
 }
 
-async function handleMaxIterationsReached({ session, budgetSummary, emitter, eventBase, config, stageResults, logger, askQuestion, task, rtkTracker }) {
+async function handleMaxIterationsReached({ session, budgetSummary, emitter, eventBase, config, stageResults, logger, askQuestion, task, rtkTracker, brainCtx }) {
   const budget = budgetSummary();
+
+  // Brain-owned decision: max_iterations is guidance, not a hard rule.
+  // Brain evaluates the feedback queue state to decide extend / finalize / escalate.
+  // Solomon is only consulted if Brain cannot decide on its own.
+  if (brainCtx?.enabled) {
+    const entries = brainCtx.feedbackQueue?.entries || [];
+    const pending = entries.map(e => ({ source: e.source, category: e.category, severity: e.severity, description: e.description }));
+    const hasSecurity = entries.some(e => e.category === "security" || e.source === "security");
+    const hasCorrectness = entries.some(e => ["correctness", "tests"].includes(e.category));
+    const hasStyleOnly = entries.length > 0 && !hasSecurity && !hasCorrectness;
+
+    if (hasSecurity) {
+      // Brain: security issues unresolved → cannot finalize, escalate
+      logger.warn(`Brain: max_iterations reached with ${entries.filter(e => e.category === "security" || e.source === "security").length} unresolved security issue(s) — cannot finalize`);
+      return { paused: true, sessionId: session.id, question: "Brain: unresolved security issues at max_iterations. Review manually or extend pipeline.", context: "brain_security_block", pending };
+    }
+
+    if (hasCorrectness) {
+      // Brain: correctness/test issues pending → extend iterations (Brain's decision, not a rule)
+      logger.info(`Brain: max_iterations reached with ${entries.filter(e => ["correctness", "tests"].includes(e.category)).length} correctness issue(s) pending — extending iterations`);
+      session.reviewer_retry_count = 0;
+      await saveSession(session);
+      return { approved: false, sessionId: session.id, reason: "max_iterations_extended", extraIterations: Math.ceil(config.max_iterations / 2) };
+    }
+
+    if (entries.length === 0) {
+      // Brain: no pending feedback → last reviewer approved, finalize
+      logger.info("Brain: max_iterations reached with clean feedback queue — finalizing as approved");
+      return { approved: true, sessionId: session.id, reason: "brain_approved" };
+    }
+
+    // hasStyleOnly: genuine dilemma → Brain consults Solomon
+    logger.info(`Brain: max_iterations with ${entries.length} style-only issue(s) — consulting Solomon on dilemma`);
+    const { invokeSolomon: invokeSolomonAI } = await import("./orchestrator/solomon-escalation.js");
+    const solomonResult = await invokeSolomonAI({
+      config, logger, emitter, eventBase, stage: "max_iterations", askQuestion, session,
+      iteration: config.max_iterations,
+      conflict: {
+        stage: "brain-max-iterations",
+        task,
+        iterationCount: config.max_iterations,
+        maxIterations: config.max_iterations,
+        budget_usd: budget?.total_cost_usd || 0,
+        dilemma: `Max iterations reached with ${entries.length} style-only issue(s) pending. Accept as-is or request more work?`,
+        pendingIssues: pending,
+        history: [{ agent: "pipeline", feedback: session.last_reviewer_feedback || "Max iterations reached" }]
+      }
+    });
+    // Brain applies Solomon's decision
+    if (solomonResult.action === "approve") {
+      logger.info("Brain: Solomon advised approve for style-only pending — finalizing");
+      return { approved: true, sessionId: session.id, reason: "brain_solomon_approved" };
+    }
+    if (solomonResult.action === "continue") {
+      return { approved: false, sessionId: session.id, reason: "max_iterations_extended", extraIterations: solomonResult.extraIterations || Math.ceil(config.max_iterations / 2) };
+    }
+    if (solomonResult.action === "pause") {
+      return { paused: true, sessionId: session.id, question: solomonResult.question, context: "brain_solomon_dilemma" };
+    }
+    // Fallback: escalate to human
+    return { paused: true, sessionId: session.id, question: `Brain+Solomon cannot resolve: ${entries.length} pending issue(s) at max_iterations`, context: "max_iterations" };
+  }
+
+  // Legacy path (Brain disabled): original Solomon-driven flow
   const solomonResult = await invokeSolomon({
     config, logger, emitter, eventBase, stage: "max_iterations", askQuestion, session,
     iteration: config.max_iterations,
@@ -898,13 +980,11 @@ async function handleMaxIterationsReached({ session, budgetSummary, emitter, eve
     }
   });
 
-  // Solomon approved the work — treat as successful completion
   if (solomonResult.action === "approve") {
     logger.info("Solomon approved coder's work at max_iterations checkpoint");
     return { approved: true, sessionId: session.id, reason: "solomon_approved" };
   }
 
-  // Solomon says continue — extend iterations
   if (solomonResult.action === "continue") {
     if (solomonResult.humanGuidance) {
       session.last_reviewer_feedback = `Solomon guidance: ${solomonResult.humanGuidance}`;
@@ -1074,7 +1154,7 @@ async function initFlowContext({ task, config, logger, emitter, askQuestion, pgT
   ctx.stageResults = {};
   ctx.sonarState = { issuesInitial: null, issuesFinal: null };
 
-  const preLoopResult = await runPreLoopStages({ config, logger, emitter, eventBase: ctx.eventBase, session: ctx.session, flags, pipelineFlags: ctx.pipelineFlags, coderRole: ctx.coderRole, trackBudget: ctx.trackBudget, task, askQuestion, pgTaskId, pgProject, stageResults: ctx.stageResults });
+  const preLoopResult = await runPreLoopStages({ config, logger, emitter, eventBase: ctx.eventBase, session: ctx.session, flags, pipelineFlags: ctx.pipelineFlags, coderRole: ctx.coderRole, trackBudget: ctx.trackBudget, task, askQuestion, pgTaskId, pgProject, stageResults: ctx.stageResults, brainCtx: ctx.brainCtx });
   ctx.plannedTask = preLoopResult.plannedTask;
   ctx.config = preLoopResult.updatedConfig;
 
@@ -1199,7 +1279,7 @@ async function runSingleIteration(ctx) {
       config, session, emitter, eventBase, coderRole: ctx.coderRole, trackBudget: ctx.trackBudget, i, task,
       stageResults: ctx.stageResults, pipelineFlags: ctx.pipelineFlags, askQuestion: ctx.askQuestion, logger,
       gitCtx: ctx.gitCtx, budgetSummary: ctx.budgetSummary, pgCard: ctx.pgCard, pgProject: ctx.pgProject, review,
-      rtkTracker: ctx.rtkTracker
+      rtkTracker: ctx.rtkTracker, brainCtx: ctx.brainCtx
     });
     if (approvedResult.action === "return" || approvedResult.action === "continue") return approvedResult;
   }
@@ -1320,7 +1400,7 @@ async function runIterationLoop(ctx, { task: loopTask, askQuestion, emitter, log
   }
 
   // Solomon decides whether to extend iterations or stop
-  const maxIterResult = await handleMaxIterationsReached({ session: ctx.session, budgetSummary: ctx.budgetSummary, emitter, eventBase: ctx.eventBase, config: ctx.config, stageResults: ctx.stageResults, logger, askQuestion, task: loopTask, rtkTracker: ctx.rtkTracker });
+  const maxIterResult = await handleMaxIterationsReached({ session: ctx.session, budgetSummary: ctx.budgetSummary, emitter, eventBase: ctx.eventBase, config: ctx.config, stageResults: ctx.stageResults, logger, askQuestion, task: loopTask, rtkTracker: ctx.rtkTracker, brainCtx: ctx.brainCtx });
 
   // Solomon said "continue" — extend iterations and keep going
   if (maxIterResult.reason === "max_iterations_extended") {
@@ -1358,7 +1438,7 @@ async function runIterationLoop(ctx, { task: loopTask, askQuestion, emitter, log
     }
 
     // Extended iterations also exhausted — final Solomon call
-    const finalResult = await handleMaxIterationsReached({ session: ctx.session, budgetSummary: ctx.budgetSummary, emitter, eventBase: ctx.eventBase, config: ctx.config, stageResults: ctx.stageResults, logger, askQuestion, task: loopTask, rtkTracker: ctx.rtkTracker });
+    const finalResult = await handleMaxIterationsReached({ session: ctx.session, budgetSummary: ctx.budgetSummary, emitter, eventBase: ctx.eventBase, config: ctx.config, stageResults: ctx.stageResults, logger, askQuestion, task: loopTask, rtkTracker: ctx.rtkTracker, brainCtx: ctx.brainCtx });
     return finalResult;
   }
 
