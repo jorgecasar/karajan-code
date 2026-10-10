@@ -19,7 +19,7 @@ vi.mock("../../src/plan/plan-reviewer.js", async () => {
 });
 vi.mock("../../src/plan/plan-fixer.js", async () => {
   const actual = await vi.importActual("../../src/plan/plan-fixer.js");
-  return { ...actual, applyReviewerFeedback: vi.fn() };
+  return { ...actual, applyReviewerFeedback: vi.fn(async () => ({ ok: false, error: "fixer not mocked" })) };
 });
 
 const EMPTY_FINDINGS = {
@@ -38,6 +38,8 @@ beforeEach(async () => {
   // Limpiar el mock entre tests para que .mock.calls[0] sea el de ESTE test.
   const { reviewPlan } = await import("../../src/plan/plan-reviewer.js");
   reviewPlan.mockClear();
+  const { applyReviewerFeedback } = await import("../../src/plan/plan-fixer.js");
+  applyReviewerFeedback.mockClear();
 });
 
 afterEach(() => {
@@ -98,6 +100,28 @@ describe("planFixCommand", () => {
     const reviewerCall = reviewPlan.mock.calls[0][0];
     expect(reviewerCall.task).toContain("USER FEEDBACK");
     expect(reviewerCall.task).toContain("falta HU export GDPR");
+  });
+
+  // KJC-BUG-0316 (#2066): with feedback the fixer runs even when the reviewer flags nothing,
+  // and the dependency it says to drop and the scope it says to narrow reach the saved plan.
+  it("con --prompt y 0 findings: el fixer aplica el feedback (quita la dep, recorta el alcance)", async () => {
+    const { dir } = await seedPlan("plan-feedback");
+    const { reviewPlan } = await import("../../src/plan/plan-reviewer.js");
+    const { applyReviewerFeedback } = await import("../../src/plan/plan-fixer.js");
+    reviewPlan.mockResolvedValueOnce({ ok: true, findings: EMPTY_FINDINGS }).mockResolvedValueOnce({ ok: true, findings: EMPTY_FINDINGS });
+    applyReviewerFeedback.mockResolvedValueOnce({ ok: true, patch: {
+      additions: [], deps_to_add: [], deletions: [],
+      deps_to_remove: [{ huId: "hu_002", on: "hu_001" }], scope_edits: [{ huId: "hu_002", scope: "b only" }],
+    } });
+    const { planFixCommand } = await import("../../src/commands/plan/fix.js");
+    const origLog = console.log;
+    console.log = () => {};
+    try {
+      await planFixCommand({ config: { projectDir }, planId: "plan-feedback", prompt: "quita la dep de B sobre A", logger: { info() {}, warn() {} }, json: true });
+    } finally { console.log = origLog; }
+    const saved = JSON.parse(readFileSync(path.join(dir, "plan-feedback.json"), "utf8"));
+    expect(applyReviewerFeedback).toHaveBeenCalledTimes(1);
+    expect(saved.hus[1]).toMatchObject({ blocked_by: [], scope: "b only" });
   });
 
   it("plan inexistente → error claro", async () => {
