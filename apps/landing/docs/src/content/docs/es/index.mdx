@@ -65,7 +65,11 @@ El caveat que el loop engineering recalca — *los bucles desatendidos cometen e
 
 Las versiones más recientes, la última primero. Las anteriores están en [Arquitectura › Historia](/docs/es/architecture/history/) y en el [CHANGELOG](https://github.com/manufosela/karajan-code/blob/main/CHANGELOG.md).
 
-### v4.48.1: tres arreglos de campo (actual)
+### v4.48.2: el HU Board arranca en una instalación global (actual)
+
+El tablero viaja dentro del paquete principal, y tres de sus dependencias (`ws`, `@xterm/xterm`, `node-pty`) solo las declaraba su propio paquete, así que una instalación global no podía arrancarlo. Ahora las declara el paquete principal, `node-pty` como opcional porque es nativa y solo la usa la terminal embebida.
+
+### v4.48.1: tres arreglos de campo
 
 El workflow de calidad corre en la raíz del lenguaje cuando la app vive en un subdirectorio, `kj rag query` ya no reindexa el repo entero antes de responder cuando el índice es antiguo, y el rag-first deja editar un barrel (`index.ts`, `__init__.py`, `mod.rs`) en cuanto el RAG ha respondido sobre su carpeta.
 
