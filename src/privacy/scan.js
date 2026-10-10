@@ -98,6 +98,12 @@ const CONTEXT_DISCARDS = [
   // (about 1 in 100) still warns, because nothing tells it apart from a phone
   // written after "R-"; the allow list is the way out for that one.
   { type: "rule-id", re: /\bR-(?=\d*[a-f])[0-9a-f]{10}\b/g },
+  // KJC-BUG-0317: a kj plan id is `plan-` + a YYYYMMDDHHMMSS stamp + `-` + 4
+  // lowercase alphanumerics, also inside an HU id (hu_<planId>_007, hence the
+  // lookarounds instead of \b). Only that WHOLE shape with a real 20xx date and
+  // time: no card of 14 digits starts with 20 (Diners is 30/36/38), and a
+  // 16-digit card does not fit the slot.
+  { type: "plan-id", re: /(?<![A-Za-z0-9])plan-20\d\d(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])(?:[01]\d|2[0-3])[0-5]\d[0-5]\d-[a-z0-9]{4}(?![A-Za-z0-9])/g },
 ];
 
 /**
