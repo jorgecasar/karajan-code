@@ -42,7 +42,8 @@ import { withBrainRecovery } from "../brain/with-brain-recovery.js";
  * @returns {string}
  */
 export function buildReviewerPrompt({ task, hus }) {
-  const huSummary = hus.map((h, i) => {
+  // KJC-BUG-0314: an archived (skipped) HU is history, not part of the plan to review.
+  const huSummary = hus.filter((h) => h.status !== "skipped").map((h, i) => {
     const deps = Array.isArray(h.blocked_by) && h.blocked_by.length > 0
       ? ` ← blocked_by: ${h.blocked_by.join(", ")}`
       : "";

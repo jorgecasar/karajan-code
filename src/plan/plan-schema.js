@@ -25,6 +25,9 @@ const VALID_HU_STATUSES = new Set([
   "pending", "running", "done",
   // Legacy
   "certified", "coding", "reviewing", "failed", "blocked", "needs_context",
+  // KJC-BUG-0314 (#2063): HUs are never deleted (KJC-TSK-0669); the fix loop
+  // archives them as skipped, and validate rejected its own archive status.
+  "skipped",
 ]);
 export const CANONICAL_HU_STATUSES = new Set(["pending", "running", "done"]);
 // KJC-TSK-0394: nuevo campo `result` ortogonal a status. Reemplaza la

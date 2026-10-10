@@ -15,7 +15,8 @@ import { normaliseAcceptanceTests } from "./plan-schema.js";
 import { withBrainRecovery } from "../brain/with-brain-recovery.js";
 
 export function buildFixerPrompt({ task, hus, findings }) {
-  const huSummary = hus.map((h) => {
+  // KJC-BUG-0314: archived (skipped) HUs are not offered to the fixer to patch.
+  const huSummary = hus.filter((h) => h.status !== "skipped").map((h) => {
     const deps = Array.isArray(h.blocked_by) && h.blocked_by.length > 0
       ? ` ← blocked_by: ${h.blocked_by.join(", ")}` : "";
     return `- ${h.id}: ${h.title || "(untitled)"}${deps}`;
@@ -42,6 +43,7 @@ export function buildFixerPrompt({ task, hus, findings }) {
     "{",
     '  "additions": [',
     '    { "id": "<symbolic>", "description": "<sentence>",',
+    '      "replaces": "<huId of a deleted HU it supersedes, if any>",',
     '      "spec_section": "<ref>", "dependencies": ["<huId>"],',
     '      "acceptance_tests": [ { "type":"gherkin","content":"…" } ],',
     '      "reuse": [] }',
@@ -73,6 +75,7 @@ function normalisePatch(raw) {
       .filter(a => a && typeof a === "object" && typeof a.description === "string" && a.description.trim())
       .map(a => ({
         id: typeof a.id === "string" ? a.id.trim() : null,
+        replaces: typeof a.replaces === "string" && a.replaces.trim() ? a.replaces.trim() : null,
         description: String(a.description).trim(),
         spec_section: typeof a.spec_section === "string" ? a.spec_section.trim() || null : null,
         dependencies: Array.isArray(a.dependencies) ? a.dependencies.map(String) : [],
@@ -112,6 +115,12 @@ export async function applyReviewerFeedback({ agent, task, hus, findings, onOutp
 
 export function applyFixerPatch(plan, patch) {
   const counts = { added: 0, depsAdded: 0, archived: 0 };
+  // KJC-BUG-0314 (#2063): what a deleted HU depended on and who depended on it,
+  // taken before archiving cleans the edges, so its replacement can take over.
+  const replaced = new Map((patch.deletions || []).map((id) => [id, {
+    deps: [...(plan.hus.find((h) => h.id === id)?.blocked_by || [])],
+    dependents: plan.hus.filter((h) => h.id !== id && h.blocked_by?.includes(id)).map((h) => h.id),
+  }]));
   // KJC-TSK-0669 (absolute rule): HUs are NEVER deleted — not even by the
   // fix loop. Overlap resolutions ARCHIVE in place (status skipped +
   // provenance), so history survives and ids stay referenceable. The
@@ -165,15 +174,23 @@ export function applyFixerPatch(plan, patch) {
     hu.created_by = "plan-reviewer"; // KJC-TSK-0661: provenance stamp
     if (symbolicId) symbolicToHuId.set(symbolicId, hu.id);
     const depsSymbolic = Array.isArray(a.dependencies) ? a.dependencies : [];
-    addedHus.push({ hu, depsSymbolic });
+    addedHus.push({ hu, depsSymbolic, replaces: a.replaces });
     counts.added += 1;
   }
-  // Pasada 2: resolver deps simbólicas de las additions a ids largos.
-  for (const { hu, depsSymbolic } of addedHus) {
+  // Pasada 2: resolver deps simbólicas de las additions a ids largos. KJC-BUG-0314:
+  // a dependency given by the HU's own long id resolves too.
+  const liveIds = new Set(plan.hus.filter((h) => h.status !== "skipped").map((h) => h.id));
+  for (const { hu, depsSymbolic, replaces } of addedHus) {
     const resolved = depsSymbolic
-      .map((s) => typeof s === "string" ? symbolicToHuId.get(s.trim()) : null)
+      .map((s) => (typeof s === "string" ? symbolicToHuId.get(s.trim()) ?? (liveIds.has(s.trim()) ? s.trim() : null) : null))
       .filter(Boolean);
-    if (resolved.length > 0) hu.blocked_by = resolved;
+    const takeOver = replaced.get(replaces);
+    const deps = [...new Set([...resolved, ...(takeOver?.deps || []).filter((d) => liveIds.has(d))])];
+    if (deps.length > 0) hu.blocked_by = deps;
+    for (const id of takeOver?.dependents || []) {
+      const dependent = plan.hus.find((h) => h.id === id);
+      if (dependent && !dependent.blocked_by?.includes(hu.id)) dependent.blocked_by = [...(dependent.blocked_by || []), hu.id];
+    }
   }
   const knownIds = new Set(plan.hus.map(h => h.id));
   for (const { huId, on } of patch.deps_to_add || []) {

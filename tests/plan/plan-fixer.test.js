@@ -167,4 +167,32 @@ describe("applyFixerPatch", () => {
     const added = plan.hus.find((h) => h.short_id === "DANGLER");
     expect(added.blocked_by).toEqual([]);
   });
+
+  // KJC-BUG-0314 (#2063): a replacement inherits the deps of the HU it replaces and takes
+  // over its dependents; deps given by long id resolve; the archived HU validates.
+  it("a replacement inherits the replaced HU's deps and takes over its dependents", () => {
+    const plan = makePlan();
+    plan.hus.push({ id: "hu_003", title: "C", task_type: "sw", status: "pending", blocked_by: ["hu_002"], reuse: [], scope: "c", acceptance_criteria: [], acceptance_tests: [] });
+    applyFixerPatch(plan, {
+      additions: [{ id: "B2", description: "B, narrowed", replaces: "hu_002", dependencies: [] }, { id: "D", description: "D", dependencies: ["hu_001"] }],
+      deps_to_add: [],
+      deletions: ["hu_002"],
+    });
+    const b2 = plan.hus.find((h) => h.short_id === "B2");
+    expect(b2.blocked_by).toEqual(["hu_001"]); // inherited from hu_002
+    expect(plan.hus.find((h) => h.id === "hu_003").blocked_by).toEqual([b2.id]); // repointed, not just dropped
+    expect(plan.hus.find((h) => h.short_id === "D").blocked_by).toEqual(["hu_001"]); // a long id resolves
+    expect(plan.hus.find((h) => h.id === "hu_002").status).toBe("skipped");
+  });
+});
+
+describe("archived HUs (KJC-BUG-0314)", () => {
+  it("validatePlan accepts the skipped status the fixer archives with, and the reviewer and fixer never see archived HUs", async () => {
+    const { validatePlan } = await import("../../src/plan/plan-schema.js");
+    const { buildReviewerPrompt } = await import("../../src/plan/plan-reviewer.js");
+    const hus = [{ id: "hu_001", title: "Live", status: "pending" }, { id: "hu_009", title: "Archived", status: "skipped" }];
+    expect(validatePlan({ planId: "p", version: 2, task: "t", status: "draft", hus })).toEqual({ valid: true });
+    expect(buildReviewerPrompt({ task: "t", hus })).not.toContain("hu_009");
+    expect(buildFixerPrompt({ task: "t", hus, findings: {} })).not.toContain("hu_009");
+  });
 });
