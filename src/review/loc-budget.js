@@ -33,6 +33,8 @@ const EXEMPT = [
   /(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock|npm-shrinkwrap\.json)$/,
   /\.lock$/,
   /(^|\/)tests\/_diet\//,
+  // KJC-BUG-0318: the plan `kj plan share` writes, at the project root only.
+  /^\.karajan-shared\/plans\/[^/]+\.json$/,
   // Human documentation, wherever the project keeps it. The landing's docs
   // moved into the monorepo (MONO-3) and the old root-anchored `docs/` rule
   // stopped matching them, which is how documenting started costing budget.
