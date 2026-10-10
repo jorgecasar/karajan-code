@@ -59,7 +59,14 @@ describe("countsTowardBudget", () => {
     "assets/app.js.map",
     "tests/__snapshots__/a.snap",
     "tests/_diet/fixture.js",
+    ".karajan-shared/plans/plan-20261010223554-a1b2.json", // KJC-BUG-0318: kj plan share
   ])("lo generado no cuenta: %s", (f) => expect(countsTowardBudget(f)).toBe(false));
+
+  it.each([
+    ".karajan-shared/notes.md",
+    ".karajan-shared/plans/helper.js",
+    "src/.karajan-shared/plans/x.json",
+  ])("solo el plan que escribe kj plan share queda fuera; el resto cuenta: %s", (f) => expect(countsTowardBudget(f)).toBe(true));
 
   it("nada no cuenta", () => {
     expect(countsTowardBudget("")).toBe(false);

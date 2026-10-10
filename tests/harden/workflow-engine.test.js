@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import yaml from "js-yaml";
 import * as prettier from "prettier";
@@ -278,5 +279,25 @@ describe("pinned actions — no mutable tags in generated workflows (KJC-BUG-013
     for (const p of ["*.lock", "package-lock.json", "pnpm-lock.yaml", "npm-shrinkwrap.json", "dist/**", "build/**", "coverage/**", "**/*.snap", "**/__snapshots__/**"]) {
       expect(t.SHRINK_BUDGET_WORKFLOW).toContain(`':!${p}'`);
     }
+  });
+
+  // KJC-BUG-0318: and the plan JSON `kj plan share` writes, only directly under
+  // .karajan-shared/plans/ (glob magic: `*` does not cross `/`), as loc-budget.js.
+  it("the shrink budget leaves out the shared plan JSON and nothing nested under it", async () => {
+    const t = await import("../../src/harden/workflow-templates.js");
+    const spec = ".karajan-shared/plans/*.json";
+    expect(t.SHRINK_BUDGET_WORKFLOW).toContain(`':(glob,exclude)${spec}'`);
+    const repo = mkdtempSync(join(tmpdir(), "kj-shared-plans-"));
+    try {
+      const git = (...a) => execFileSync("git", ["-C", repo, ...a], { encoding: "utf8" });
+      git("init", "-q");
+      for (const f of [".karajan-shared/plans/p.json", ".karajan-shared/plans/n/x.json", "src/a.js"]) {
+        mkdirSync(dirname(join(repo, f)), { recursive: true });
+        writeFileSync(join(repo, f), "{}\n");
+      }
+      git("add", "-A");
+      const listed = git("diff", "--cached", "--name-only", "--", ".", `:(glob,exclude)${spec}`).trim().split("\n");
+      expect(listed.sort()).toEqual([".karajan-shared/plans/n/x.json", "src/a.js"]);
+    } finally { rmSync(repo, { recursive: true, force: true }); }
   });
 });

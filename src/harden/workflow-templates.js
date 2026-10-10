@@ -212,7 +212,7 @@ export const SHRINK_BUDGET_WORKFLOW = [
   // enter the agent's context every run and unbounded growth there dilutes the
   // signal. Documentation is exempt where documentation lives; markdown that
   // instructs an agent is code.
-  "          d=$(git diff --numstat \"origin/${BASE_REF}...HEAD\" -- . ':!**/docs/**/*.md' ':!**/docs/**/*.mdx' ':!**/docs/**/*.txt' ':!**/docs/**/*.rst' ':!README.md' ':!README.*.md' ':!CHANGELOG.md' ':!CONTRIBUTING.md' ':!SECURITY.md' ':!CODE_OF_CONDUCT.md' ':!MIGRATION*.md' ':!TODO*.md' ':!*.lock' ':!package-lock.json' ':!pnpm-lock.yaml' ':!npm-shrinkwrap.json' ':!dist/**' ':!build/**' ':!coverage/**' ':!**/*.snap' ':!**/__snapshots__/**' ':!**/*.min.js' ':!**/*.map' || true)",
+  "          d=$(git diff --numstat \"origin/${BASE_REF}...HEAD\" -- . ':!**/docs/**/*.md' ':!**/docs/**/*.mdx' ':!**/docs/**/*.txt' ':!**/docs/**/*.rst' ':!README.md' ':!README.*.md' ':!CHANGELOG.md' ':!CONTRIBUTING.md' ':!SECURITY.md' ':!CODE_OF_CONDUCT.md' ':!MIGRATION*.md' ':!TODO*.md' ':!*.lock' ':!package-lock.json' ':!pnpm-lock.yaml' ':!npm-shrinkwrap.json' ':!dist/**' ':!build/**' ':!coverage/**' ':!**/*.snap' ':!**/__snapshots__/**' ':!**/*.min.js' ':!**/*.map' ':(glob,exclude).karajan-shared/plans/*.json' || true)",
   '          a=$(printf "%s\\n" "$d" | awk \'$1!="-"{s+=$1}END{print s+0}\')',
   '          r=$(printf "%s\\n" "$d" | awk \'$2!="-"{s+=$2}END{print s+0}\')',
   '          net=$((a - r)); echo "net=$net (limit=$LOC_LIMIT)"',
