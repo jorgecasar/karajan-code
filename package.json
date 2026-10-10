@@ -104,6 +104,7 @@
     "@babel/parser": "^7.29.7",
     "@karajan-family/governance": "^0.1.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@xterm/xterm": "^6.0.0",
     "better-sqlite3": "^12.10.0",
     "chokidar": "^5.0.0",
     "commander": "^15.0.0",
@@ -120,7 +121,11 @@
     "sqlite-vec": "^0.1.9",
     "valibot": "^1.4.1",
     "web-tree-sitter": "^0.26.9",
+    "ws": "^8.21.3",
     "yaml": "^2.9.0"
+  },
+  "optionalDependencies": {
+    "node-pty": "^1.1.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
