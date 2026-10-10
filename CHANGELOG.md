@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.48.2] - 2026-10-10
+
+### Fixed
+
+- **The HU Board starts on a global install** (KJC-BUG-0310): it ships inside the root package, so a global install resolves its imports from the root's dependencies, and `ws`, `@xterm/xterm` and `node-pty` were only declared by the board's own package. `ws` and `@xterm/xterm` are now root dependencies and `node-pty` (native, only loaded by the embedded terminal) an optional one; a test keeps every HU Board dependency declared by the root.
+
 ## [4.48.1] - 2026-10-10
 
 ### Fixed
