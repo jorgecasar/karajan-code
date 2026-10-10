@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.49.0] - 2026-10-11
+
+Plans that converge, and gates that stop shouting at kj's own output. Five
+field reports against `kj plan` and the gates around a shared plan, all from
+one session: a fix loop that archived what validate rejected and could only
+add, a cycle that slipped through to the run, and the privacy and size gates
+treating the shared plan as cards and code. With them, the guards absent from
+CI are vouched by the roster's signature instead of a known-hash heuristic.
+
+### Added
+
+- **Guards absent from the checkout are vouched by the roster's signature** (KJC-TSK-0877): the Sentinel guards live only on the user's machine, so CI accepted them by a hash kj knows. With the roster's signature verified, the human signed their hashes with the rest of the seal, and that signature now vouches for them; without a roster the heuristic stays, and an unknown guard hash is refused.
+
+### Fixed
+
+- **`kj plan fix` archives what `kj plan validate` accepts, and a replacement takes over** (KJC-BUG-0314, #2063): validate accepts the `skipped` status the fix loop archives with, the reviewer and the fixer no longer see archived HUs as overlaps, and an addition that says which HU it `replaces` inherits its dependencies and takes over its dependents.
+- **A cycle of HU dependencies stops the run and is named** (KJC-BUG-0315, #2065): validate names the path (`a -> b -> a`) and `kj run` stops before ordering the HUs instead of falling back to an order silently.
+- **`kj plan fix` removes dependencies, narrows scopes and rejects cycles** (KJC-BUG-0316, #2066): the patch carries `deps_to_remove` and `scope_edits`, the fixer applies the user feedback and not only the reviewer's findings, with `--prompt` it runs at least once, and an added edge that would close a cycle is rejected and counted.
+- **A kj plan id is not a credit card** (KJC-BUG-0317, #2070): the 14-digit stamp in a plan id made a shared plan warn `[creditCard]` hundreds of times; the whole plan id shape with a real date is discarded by context, and a card in that slot still warns.
+- **The plan `kj plan share` writes is generated, not code** (KJC-BUG-0318, #2071): `pr-size` and the CI shrink budget leave out `.karajan-shared/plans/*.json` at the project root.
+- **The agent-skills catalog checks out only `skills/`** (KJC-BUG-0320): kj cloned the whole repo, and with a project-local KARAJAN home the project's test runner ran its `evals/` fixtures; the clone is sparse now, and an older full clone narrows on its next refresh.
+- **The playbook's PR budget says it is for code** (KJC-BUG-0312, #2059): ~150 net lines of code, with what the gate exempts named.
+- **`kj architect` text output renders every section** (KJC-BUG-0313, #2061): tradeoffs and API contracts no longer print `undefined`, and the data model and dependencies have their own sections.
+
+### Infrastructure
+
+- **Fewer CI flakes** (KJC-BUG-0234): every git the suite launches runs without background gc or maintenance (a temp repo kept being written while its teardown removed it), and the doctor test no longer waits out the GPU probe in every case.
+
 ## [4.48.3] - 2026-10-10
 
 Carries 4.48.2, which was tagged but not published to npm.

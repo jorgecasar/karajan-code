@@ -1791,6 +1791,12 @@ El ADR 0018 dice que el agente no pide al humano por el chat lo que kj le negó:
 
 Dos arreglos viajan con ella, los dos encontrados por otras sesiones el mismo día. La regla del pre-commit que deja fuera de los commits los ficheros de runtime del agente contaba los borrados, así que sacar del índice un `.kj/` heredado exigía `--no-verify`. Y el Sentinel mandaba al agente a `kj report-issue` y luego le negaba el texto como si fuera una ruta entrecomillada; el propio gate de issues leía tres palabras en cualquier sitio del comando en vez del subcomando de gh.
 
+## Phase 141: v4.49.0, planes que convergen, gates que dejan de gritarle a kj
+
+Una sesión que planificaba un proyecto grande mandó cinco avisos en una tarde, y juntos describían un bucle de arreglo que no podía converger. `kj plan fix` archiva como `skipped` la HU sustituida, porque las HUs nunca se borran, pero validate rechazaba ese estado, el reviewer seguía contando la HU archivada como solape y su sustituta nacía sin aristas. El parche solo sabía añadir, así que el feedback que pedía quitar una dependencia o recortar un alcance se leía y se ignoraba, una arista añadida podía cerrar un ciclo, y el ciclo llegaba a `kj run`, cuyo planificador caía en un orden cualquiera sin decirlo. Ahora una HU nueva dice a cuál sustituye y hereda sus dependencias y sus dependientes, el parche quita aristas y edita alcances, una arista que cerraría un ciclo se rechaza, con `--prompt` el fixer corre aunque el reviewer no marque nada, y un ciclo se nombra por su camino y para el run.
+
+El mismo plan, compartido con `kj plan share`, disparó dos gates contra la salida del propio kj: sus ids llevan un sello de 14 dígitos que el gate de privacidad tomaba por un número de tarjeta, y su JSON contaba como código contra el presupuesto de la PR. Las dos exenciones toman la forma literal entera y nada más ancho. El catálogo de skills clonaba un repositorio entero con sus fixtures de evaluación, que luego ejecutaba el runner de tests del proyecto; ahora solo trae las skills. Y las guardas del Sentinel que solo viven en la máquina del usuario, que CI aceptaba por un hash conocido, las avala la firma del padrón sobre el sello.
+
 ## Decisiones Arquitectonicas Clave
 
 ### CLI wrapping vs llamadas directas a API

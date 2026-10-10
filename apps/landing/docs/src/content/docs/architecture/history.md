@@ -1792,6 +1792,12 @@ ADR 0018 says the agent does not ask the human by chat for what kj refused it: t
 
 Two fixes ride along, both found by other sessions the same day. The pre-commit rule that keeps agent runtime files out of commits counted deletions, so untracking an inherited `.kj/` file needed `--no-verify`. And the Sentinel sent the agent to `kj report-issue` and then denied its text as if it were a quoted path; the issue gate itself read three words anywhere in a command instead of the gh subcommand.
 
+## Phase 141: v4.49.0, plans that converge, gates that stop shouting at kj
+
+One session planning a large project sent five reports in an evening, and together they described a fix loop that could not converge. `kj plan fix` archives a superseded HU as `skipped`, because HUs are never deleted, but validate rejected that status, the reviewer kept counting the archived HU as an overlap, and its replacement was born with no edges. The patch could only add, so feedback asking to drop a dependency or narrow a scope was read and ignored, an added edge could close a cycle, and a cycle reached `kj run`, whose scheduler fell back to some order without saying so. Now an addition says which HU it replaces and takes over its dependencies and dependents, the patch removes edges and edits scopes, an edge that would close a cycle is rejected, with `--prompt` the fixer runs even when the reviewer flags nothing, and a cycle is named by its path and stops the run.
+
+The same plan, shared with `kj plan share`, set off two gates against kj's own output: its ids carry a 14-digit timestamp that the privacy gate read as a card number, and its JSON counted as code against the PR budget. Both exemptions take the whole literal shape and nothing wider. The skills catalog cloned a whole repository with its evaluation fixtures, which a project's test runner then executed; it checks out only the skills now. And the Sentinel guards that only live on the user's machine, which CI used to accept by a known hash, are vouched by the roster's signature over the seal.
+
 ## Key Architectural Decisions
 
 ### CLI wrapping vs direct API calls
