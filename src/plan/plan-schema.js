@@ -5,6 +5,7 @@
  */
 
 import { generatePlanId } from "./plan-id.js";
+import { findCycle } from "../hu/graph.js";
 
 const VALID_PLAN_STATUSES = new Set(["draft", "ready", "running", "done", "failed"]);
 // KJC-TSK-0394 step 5: el modelo CANONICAL del lifecycle es
@@ -301,34 +302,9 @@ export function validatePlan(plan) {
     }
   }
 
-  // Check for circular dependencies
-  try {
-    topoSort(plan.hus || []);
-  } catch {
-    errors.push("Circular dependency detected in HU blocked_by graph");
-  }
+  // KJC-BUG-0315 (#2065): the cycle is named, so the person knows which edge to cut.
+  const cycle = findCycle(plan.hus || []);
+  if (cycle) errors.push(`Circular dependency in HU blocked_by graph: ${cycle.join(" -> ")}`);
 
   return errors.length === 0 ? { valid: true } : { valid: false, errors };
-}
-
-/** Simple topological sort for cycle detection. */
-function topoSort(hus) {
-  const visited = new Set();
-  const visiting = new Set();
-  const order = [];
-  const map = new Map(hus.map(h => [h.id, h]));
-
-  function visit(id) {
-    if (visited.has(id)) return;
-    if (visiting.has(id)) throw new Error("cycle");
-    visiting.add(id);
-    const hu = map.get(id);
-    for (const dep of hu?.blocked_by || []) visit(dep);
-    visiting.delete(id);
-    visited.add(id);
-    order.push(id);
-  }
-
-  for (const hu of hus) visit(hu.id);
-  return order;
 }

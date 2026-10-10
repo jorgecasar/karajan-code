@@ -47,7 +47,8 @@ vi.mock("../src/hu/store.js", () => ({
   updateStoryStatus: (...args) => updateStoryStatusMock(...args)
 }));
 
-vi.mock("../src/hu/graph.js", () => ({
+vi.mock("../src/hu/graph.js", async (importOriginal) => ({
+  ...(await importOriginal()),
   topologicalSort: vi.fn((stories) => {
     const ids = new Set(stories.map(s => s.id));
     const inDegree = new Map();
@@ -234,6 +235,19 @@ describe("parallel HU execution in sub-pipeline", () => {
     expect(result.results).toHaveLength(1);
     // No worktree commands should have been called
     expect(execFileAsyncMock).not.toHaveBeenCalled();
+  });
+
+  // KJC-BUG-0315 (#2065): a cycle has no valid order; the run stops naming it.
+  it("a blocked_by cycle stops the run and names the cycle, nothing runs", async () => {
+    const hu = (id, dep) => ({ id, status: "certified", certified: { text: id }, original: { text: id }, blocked_by: [dep] });
+    const stories = [hu("080", "075"), hu("075", "010"), hu("010", "080")];
+    loadHuBatchMock.mockResolvedValue({ session_id: "hu-s_cycle", stories: [...stories] });
+    const runIterationFn = vi.fn(async () => ({ approved: true }));
+    await expect(runHuSubPipeline({
+      huReviewerResult: { ok: true, certified: 3, total: 3, stories, batchSessionId: "hu-s_cycle" },
+      runIterationFn, emitter, eventBase, logger,
+    })).rejects.toThrow(/Circular dependency between HUs: 080 -> 075 -> 010 -> 080/);
+    expect(runIterationFn).not.toHaveBeenCalled();
   });
 
   it("failed HU in parallel batch does not block siblings", async () => {

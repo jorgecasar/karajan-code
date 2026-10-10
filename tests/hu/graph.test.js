@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { topologicalSort, isStoryReady, getNextReadyStories } from "../../src/hu/graph.js";
+import { findCycle, topologicalSort, isStoryReady, getNextReadyStories } from "../../src/hu/graph.js";
+
+// KJC-BUG-0315 (#2065): a cycle is named, and dependencies outside the set are not a cycle.
+describe("findCycle", () => {
+  it("returns the cycle as a closed path, or null", () => {
+    const cyclic = [{ id: "080", blocked_by: ["075"] }, { id: "075", blocked_by: ["010"] }, { id: "010", blocked_by: ["080"] }, { id: "001" }];
+    expect(findCycle(cyclic)).toEqual(["080", "075", "010", "080"]);
+    expect(findCycle([{ id: "A", blocked_by: ["A"] }])).toEqual(["A", "A"]);
+    expect(findCycle([{ id: "B", blocked_by: ["A"] }, { id: "A" }])).toBeNull();
+    expect(findCycle([{ id: "B", blocked_by: ["done-elsewhere"] }])).toBeNull();
+  });
+});
 
 describe("topologicalSort", () => {
   it("sorts linear chain A->B->C", () => {

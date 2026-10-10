@@ -28,7 +28,8 @@ vi.mock("../../src/hu/store.js", () => ({
   updateStoryStatus: (...args) => updateStoryStatusMock(...args)
 }));
 
-vi.mock("../../src/hu/graph.js", () => ({
+vi.mock("../../src/hu/graph.js", async (importOriginal) => ({
+  ...(await importOriginal()),
   topologicalSort: vi.fn((stories) => {
     // Simple implementation: dependencies first via Kahn's algorithm
     const ids = new Set(stories.map(s => s.id));

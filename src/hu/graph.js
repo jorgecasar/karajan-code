@@ -1,4 +1,41 @@
 /**
+ * KJC-BUG-0315 (#2065): the first blocked_by cycle among `stories`, as a closed path
+ * (["080", "075", "010", "080"]), or null. A dependency on an id outside the set
+ * (an HU already done, or in another batch) is not a cycle.
+ * @param {Array<{id: string, blocked_by?: string[]}>} stories
+ * @returns {string[]|null}
+ */
+export function findCycle(stories) {
+  const deps = new Map(stories.map((s) => [s.id, s.blocked_by || []]));
+  const state = new Map(); // id -> "visiting" | "done"
+  const path = [];
+  const visit = (id) => {
+    if (state.get(id) === "done" || !deps.has(id)) return null;
+    if (state.get(id) === "visiting") return [...path.slice(path.indexOf(id)), id];
+    state.set(id, "visiting");
+    path.push(id);
+    for (const dep of deps.get(id)) {
+      const cycle = visit(dep);
+      if (cycle) return cycle;
+    }
+    path.pop();
+    state.set(id, "done");
+    return null;
+  };
+  for (const s of stories) {
+    const cycle = visit(s.id);
+    if (cycle) return cycle;
+  }
+  return null;
+}
+
+/** Throws, naming the cycle, when `stories` have one: there is no valid order to run them in. */
+export function assertNoCycle(stories) {
+  const cycle = findCycle(stories);
+  if (cycle) throw new Error(`Circular dependency between HUs: ${cycle.join(" -> ")}; no valid execution order exists, fix blocked_by (kj plan fix) before running`);
+}
+
+/**
  * Topological sort of HU stories respecting blocked_by dependencies.
  * Returns ordered array of story IDs (dependencies first).
  * Throws if circular dependency detected.
