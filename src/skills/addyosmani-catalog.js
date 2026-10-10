@@ -98,6 +98,23 @@ export function __resetGitProbe() {
 }
 
 /**
+ * KJC-BUG-0320: check out only skills/. The rest of the repo (evals/ with its
+ * *.test.js fixtures, scripts/) is never read, and under a project-local
+ * KARAJAN home the project's test runner picked those fixtures up.
+ * Idempotent, so an older full clone narrows on its next refresh.
+ */
+async function narrowToSkills(root, logger) {
+  const result = await runCommand("git", ["-C", root, "sparse-checkout", "set", SKILLS_SUBDIR], { timeout: 30_000 });
+  if (result?.exitCode === 0) return null;
+  // Neither a full checkout (it brings the fixtures back) nor a half one stays:
+  // the clone goes, the caller reports it, and the next use clones again.
+  await fs.rm(root, { recursive: true, force: true });
+  const error = `skills/ could not be checked out alone: ${(result?.stderr || "").trim() || "sparse-checkout failed"}`;
+  logger?.warn?.(`addyosmani-catalog: ${error} (catalog removed)`);
+  return error;
+}
+
+/**
  * Clone the addyosmani/agent-skills repo (shallow) if it does not already
  * exist locally. No-op when it is already present.
  *
@@ -121,7 +138,7 @@ export async function ensureCatalog(opts = {}) {
 
   const result = await runCommand(
     "git",
-    ["clone", "--depth", "1", repoUrl, root],
+    ["clone", "--depth", "1", "--sparse", repoUrl, root],
     { timeout: 120_000 }
   );
 
@@ -130,6 +147,8 @@ export async function ensureCatalog(opts = {}) {
     logger?.warn?.(`addyosmani-catalog: clone failed — ${stderr}`);
     return { ok: false, error: stderr || `clone failed (exit ${result.exitCode})` };
   }
+  const narrowError = await narrowToSkills(root, logger);
+  if (narrowError) return { ok: false, error: narrowError };
 
   await writeMeta({
     repoUrl,
@@ -204,6 +223,8 @@ export async function refreshIfStale(opts = {}) {
     action = "reset";
     logger?.info?.("addyosmani-catalog: ff-only failed, recovered via fetch+reset (upstream force-pushed)");
   }
+  const narrowError = await narrowToSkills(root, logger);
+  if (narrowError) return { ok: false, action: "skipped", error: narrowError };
 
   await writeMeta({
     ...(meta || {}),
