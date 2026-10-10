@@ -171,13 +171,19 @@ describe("skills/addyosmani-catalog", () => {
       runCommand.mockResolvedValueOnce({ exitCode: 0, stdout: "git version", stderr: "" });
       runCommand.mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" });
 
+      runCommand.mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" });
+
       const result = await mod.ensureCatalog();
       expect(result.ok).toBe(true);
-      expect(runCommand).toHaveBeenCalledTimes(2);
-      expect(runCommand).toHaveBeenLastCalledWith(
+      expect(runCommand).toHaveBeenCalledTimes(3);
+      expect(runCommand).toHaveBeenNthCalledWith(2,
         "git",
-        expect.arrayContaining(["clone", "--depth", "1"]),
+        expect.arrayContaining(["clone", "--depth", "1", "--sparse"]),
         expect.objectContaining({ timeout: expect.any(Number) })
+      );
+      // KJC-BUG-0320: only skills/ is checked out, never the repo's evals/ test fixtures.
+      expect(runCommand).toHaveBeenLastCalledWith(
+        "git", ["-C", mod.getCatalogRoot(), "sparse-checkout", "set", "skills"], expect.any(Object)
       );
 
       const metaPath = path.join(mod.getCatalogRoot(), ".karajan-catalog-meta.json");
@@ -185,6 +191,27 @@ describe("skills/addyosmani-catalog", () => {
       expect(meta.repoUrl).toBeTruthy();
       expect(typeof meta.clonedAt).toBe("string");
       expect(typeof meta.lastPullAt).toBe("string");
+    });
+
+    // KJC-BUG-0320: a clone that cannot be narrowed to skills/ is neither kept full
+    // nor half: it is removed and the failure is reported, on clone and on refresh.
+    it("a clone that cannot be narrowed to skills/ is removed and reported", async () => {
+      const ok = { exitCode: 0, stdout: "", stderr: "" };
+      const bad = { exitCode: 1, stdout: "", stderr: "boom" };
+      const root = mod.getCatalogRoot();
+      runCommand.mockResolvedValueOnce(ok).mockImplementationOnce(async () => {
+        await fs.mkdir(path.join(root, ".git"), { recursive: true });
+        return ok;
+      }).mockResolvedValueOnce(bad);
+      const r = await mod.ensureCatalog();
+      expect(r).toEqual({ ok: false, error: "skills/ could not be checked out alone: boom" });
+      await expect(fs.access(root)).rejects.toThrow();
+
+      await fs.mkdir(path.join(root, ".git"), { recursive: true }); // an older full clone, due for refresh
+      runCommand.mockResolvedValueOnce(ok).mockResolvedValueOnce(bad);
+      const refreshed = await mod.refreshIfStale({ refreshMs: 0 });
+      expect(refreshed).toMatchObject({ ok: false, action: "skipped" });
+      await expect(fs.access(root)).rejects.toThrow();
     });
 
     it("surfaces clone failures without throwing", async () => {
@@ -223,16 +250,28 @@ describe("skills/addyosmani-catalog", () => {
       await seedCatalog({ lastPullAgoMs: 8 * 24 * 60 * 60 * 1000 });
       runCommand.mockResolvedValueOnce({ exitCode: 0, stdout: "git version", stderr: "" });
       runCommand.mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" });
+      runCommand.mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" }); // sparse-checkout set skills
 
       const result = await mod.refreshIfStale({ refreshMs: 7 * 24 * 60 * 60 * 1000 });
       expect(result.ok).toBe(true);
       expect(result.action).toBe("pulled");
     });
 
+    // KJC-BUG-0320: a full clone from before narrows to skills/ on its next refresh.
+    it("a refresh narrows an older full clone to skills/", async () => {
+      await seedCatalog({ lastPullAgoMs: 8 * 24 * 60 * 60 * 1000 });
+      runCommand.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+      await mod.refreshIfStale({ refreshMs: 7 * 24 * 60 * 60 * 1000 });
+      expect(runCommand).toHaveBeenLastCalledWith(
+        "git", ["-C", mod.getCatalogRoot(), "sparse-checkout", "set", "skills"], expect.any(Object)
+      );
+    });
+
     it("force:true bypasses TTL check and always pulls", async () => {
       await seedCatalog({ lastPullAgoMs: 60 * 1000 });
       runCommand.mockResolvedValueOnce({ exitCode: 0, stdout: "git version", stderr: "" });
       runCommand.mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" });
+      runCommand.mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" }); // sparse-checkout set skills
 
       const result = await mod.refreshIfStale({ force: true });
       expect(result.action).toBe("pulled");
@@ -266,6 +305,7 @@ describe("skills/addyosmani-catalog", () => {
       });
       runCommand.mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" }); // fetch HEAD
       runCommand.mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" }); // reset --hard
+      runCommand.mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" }); // sparse-checkout set skills
 
       const logger = { info: vi.fn(), warn: vi.fn() };
       const result = await mod.refreshIfStale({ refreshMs: 0, logger });
@@ -276,8 +316,8 @@ describe("skills/addyosmani-catalog", () => {
       // happened. No warn (warn is reserved for genuine failures).
       expect(logger.info).toHaveBeenCalledWith(expect.stringMatching(/force-pushed|fetch\+reset/));
       expect(logger.warn).not.toHaveBeenCalled();
-      // The 4 expected git invocations: probe, pull, fetch, reset.
-      expect(runCommand).toHaveBeenCalledTimes(4);
+      // The 5 expected git invocations: probe, pull, fetch, reset, sparse-checkout (KJC-BUG-0320).
+      expect(runCommand).toHaveBeenCalledTimes(5);
     });
 
     it("degrades to 'skipped' when ff-only fails and the recovery reset also fails", async () => {
@@ -297,6 +337,7 @@ describe("skills/addyosmani-catalog", () => {
     it("delegates to ensureCatalog when catalog is absent", async () => {
       runCommand.mockResolvedValueOnce({ exitCode: 0, stdout: "git version", stderr: "" });
       runCommand.mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" });
+      runCommand.mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" }); // sparse-checkout set skills
 
       const result = await mod.refreshIfStale();
       expect(result.ok).toBe(true);
