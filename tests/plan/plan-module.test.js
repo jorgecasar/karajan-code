@@ -85,7 +85,8 @@ describe("plan-schema", () => {
     ];
     const result = validatePlan(plan);
     expect(result.valid).toBe(false);
-    expect(result.errors.some(e => e.includes("Circular"))).toBe(true);
+    // KJC-BUG-0315 (#2065): and names it.
+    expect(result.errors).toContain("Circular dependency in HU blocked_by graph: a -> b -> a");
   });
 });
 

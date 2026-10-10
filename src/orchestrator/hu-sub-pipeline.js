@@ -2,7 +2,7 @@
  * HU Sub-Pipeline — executes each certified HU as an independent sub-pipeline
  * with per-HU state tracking, topological ordering, and dependency-aware blocking.
  */
-import { topologicalSort } from "../hu/graph.js";
+import { assertNoCycle, topologicalSort } from "../hu/graph.js";
 import { updateStoryStatus, loadHuBatch, saveHuBatch, HU_STATUS } from "../hu/store.js";
 import { emitProgress, makeEvent } from "../utils/events.js";
 import { refineHuWithContext } from "../hu/lazy-planner.js";
@@ -455,10 +455,13 @@ export async function runHuSubPipeline({ huReviewerResult, runIterationFn, emitt
   }
 
   const certifiedStories = batch.stories.filter(s => s.status === HU_STATUS.CERTIFIED);
+  // KJC-BUG-0315 (#2065): a cycle has no valid order. The catch below fell back to
+  // the list order and ran it anyway; a cycle now stops the run and is named.
+  assertNoCycle(certifiedStories);
   let orderedIds;
   try {
     orderedIds = topologicalSort(certifiedStories);
-  } catch { /* cyclic dependency */
+  } catch { /* a dependency outside the certified batch (done or pending): keep the list order */
     orderedIds = certifiedStories.map(s => s.id);
   }
 

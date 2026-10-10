@@ -51,7 +51,8 @@ vi.mock("../../src/hu/store.js", () => ({
   answerContextRequest: vi.fn()
 }));
 
-vi.mock("../../src/hu/graph.js", () => ({
+vi.mock("../../src/hu/graph.js", async (importOriginal) => ({
+  ...(await importOriginal()),
   topologicalSort: vi.fn((stories) => stories.map(s => s.id))
 }));
 
