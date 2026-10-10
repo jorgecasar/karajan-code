@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import {
-  buildFixerPrompt, applyReviewerFeedback, applyFixerPatch,
+  buildFixerPrompt, applyReviewerFeedback, applyFixerPatch, patchChanged,
 } from "../../src/plan/plan-fixer.js";
 
 // KJC-BUG-0045 / P4: self-fix loop after plan-reviewer. The reviewer is
@@ -99,7 +99,7 @@ describe("applyFixerPatch", () => {
       ],
       deletions: ["hu_002"],
     });
-    expect(r).toEqual({ added: 1, depsAdded: 1, archived: 1 });
+    expect(r).toEqual({ added: 1, depsAdded: 1, depsRemoved: 0, scopesEdited: 0, archived: 1, cyclesRejected: 0 });
     expect(plan.hus).toHaveLength(4); // nothing is ever removed
     const archived = plan.hus.find(h => h.id === "hu_002");
     expect(archived.status).toBe("skipped");
@@ -183,6 +183,46 @@ describe("applyFixerPatch", () => {
     expect(plan.hus.find((h) => h.id === "hu_003").blocked_by).toEqual([b2.id]); // repointed, not just dropped
     expect(plan.hus.find((h) => h.short_id === "D").blocked_by).toEqual(["hu_001"]); // a long id resolves
     expect(plan.hus.find((h) => h.id === "hu_002").status).toBe("skipped");
+  });
+});
+
+// KJC-BUG-0316 (#2066): the fixer can remove a dependency and narrow a scope, an added
+// dependency that would close a cycle is rejected, and user feedback reaches the fixer.
+describe("removals, scope edits and cycles (KJC-BUG-0316)", () => {
+  const plan3 = () => ({ planId: "p", hus: [
+    { id: "hu_001", title: "A", status: "pending", blocked_by: [], scope: "a" },
+    { id: "hu_002", title: "B", status: "pending", blocked_by: ["hu_001"], scope: "b wide" },
+    { id: "hu_003", title: "C", status: "pending", blocked_by: ["hu_002"], scope: "c" },
+  ] });
+
+  it("removes a dependency, narrows a scope and rejects a dependency that closes a cycle", () => {
+    const plan = plan3();
+    const r = applyFixerPatch(plan, {
+      additions: [], deletions: [],
+      deps_to_remove: [{ huId: "hu_003", on: "hu_002" }, { huId: "hu_002", on: "hu_999" }],
+      scope_edits: [{ huId: "hu_002", scope: "b narrow" }, { huId: "hu_404", scope: "x" }],
+      deps_to_add: [{ huId: "hu_001", on: "hu_002" }, { huId: "hu_003", on: "hu_001" }],
+    });
+    expect(plan.hus[2].blocked_by).toEqual(["hu_001"]);
+    expect(plan.hus[1].scope).toBe("b narrow");
+    expect(plan.hus[0].blocked_by).toEqual([]); // hu_001 -> hu_002 -> hu_001 would be a cycle
+    expect(r).toEqual({ added: 0, depsAdded: 1, depsRemoved: 1, scopesEdited: 1, archived: 0, cyclesRejected: 1 });
+    expect(patchChanged(r)).toBe(true);
+    expect(patchChanged({ added: 0, depsAdded: 0, depsRemoved: 0, scopesEdited: 0, archived: 0, cyclesRejected: 2 })).toBe(false);
+  });
+
+  it("the patch keeps removals and scope edits, and the prompt offers them and points at the user feedback", async () => {
+    const agent = { runTask: vi.fn(async () => ({ ok: true, output: JSON.stringify({
+      deps_to_remove: [{ huId: "hu_003", on: "hu_002" }, { huId: 3 }],
+      scope_edits: [{ huId: "hu_002", scope: " narrow " }, { huId: "hu_002", scope: "" }],
+    }) })) };
+    const r = await applyReviewerFeedback({ agent, task: "t", hus: plan3().hus, findings: {} });
+    expect(r.patch.deps_to_remove).toEqual([{ huId: "hu_003", on: "hu_002" }]);
+    expect(r.patch.scope_edits).toEqual([{ huId: "hu_002", scope: "narrow" }]);
+    const p = buildFixerPrompt({ task: "t", hus: plan3().hus, findings: {} });
+    expect(p).toContain('"deps_to_remove"');
+    expect(p).toContain('"scope_edits"');
+    expect(p).toContain("USER FEEDBACK");
   });
 });
 

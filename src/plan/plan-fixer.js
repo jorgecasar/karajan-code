@@ -35,8 +35,11 @@ export function buildFixerPrompt({ task, hus, findings }) {
     "- missing_hus → MUST add one HU each",
     "- missing_dependencies → MUST declare each edge",
     "- scope_overlaps → MUST drop one of the pair or merge them",
+    "- USER FEEDBACK in the task (if any) → apply it too: deps_to_remove for",
+    "  an edge it says to drop, scope_edits for a scope it says to narrow",
     "Do NOT propose new features outside the findings list. Do not add new",
     "tests/logging/refactors. The fixer is scoped to the report ONLY.",
+    "A dependency that would close a cycle is rejected.",
     "",
     "Output MUST be a JSON object:",
     "```json",
@@ -49,6 +52,8 @@ export function buildFixerPrompt({ task, hus, findings }) {
     '      "reuse": [] }',
     "  ],",
     '  "deps_to_add": [ { "huId": "<huId>", "on": "<huId>" } ],',
+    '  "deps_to_remove": [ { "huId": "<huId>", "on": "<huId>" } ],',
+    '  "scope_edits": [ { "huId": "<huId>", "scope": "<the narrowed scope>" } ],',
     '  "deletions": [ "<huId>" ]',
     "}",
     "```",
@@ -67,8 +72,12 @@ export function buildFixerPrompt({ task, hus, findings }) {
   ].filter(Boolean).join("\n");
 }
 
+const normaliseEdges = (list) => (Array.isArray(list) ? list : [])
+  .filter(d => d && typeof d.huId === "string" && typeof d.on === "string")
+  .map(d => ({ huId: d.huId.trim(), on: d.on.trim() }));
+
 function normalisePatch(raw) {
-  const out = { additions: [], deps_to_add: [], deletions: [] };
+  const out = { additions: [], deps_to_add: [], deps_to_remove: [], scope_edits: [], deletions: [] };
   if (!raw || typeof raw !== "object") return out;
   if (Array.isArray(raw.additions)) {
     out.additions = raw.additions
@@ -83,10 +92,12 @@ function normalisePatch(raw) {
         reuse: Array.isArray(a.reuse) ? a.reuse.map(String) : [],
       }));
   }
-  if (Array.isArray(raw.deps_to_add)) {
-    out.deps_to_add = raw.deps_to_add
-      .filter(d => d && typeof d.huId === "string" && typeof d.on === "string")
-      .map(d => ({ huId: d.huId.trim(), on: d.on.trim() }));
+  out.deps_to_add = normaliseEdges(raw.deps_to_add);
+  out.deps_to_remove = normaliseEdges(raw.deps_to_remove);
+  if (Array.isArray(raw.scope_edits)) {
+    out.scope_edits = raw.scope_edits
+      .filter(e => e && typeof e.huId === "string" && typeof e.scope === "string" && e.scope.trim())
+      .map(e => ({ huId: e.huId.trim(), scope: e.scope.trim() }));
   }
   if (Array.isArray(raw.deletions)) {
     out.deletions = raw.deletions.filter(d => typeof d === "string" && d.trim()).map(d => d.trim());
@@ -113,8 +124,40 @@ export async function applyReviewerFeedback({ agent, task, hus, findings, onOutp
   return { ok: true, patch: normalisePatch(parsed) };
 }
 
+// KJC-BUG-0316: whether `from` depends on `target`, directly or transitively.
+function dependsOn(plan, from, target) {
+  const seen = new Set();
+  const stack = [from];
+  while (stack.length > 0) {
+    const id = stack.pop();
+    if (id === target) return true;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    stack.push(...(plan.hus.find((h) => h.id === id)?.blocked_by || []));
+  }
+  return false;
+}
+
+/** Whether applying the patch changed the plan (a rejected cycle is not a change). */
+export function patchChanged(counts) {
+  return counts.added + counts.depsAdded + counts.depsRemoved + counts.scopesEdited + counts.archived > 0;
+}
+
 export function applyFixerPatch(plan, patch) {
-  const counts = { added: 0, depsAdded: 0, archived: 0 };
+  const counts = { added: 0, depsAdded: 0, depsRemoved: 0, scopesEdited: 0, archived: 0, cyclesRejected: 0 };
+  // KJC-BUG-0316 (#2066): an edge the feedback says to drop, and a scope it says to narrow.
+  for (const { huId, on } of patch.deps_to_remove || []) {
+    const hu = plan.hus.find((h) => h.id === huId);
+    if (!hu?.blocked_by?.includes(on)) continue;
+    hu.blocked_by = hu.blocked_by.filter((d) => d !== on);
+    counts.depsRemoved += 1;
+  }
+  for (const { huId, scope } of patch.scope_edits || []) {
+    const hu = plan.hus.find((h) => h.id === huId);
+    if (!hu || hu.scope === scope) continue;
+    hu.scope = scope;
+    counts.scopesEdited += 1;
+  }
   // KJC-BUG-0314 (#2063): what a deleted HU depended on and who depended on it,
   // taken before archiving cleans the edges, so its replacement can take over.
   const replaced = new Map((patch.deletions || []).map((id) => [id, {
@@ -199,10 +242,11 @@ export function applyFixerPatch(plan, patch) {
     if (!hu) continue;
     const blocked = Array.isArray(hu.blocked_by) ? hu.blocked_by : [];
     if (blocked.includes(on)) continue;
+    if (dependsOn(plan, on, huId)) { counts.cyclesRejected += 1; continue; }
     hu.blocked_by = [...blocked, on];
     counts.depsAdded += 1;
   }
-  if (counts.added + counts.depsAdded + counts.archived > 0) {
+  if (patchChanged(counts)) {
     plan.updatedAt = new Date().toISOString();
   }
   return counts;

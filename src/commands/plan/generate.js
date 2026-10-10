@@ -7,7 +7,7 @@ import { createCliProgressReporter } from "../../utils/cli-progress.js";
 import { runAutoGC, summarizeGC } from "../../utils/garbage-collector.js";
 import { promptProjectName } from "../../utils/prompt-project-name.js";
 import { deriveProjectNameFromCwd } from "../../utils/derive-project-name-from-cwd.js";
-import { applyReviewerFeedback, applyFixerPatch } from "../../plan/plan-fixer.js";
+import { applyReviewerFeedback, applyFixerPatch, patchChanged } from "../../plan/plan-fixer.js";
 import { runStructuralPass } from "../../plan/plan-structural-pass.js";
 import { recommendModelsForHu, complexityFromTaskType } from "../../hu/model-router.js";
 import { withBrainRecovery } from "../../brain/with-brain-recovery.js";
@@ -370,8 +370,8 @@ async function planGenerateImpl({ task, config, logger, json, context, runLog, f
             break;
           }
           const ops = applyFixerPatch(plan, fix.patch);
-          runLog.logText(`[planner] self-fix iter ${i} applied: +${ops.added} HU, +${ops.depsAdded} dep, ${ops.archived} archived`);
-          if (ops.added + ops.depsAdded + ops.archived === 0) {
+          runLog.logText(`[planner] self-fix iter ${i} applied: +${ops.added} HU, +${ops.depsAdded} dep, -${ops.depsRemoved} dep, ${ops.scopesEdited} scope, ${ops.archived} archived, ${ops.cyclesRejected} cycle(s) rejected`);
+          if (!patchChanged(ops)) {
             fixProgress.finish("done");
             runLog.logText(`[planner] self-fix iter ${i} empty patch — stopping`);
             break;

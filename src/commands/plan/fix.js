@@ -8,7 +8,7 @@ import { assertAgentsAvailable } from "../../agents/availability.js";
 import { resolveRole } from "../../config.js";
 import { createCliProgressReporter } from "../../utils/cli-progress.js";
 import { reviewPlan, findingsCount, findingsCountByType } from "../../plan/plan-reviewer.js";
-import { applyReviewerFeedback, applyFixerPatch } from "../../plan/plan-fixer.js";
+import { applyReviewerFeedback, applyFixerPatch, patchChanged } from "../../plan/plan-fixer.js";
 import { runStructuralPass } from "../../plan/plan-structural-pass.js";
 import { loadPlan, savePlan } from "../../plan/plan-store.js";
 
@@ -50,7 +50,9 @@ export async function planFixCommand({ config, planId, prompt, logger, json }) {
 
   // Self-fix loop con smart convergence guard (mismo que generate.js).
   const maxIter = 4;
-  for (let i = 1; i <= maxIter && count > 0; i++) {
+  // KJC-BUG-0316: with user feedback the fixer runs at least once, even when
+  // the reviewer flagged nothing, so the feedback is applied, not just read.
+  for (let i = 1; i <= maxIter && (count > 0 || (i === 1 && prompt)); i++) {
     const husSnapshot = JSON.parse(JSON.stringify(plan.hus));
     const reviewSnapshot = JSON.parse(JSON.stringify(plan.review));
     const fixProgress = createCliProgressReporter({ role: `plan-fix:iter ${i}`, quiet: Boolean(json) });
@@ -60,7 +62,7 @@ export async function planFixCommand({ config, planId, prompt, logger, json }) {
     });
     if (!fix.ok) { fixProgress.finish("failed"); break; }
     const ops = applyFixerPatch(plan, fix.patch);
-    if (ops.added + ops.depsAdded + ops.archived === 0) { fixProgress.finish("done"); break; }
+    if (!patchChanged(ops)) { fixProgress.finish("done"); break; }
     const review2 = await reviewPlan({
       agent: planner, task: enrichedTask, hus: plan.hus,
       onOutput: fixProgress.onOutput, silenceTimeoutMs, timeoutMs,
