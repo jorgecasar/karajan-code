@@ -65,7 +65,11 @@ El caveat que el loop engineering recalca — *los bucles desatendidos cometen e
 
 Las versiones más recientes, la última primero. Las anteriores están en [Arquitectura › Historia](/docs/es/architecture/history/) y en el [CHANGELOG](https://github.com/manufosela/karajan-code/blob/main/CHANGELOG.md).
 
-### v4.48.3: el móvil respalda el sello de un kj anterior (actual)
+### v4.49.0: planes que convergen, gates que dejan de gritarle a kj (actual)
+
+Cinco avisos de campo de una misma sesión contra `kj plan`: el bucle de arreglo archivaba HUs con un estado que validate rechazaba, solo sabía añadir dependencias y podía cerrar un ciclo que luego llegaba al run. Ahora las HUs archivadas validan y las sustitutas heredan sus aristas, el fixer quita dependencias y recorta alcances cuando el feedback lo pide, y un ciclo se nombra y para el run. El gate de privacidad ya no toma un id de plan por una tarjeta, `pr-size` deja fuera el plan compartido, el catálogo de skills ya no mete fixtures de test en el proyecto y las guardas que CI no ve las avala la firma del padrón.
+
+### v4.48.3: el móvil respalda el sello de un kj anterior
 
 Tras actualizar kj, `kj release check` negaba el hook que un humano había sellado con la versión anterior, porque lo recomputa con la plantilla nueva. Un sello de otra versión lo respalda ahora la firma del móvil sobre esos bytes; sin firma sigue negado y dice que hay que re-sellar. Incluye también la 4.48.2: el HU Board arranca en una instalación global.
 
