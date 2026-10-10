@@ -5,44 +5,32 @@ import { buildArchitectPrompt, parseArchitectOutput } from "../prompts/architect
 import { createCliProgressReporter } from "../utils/cli-progress.js";
 import { withBrainRecovery } from "../brain/with-brain-recovery.js";
 
-function formatLayers(layers, lines) {
-  lines.push("### Layers");
-  for (const l of layers) {
-    lines.push(typeof l === "string" ? `- ${l}` : `- **${l.name}**: ${l.responsibility || ""}`);
-  }
+// KJC-BUG-0313 (#2061): the agent answers each list with plain strings or with
+// objects; both render, and a section with neither prints nothing, never "undefined".
+function section(title, items, render, lines) {
+  if (!items?.length) return;
+  lines.push(`### ${title}`);
+  for (const item of items) lines.push(...(typeof item === "string" ? [`- ${item}`] : render(item)));
   lines.push("");
 }
 
-function formatTradeoffs(tradeoffs, lines) {
-  lines.push("### Tradeoffs");
-  for (const t of tradeoffs) {
-    lines.push(`- **${t.decision}**: ${t.rationale || ""}`);
-    if (t.alternatives?.length) lines.push(`  Alternatives: ${t.alternatives.join(", ")}`);
-  }
-  lines.push("");
-}
-
-function formatApiContracts(contracts, lines) {
-  lines.push("### API Contracts");
-  for (const c of contracts) {
-    lines.push(`- \`${c.method || "GET"} ${c.endpoint}\``);
-  }
-  lines.push("");
-}
+const named = (o, detail) => [`- **${o.name ?? o.decision ?? JSON.stringify(o)}**${detail ? `: ${detail}` : ""}`];
+const contract = (c) => [`- \`${c.method || "GET"} ${c.endpoint ?? c.path ?? ""}\``];
+const tradeoff = (t) => [...named(t, t.rationale), ...(t.alternatives?.length ? [`  Alternatives: ${t.alternatives.join(", ")}`] : [])];
+const entity = (e) => named(e, Array.isArray(e.fields) ? e.fields.join(", ") : e.description);
 
 function formatArchitecture(arch, lines) {
   if (arch.type) lines.push(`**Type:** ${arch.type}`, "");
-  if (arch.layers?.length) formatLayers(arch.layers, lines);
-  if (arch.patterns?.length) {
-    lines.push("### Patterns");
-    for (const p of arch.patterns) lines.push(`- ${p}`);
-    lines.push("");
-  }
-  if (arch.tradeoffs?.length) formatTradeoffs(arch.tradeoffs, lines);
-  if (arch.apiContracts?.length) formatApiContracts(arch.apiContracts, lines);
+  section("Layers", arch.layers, (l) => named(l, l.responsibility), lines);
+  section("Patterns", arch.patterns, (p) => [`- ${p.name ?? JSON.stringify(p)}`], lines);
+  section("Data Model", arch.dataModel?.entities, entity, lines);
+  // A contract given as a string ("GET /x") is code too: same backticks as an object's.
+  section("API Contracts", arch.apiContracts?.map((c) => (typeof c === "string" ? { raw: c } : c)), (c) => (c.raw ? [`- \`${c.raw}\``] : contract(c)), lines);
+  section("Dependencies", arch.dependencies, (d) => named(d, d.reason), lines);
+  section("Tradeoffs", arch.tradeoffs, tradeoff, lines);
 }
 
-function formatArchitect(result) {
+export function formatArchitect(result) {
   const lines = [];
   lines.push(`## Architecture Design`);
   lines.push(`**Verdict:** ${result.verdict || "unknown"}`, "");
