@@ -193,6 +193,25 @@ describe("scanText — lo que PARECE una tarjeta y no lo es", () => {
     const findings = scanText(`card ${spaced}`, { list: { personal: [], allow: [] } });
     expect(findings.some((f) => f.type === "creditCard")).toBe(true);
   });
+
+  // KJC-BUG-0317 (#2070): un plan de kj es plan-<YYYYMMDDHHMMSS>-<4 alfanumericos> y sus
+  // HUs hu_<planId>_<nnn>; el plan compartido llevaba cientos de avisos [creditCard].
+  it("un id de plan de kj, solo o dentro del id de una HU, no es una tarjeta", () => {
+    for (const text of ['"planId": "plan-20261010223554-a1b2"', '"id": "hu_plan-20261010223554-a1b2_007"']) {
+      const findings = scanText(text, { list: { personal: [], allow: [] } });
+      expect(findings.filter((f) => f.type === "creditCard")).toEqual([]);
+      expect(findings.discardedByContext).toBeGreaterThan(0);
+    }
+  });
+
+  it("una tarjeta de 14 digitos con la forma de un id de plan SIGUE avisando", () => {
+    // Diners es de 14 digitos y empieza por 3: no cabe en un timestamp de 20xx.
+    const diners = `3056${"9309025904"}`;
+    for (const text of [`plan-${diners}-a1b2`, "plan-20261399223554-a1b2"]) {
+      const findings = scanText(text, { list: { personal: [], allow: [] } });
+      expect(findings.some((f) => f.type === "creditCard")).toBe(true);
+    }
+  });
 });
 
 // KJC-BUG-0270 — a rule id of the inventory (ADR 0016) is `R-` and 10 hex chars
