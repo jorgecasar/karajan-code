@@ -20,6 +20,16 @@ const HARNESS_PREFIX = ".karajan/harness/";
 const SAFE_DIR = /^(\$HOME)?(\/[\w.@%+~-]+)+$/;
 
 const sha256 = (buf) => createHash("sha256").update(buf).digest("hex");
+// KJC-BUG-0311: the kj judging now, to tell a seal made by another version. Read
+// lazily and never fatal (a bundled binary may not carry package.json): unknown
+// means no seal counts as "older", so the strict re-render rule applies.
+let kjVersionCache;
+const kjVersion = () => {
+  if (kjVersionCache === undefined) {
+    try { kjVersionCache = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")).version ?? null; } catch { kjVersionCache = null; }
+  }
+  return kjVersionCache;
+};
 
 /**
  * @returns {{files: Set<string>, reason?: string}} rutas repo-relativas de
@@ -41,6 +51,10 @@ export function verifiedSupervisorFiles({ projectDir, trackedOnly = false }) {
   if (!signed.ok) return { files: new Set(), reason: signed.reason };
   const ok = new Set();
   const unjudgeable = new Set();
+  const current = kjVersion();
+  const olderSeal = current && typeof prov?.kj_version === "string" && prov.kj_version !== current ? prov.kj_version : null;
+  let vouched = false;
+  let stale = false;
   // KJC-BUG-0259 (user's decision, option A): history is judged with the kj of
   // when it was committed. The harness guards are machine-local and never in the
   // repo; the review and each PR's CI verify them when the seal is made. A check
@@ -87,13 +101,23 @@ export function verifiedSupervisorFiles({ projectDir, trackedOnly = false }) {
       continue;
     }
     if (canonical != null && sha256(Buffer.from(canonical, "utf8")) === entry.sha256) ok.add(entry.file);
+    // KJC-BUG-0311 (#2052): sealed with another kj whose template this kj cannot
+    // re-render. A phone of the roster signed these very bytes: that vouches for
+    // them. Without that signature recomputation is the only proof, so it stays
+    // denied (an unsigned provenance could claim any version to skip it).
+    else if (olderSeal && signed.required) { ok.add(entry.file); vouched = true; }
+    else if (olderSeal) stale = true;
   }
   // `complete` = ninguna entrada FALLO y alguna verifico. Exigir que todas
   // verifiquen hacia imposible sellar desde cualquier sitio que no fuera la
   // maquina que sello, porque los guardias no viajan con el repo (0212).
   const judged = (e) => ok.has(e.file) || unjudgeable.has(e.file);
   const complete = ok.size > 0 && entries.every((e) => typeof e?.file === "string" && judged(e));
-  return { files: ok, complete, unjudgeable, signed: signed.required };
+  return {
+    files: ok, complete, unjudgeable, signed: signed.required,
+    ...(vouched ? { vouchedOlder: olderSeal } : {}),
+    ...(stale ? { reason: `sellado con kj ${olderSeal} y este kj (${current}) no puede recomputar su plantilla, y sin firma del padrón nada más lo respalda: re-séllalo con kj harden --commit` } : {}),
+  };
 }
 
 /**
@@ -117,6 +141,7 @@ export function liftSealedSupervisorViolations({ projectDir, violations, tracked
     ...(unjudged > 0 ? [`${unjudged} guardia(s) del sello no existen en este checkout y no se han podido comprobar aquí`] : []),
     // KJC-TSK-0964: what the signature did or did not prove is said, never assumed.
     ...(sealed.signed === false ? ["proyecto sin padrón de firmantes: el sello no lleva firma verificable y su garantía es solo local"] : []),
+    ...(sealed.vouchedOlder ? [`sellado con kj ${sealed.vouchedOlder}: este kj no puede recomputar su plantilla y lo respalda la firma del padrón sobre esos bytes`] : []),
     ...(kept.length === violations.length && sealed.reason ? [sealed.reason] : []),
   ];
   return {
