@@ -1,7 +1,7 @@
 // KJC-TSK-0964 (HUM-A, ADR 0018): the phone's signature is a guarantee only if
 // something OUTSIDE the machine checks it. CI verifies the seal's signature
 // against the roster that travels with the repo; a local wipe changes nothing.
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,6 +12,8 @@ import { renderCanonicalHook } from "../../src/harden/harden-engine.js";
 import { canonicalPayload } from "../../src/harden/phone-sign.js";
 import { PROVENANCE_FILE } from "../../src/harden/supervisor-commit.js";
 import { liftSealedSupervisorViolations, verifiedSupervisorFiles } from "../../src/policy/supervisor-verify.js";
+
+const KJ_VERSION = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")).version;
 
 const HOOK = ".karajan/hooks/pre-commit";
 const generation = { profile: "standard", cmds: {}, baseBranch: "main", globalHooksDir: "$HOME/.git-hooks" };
@@ -92,5 +94,37 @@ describe("the seal's signature against the versioned roster", () => {
     expect(liftSealedSupervisorViolations({ projectDir: repo, violations })).toMatchObject({ lifted: 1, note: expect.stringMatching(/sin padrón.*solo local/) });
     roster(phone().publicKey);
     expect(liftSealedSupervisorViolations({ projectDir: repo, violations })).toMatchObject({ lifted: 0, note: expect.stringMatching(/no lleva firma/) });
+  });
+});
+
+// KJC-BUG-0311 (#2052): a hook sealed by a human with an older kj, whose template
+// has changed since, cannot be re-rendered by this kj. The phone's signature over
+// its bytes is what vouches for it; without a signature it stays denied, saying why.
+describe("a seal made with another kj version", () => {
+  const sealOld = (who, kjVersion) => {
+    writeFileSync(join(repo, HOOK), "#!/bin/sh\n# the pre-commit of an older kj\n");
+    files = [{ file: HOOK, sha256: sha("#!/bin/sh\n# the pre-commit of an older kj\n") }];
+    seal(who);
+    const prov = JSON.parse(readFileSync(join(repo, PROVENANCE_FILE), "utf8"));
+    writeFileSync(join(repo, PROVENANCE_FILE), JSON.stringify({ ...prov, kj_version: kjVersion }));
+  };
+
+  it("signed by a phone of the roster over those bytes: it verifies, and the lift says it was not re-rendered", () => {
+    const mine = phone();
+    roster(mine.publicKey);
+    sealOld(mine, "0.0.1");
+    expect(verified().files.has(HOOK)).toBe(true);
+    const lift = liftSealedSupervisorViolations({ projectDir: repo, violations: [{ rule_id: "defaults.supervisor.write", file: HOOK }] });
+    expect(lift).toMatchObject({ lifted: 1, note: expect.stringMatching(/sellado con kj 0\.0\.1.*firma del padrón/) });
+  });
+
+  it("unsigned, or claiming this very kj version: it stays denied, and names the remedy", () => {
+    sealOld(null, "0.0.1");
+    expect(verified()).toMatchObject({ reason: expect.stringMatching(/sellado con kj 0\.0\.1.*kj harden --commit/) });
+    expect(verified().files.size).toBe(0);
+    const mine = phone();
+    roster(mine.publicKey);
+    sealOld(mine, KJ_VERSION); // same version: the template must match, signature or not
+    expect(verified().files.size).toBe(0);
   });
 });
