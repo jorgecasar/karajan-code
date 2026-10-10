@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.48.3] - 2026-10-10
+
+Carries 4.48.2, which was tagged but not published to npm.
+
+### Fixed
+
+- **A seal made with an older kj no longer turns release check red** (KJC-BUG-0311, #2052): the supervisor check re-renders each sealed hook with the current kj's template, so once a template changed between versions, a hook a human sealed with the older kj was denied as a supervisor write. When the provenance was made by another kj version and a phone of the roster signed those very bytes, the signature vouches for them; unsigned, it stays denied and names the remedy (re-seal with `kj harden --commit`), since an unsigned provenance could claim any version.
+
 ## [4.48.2] - 2026-10-10
 
 ### Fixed
