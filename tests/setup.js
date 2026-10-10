@@ -81,3 +81,12 @@ globalThis.__KJ_DISABLE_SUITE_GREEN_STAGE = true;
 // tests that need one set CLAUDECODE themselves.
 delete process.env.CLAUDECODE;
 delete process.env.CLAUDE_CODE;
+
+// KJC-BUG-0234: every git the suite launches inherits this, so a commit in a
+// temp repo never leaves a background gc or maintenance writing into
+// .git/objects while the teardown removes the directory (ENOTEMPTY).
+process.env.GIT_CONFIG_COUNT = "2";
+process.env.GIT_CONFIG_KEY_0 = "gc.auto";
+process.env.GIT_CONFIG_VALUE_0 = "0";
+process.env.GIT_CONFIG_KEY_1 = "maintenance.auto";
+process.env.GIT_CONFIG_VALUE_1 = "false";

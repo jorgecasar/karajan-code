@@ -40,7 +40,8 @@ vi.mock("node:fs/promises", () => ({
     access: vi.fn().mockResolvedValue(undefined),
     stat: vi.fn().mockResolvedValue({ isDirectory: () => true }),
     mkdir: vi.fn().mockResolvedValue(undefined)
-  }
+  },
+  statfs: vi.fn()
 }));
 
 // Stub spawn so mcp-health check doesn't actually fork `node bin/karajan-mcp.js`
@@ -127,9 +128,14 @@ describe("doctor", () => {
       child.stderr = new EventEmitter();
       child.kill = vi.fn();
       child.unref = vi.fn();
-      setImmediate(() => child.stdout.emit("data", Buffer.from('{"jsonrpc":"2.0","id":1,"result":{}}\n')));
+      setImmediate(() => {
+        child.stdout.emit("data", Buffer.from('{"jsonrpc":"2.0","id":1,"result":{}}\n'));
+        // KJC-BUG-0234: the child also ends, or the GPU probe waits out its 1.5 s timeout in every test.
+        setImmediate(() => child.emit("close", 0));
+      });
       return child;
     });
+    fsPromises.statfs.mockResolvedValue({ bsize: 4096, bavail: 25 * 1024 ** 2 }); // ~100 GB free
 
     const mod = await import("../src/commands/doctor.js");
     runChecks = mod.runChecks;
