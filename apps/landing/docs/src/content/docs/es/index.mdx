@@ -65,7 +65,11 @@ El caveat que el loop engineering recalca — *los bucles desatendidos cometen e
 
 Las versiones más recientes, la última primero. Las anteriores están en [Arquitectura › Historia](/docs/es/architecture/history/) y en el [CHANGELOG](https://github.com/manufosela/karajan-code/blob/main/CHANGELOG.md).
 
-### v4.48.2: el HU Board arranca en una instalación global (actual)
+### v4.48.3: el móvil respalda el sello de un kj anterior (actual)
+
+Tras actualizar kj, `kj release check` negaba el hook que un humano había sellado con la versión anterior, porque lo recomputa con la plantilla nueva. Un sello de otra versión lo respalda ahora la firma del móvil sobre esos bytes; sin firma sigue negado y dice que hay que re-sellar. Incluye también la 4.48.2: el HU Board arranca en una instalación global.
+
+### v4.48.2: el HU Board arranca en una instalación global
 
 El tablero viaja dentro del paquete principal, y tres de sus dependencias (`ws`, `@xterm/xterm`, `node-pty`) solo las declaraba su propio paquete, así que una instalación global no podía arrancarlo. Ahora las declara el paquete principal, `node-pty` como opcional porque es nativa y solo la usa la terminal embebida.
 
