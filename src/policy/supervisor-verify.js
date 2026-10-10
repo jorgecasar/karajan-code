@@ -51,6 +51,7 @@ export function verifiedSupervisorFiles({ projectDir, trackedOnly = false }) {
   if (!signed.ok) return { files: new Set(), reason: signed.reason };
   const ok = new Set();
   const unjudgeable = new Set();
+  const signedAbsent = new Set();
   const current = kjVersion();
   const olderSeal = current && typeof prov?.kj_version === "string" && prov.kj_version !== current ? prov.kj_version : null;
   let vouched = false;
@@ -86,6 +87,9 @@ export function verifiedSupervisorFiles({ projectDir, trackedOnly = false }) {
     // tiene que ser el de un guardia que kj CONOCE, o una procedencia forjada
     // colaria entradas ausentes con cualquier hash (catch de la review).
     if (prefix === HARNESS_PREFIX && st === null) {
+      // KJC-TSK-0877: with the roster's signature verified, the human signed this
+      // guard's hash with the rest; that vouches for it without seeing the file.
+      if (signed.required && typeof entry.sha256 === "string") { signedAbsent.add(entry.file); continue; }
       const body = canonicalHarnessBody(entry.file.slice(prefix.length));
       if (body != null && typeof entry.sha256 === "string" && sha256(Buffer.from(body, "utf8")) === entry.sha256) unjudgeable.add(entry.file);
       continue;
@@ -111,10 +115,10 @@ export function verifiedSupervisorFiles({ projectDir, trackedOnly = false }) {
   // `complete` = ninguna entrada FALLO y alguna verifico. Exigir que todas
   // verifiquen hacia imposible sellar desde cualquier sitio que no fuera la
   // maquina que sello, porque los guardias no viajan con el repo (0212).
-  const judged = (e) => ok.has(e.file) || unjudgeable.has(e.file);
+  const judged = (e) => ok.has(e.file) || unjudgeable.has(e.file) || signedAbsent.has(e.file);
   const complete = ok.size > 0 && entries.every((e) => typeof e?.file === "string" && judged(e));
   return {
-    files: ok, complete, unjudgeable, signed: signed.required,
+    files: ok, complete, unjudgeable, signedAbsent, signed: signed.required,
     ...(vouched ? { vouchedOlder: olderSeal } : {}),
     ...(stale ? { reason: `sellado con kj ${olderSeal} y este kj (${current}) no puede recomputar su plantilla, y sin firma del padrón nada más lo respalda: re-séllalo con kj harden --commit` } : {}),
   };
@@ -137,8 +141,10 @@ export function liftSealedSupervisorViolations({ projectDir, violations, tracked
     && (sealed.files.has(v.file) || (v.file === PROVENANCE_FILE && sealed.complete === true));
   const kept = violations.filter((v) => !liftable(v));
   const unjudged = sealed.unjudgeable?.size ?? 0;
+  const vouchedAbsent = sealed.signedAbsent?.size ?? 0;
   const notes = [
     ...(unjudged > 0 ? [`${unjudged} guardia(s) del sello no existen en este checkout y no se han podido comprobar aquí`] : []),
+    ...(vouchedAbsent > 0 ? [`${vouchedAbsent} guardia(s) del sello no existen en este checkout y están respaldados por la firma del padrón`] : []),
     // KJC-TSK-0964: what the signature did or did not prove is said, never assumed.
     ...(sealed.signed === false ? ["proyecto sin padrón de firmantes: el sello no lleva firma verificable y su garantía es solo local"] : []),
     ...(sealed.vouchedOlder ? [`sellado con kj ${sealed.vouchedOlder}: este kj no puede recomputar su plantilla y lo respalda la firma del padrón sobre esos bytes`] : []),

@@ -97,6 +97,31 @@ describe("the seal's signature against the versioned roster", () => {
   });
 });
 
+// KJC-TSK-0877: the Sentinel guards live only on the user's machine, so CI never has
+// them. With the roster's signature verified, the signature over their hashes vouches
+// for them; without a roster, only a guard whose hash kj knows is accepted (KJC-BUG-0212).
+describe("guards absent from the checkout", () => {
+  const GUARD = ".karajan/harness/pretooluse-sentinel.mjs";
+  const withGuard = () => { files = [...files, { file: GUARD, sha256: sha("a guard this kj does not render") }]; };
+
+  it("signed by a phone of the roster: vouched by the signature, and the lift says so", () => {
+    const mine = phone();
+    roster(mine.publicKey);
+    withGuard();
+    seal(mine);
+    expect(verified()).toMatchObject({ complete: true });
+    expect(verified().unjudgeable.size).toBe(0);
+    const lift = liftSealedSupervisorViolations({ projectDir: repo, violations: [{ rule_id: "defaults.supervisor.write", file: PROVENANCE_FILE }] });
+    expect(lift).toMatchObject({ lifted: 1, note: expect.stringMatching(/1 guardia\(s\) .*respaldados por la firma del padrón/) });
+  });
+
+  it("without a roster: an unknown guard hash is not accepted", () => {
+    withGuard();
+    seal(null);
+    expect(verified().complete).toBe(false);
+  });
+});
+
 // KJC-BUG-0311 (#2052): a hook sealed by a human with an older kj, whose template
 // has changed since, cannot be re-rendered by this kj. The phone's signature over
 // its bytes is what vouches for it; without a signature it stays denied, saying why.
