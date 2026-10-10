@@ -84,7 +84,8 @@ ${panel ? `${panel}\n` : ""}- Security findings are never overridable — not ev
 - Publishing ANY artifact (a build's dist/, a docs site, a tarball)?
   \`kj privacy scan <dir>\` first — nothing personal or secret-shaped ships.
 - Branch first: never commit on the base branch — every change reaches it
-  through an atomic PR (~150 net lines, Conventional Commits). More than one
+  through an atomic PR (~150 net lines of code, Conventional Commits; human
+  docs, lockfiles, snapshots and dist/ do not count, AI-rule files do). More than one
   task, or the base tree must stay untouched? \`kj worktree start <slug>\`
   (one lane per task; \`kj worktree done <slug>\` after merge). Never CLAIM
   isolation without proof: in a lane, \`git rev-parse --git-dir\` differs

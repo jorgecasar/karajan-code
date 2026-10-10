@@ -32,6 +32,8 @@ describe("renderPlaybook", () => {
       expect(text).toMatch(/kj privacy scan/);
       // KJC-TSK-0711: the RAG is a native MCP tool, not just a Bash command.
       expect(text).toMatch(/kj_rag_query/);
+      // KJC-BUG-0312 (#2059): the line budget is for code; what the pr-size gate exempts is named.
+      expect(text).toMatch(/150 net lines of code[\s\S]*human\s+docs, lockfiles, snapshots and dist\/ do not count, AI-rule files do/);
       expect(text.split("\n").length).toBeLessThanOrEqual(60);
     });
   }
