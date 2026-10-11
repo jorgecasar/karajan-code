@@ -51,6 +51,13 @@ export async function runSpecReview({ spec, config, logger, askQuestion, flags =
     return { proceed: true, skipped: true };
   }
   if (!spec || !String(spec).trim()) return { proceed: true, skipped: true };
+  // KJC-BUG-0321 (#2074): with --plan the spec is the plan's original task, which
+  // `kj plan` reviewed when it generated the plan, and the HUs were certified since.
+  // Reviewing it again flags the plan, not the HUs being run.
+  if (flags.plan) {
+    logger?.info?.(`Spec review skipped: plan ${flags.plan} was reviewed when it was generated and its HUs certified.`);
+    return { proceed: true, skipped: true };
+  }
 
   const role = new SpecReviewerRole({ config, logger });
   await role.init({ task: spec });

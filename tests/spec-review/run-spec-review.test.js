@@ -27,6 +27,16 @@ describe("runSpecReview", () => {
     expect((await runSpecReview({ spec: "  ", config: {}, logger: noopLog, flags: { forceSpecReview: true } })).skipped).toBe(true);
   });
 
+  // KJC-BUG-0321 (#2074): `kj run --plan` passes the plan's original task as the spec,
+  // which `kj plan` already reviewed when it generated the plan; reviewing it again
+  // flagged things about the plan, not about the HUs being run.
+  it("with --plan the task was reviewed when the plan was generated: skipped, and said", async () => {
+    const { runSpecReview } = await loadWith({ ok: true, result: { severity: "warn", findings: findingsWarn } });
+    const r = await runSpecReview({ spec: "plan task", config: {}, logger: noopLog, flags: { forceSpecReview: true, plan: "plan-20261010223554-a1b2" } });
+    expect(r).toMatchObject({ proceed: true, skipped: true });
+    expect(noopLog.info).toHaveBeenCalledWith(expect.stringContaining("plan-20261010223554-a1b2"));
+  });
+
   it("proceeds silently with `✓ spec OK` when severity=ok / no findings", async () => {
     const { runSpecReview } = await loadWith({ ok: true, result: { severity: "ok", findings: [] } });
     const r = await runSpecReview({ spec: "good", config: {}, logger: noopLog, flags: { forceSpecReview: true } });
