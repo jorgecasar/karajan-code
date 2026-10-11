@@ -63,9 +63,10 @@ async function handlePgDecomposition({ triageResult, pgTaskId, pgProject, config
     const normalizedAnswer = (answer || "").trim().toLowerCase();
     const isAccept = normalizedAnswer === "1" || normalizedAnswer === "yes" || normalizedAnswer === "sí" || normalizedAnswer === "si";
     if (isAccept) {
-      const parentCard = await fetchCard({ projectId: pgProject, cardId: pgTaskId }).catch(() => null);
+      const apiUrl = config.planning_game?.api_url;
+      const parentCard = await fetchCard({ projectId: pgProject, cardId: pgTaskId, apiUrl }).catch(() => null);
       const createdSubtasks = await createDecompositionSubtasks({
-        client: { createCard, relateCards },
+        client: { createCard: (args) => createCard({ ...args, apiUrl }), relateCards: (args) => relateCards({ ...args, apiUrl }) },
         projectId: pgProject,
         parentCardId: pgTaskId,
         parentFirebaseId: parentCard?.firebaseId || null,
@@ -129,7 +130,8 @@ export async function markPgCardToValidate({ pgCard, pgProject, config, session,
       projectId: pgProject,
       cardId: session.pg_task_id,
       firebaseId: pgCard.firebaseId,
-      updates: pgUpdates
+      updates: pgUpdates,
+      apiUrl: config.planning_game?.api_url
     });
     logger.info(`Planning Game: ${session.pg_task_id} → To Validate`);
   } catch (err) {
@@ -201,9 +203,9 @@ async function markPgCardInProgress({ pgTaskId, pgProject, config, logger }) {
   // its own HUs and said approved. With a card named, no card is a loud stop.
   let pgCard;
   try {
-    pgCard = await fetchCard({ projectId: pgProject, cardId: pgTaskId });
+    pgCard = await fetchCard({ projectId: pgProject, cardId: pgTaskId, apiUrl: config.planning_game?.api_url });
   } catch (err) {
-    throw new Error(`Planning Game: card ${pgTaskId} could not be read (${err.message}): the run would implement without the card's acceptance criteria. Check PG_API_URL, or run without pgTask.`, { cause: err });
+    throw new Error(`Planning Game: card ${pgTaskId} could not be read (${err.message}): the run would implement without the card's acceptance criteria. Check planning_game.api_url in the config (PG_API_URL overrides it), or run without pgTask.`, { cause: err });
   }
   if (!pgCard) throw new Error(`Planning Game: card ${pgTaskId} not found in project ${pgProject}: the run would implement without the card's acceptance criteria. Check the id, or run without pgTask.`);
   try {
@@ -212,6 +214,7 @@ async function markPgCardInProgress({ pgTaskId, pgProject, config, logger }) {
         projectId: pgProject,
         cardId: pgTaskId,
         firebaseId: pgCard.firebaseId,
+        apiUrl: config.planning_game?.api_url,
         updates: {
           status: "In Progress",
           startDate: new Date().toISOString(),

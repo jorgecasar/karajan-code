@@ -29,6 +29,18 @@ describe("PG card lifecycle auto-tracking", () => {
 
   // --- markCardInProgress via initPgAdapter ---
 
+  // KJC-BUG-0322 (#2076): the adapter hands the client the configured api_url.
+  it("passes planning_game.api_url to the client on read and update", async () => {
+    mockFetchCard.mockResolvedValue({ cardId: "C-1", firebaseId: "fb", status: "To Do" });
+    mockUpdateCard.mockResolvedValue({});
+    await initPgAdapter({
+      session: { id: "s" }, config: makeConfig({ planning_game: { api_url: "https://pg.example.test/api" } }),
+      logger: makeLogger(), pgTaskId: "C-1", pgProject: "P",
+    });
+    expect(mockFetchCard).toHaveBeenCalledWith(expect.objectContaining({ apiUrl: "https://pg.example.test/api" }));
+    expect(mockUpdateCard).toHaveBeenCalledWith(expect.objectContaining({ apiUrl: "https://pg.example.test/api" }));
+  });
+
   describe("initPgAdapter (markCardInProgress)", () => {
     it("marks card as In Progress when pgTaskId is set and card is not In Progress", async () => {
       const pgCard = { cardId: "KJC-TSK-0210", firebaseId: "fb-123", status: "To Do" };

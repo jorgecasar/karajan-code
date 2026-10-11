@@ -14,8 +14,22 @@ import { withRetry } from "../utils/retry.js";
 const DEFAULT_API_URL = "http://localhost:3000/api";
 const DEFAULT_TIMEOUT_MS = 10000;
 
-function getApiUrl() {
-  return process.env.PG_API_URL || DEFAULT_API_URL;
+// KJC-BUG-0322: PG_API_URL > planning_game.api_url (passed by the caller) > localhost.
+function getApiUrl(apiUrl) {
+  const fromEnv = process.env.PG_API_URL?.trim();
+  if (fromEnv) return fromEnv;
+  const fromConfig = typeof apiUrl === "string" ? apiUrl.trim() : "";
+  return fromConfig ? fromConfig : DEFAULT_API_URL;
+}
+
+// Origin and path only: credentials or a query token in a configured URL never reach a log.
+function urlForMessage(url) {
+  try {
+    const u = new URL(url);
+    return `${u.origin}${u.pathname}`;
+  } catch {
+    return "(invalid Planning Game URL)";
+  }
 }
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
@@ -37,7 +51,7 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = DEFAULT_TIMEOUT_M
       err.httpStatus = 408;
       throw err;
     }
-    throw new Error(`Planning Game network error: ${error?.message || "unknown error"}`, { cause: error });
+    throw new Error(`Planning Game network error at ${urlForMessage(url)}: ${error?.message ?? "unknown error"}`, { cause: error });
   } finally {
     clearTimeout(timeoutId);
   }
@@ -58,15 +72,15 @@ async function parseJsonResponse(response) {
   }
 }
 
-export async function fetchCard({ projectId, cardId, timeoutMs = DEFAULT_TIMEOUT_MS }) {
-  const url = `${getApiUrl()}/projects/${encodeURIComponent(projectId)}/cards/${encodeURIComponent(cardId)}`;
+export async function fetchCard({ projectId, cardId, apiUrl, timeoutMs = DEFAULT_TIMEOUT_MS }) {
+  const url = `${getApiUrl(apiUrl)}/projects/${encodeURIComponent(projectId)}/cards/${encodeURIComponent(cardId)}`;
   const response = await fetchWithRetry(url, {}, timeoutMs);
   const data = await parseJsonResponse(response);
   return data?.card || data;
 }
 
-export async function updateCard({ projectId, cardId: _cardId, firebaseId, updates, timeoutMs = DEFAULT_TIMEOUT_MS }) {
-  const url = `${getApiUrl()}/projects/${encodeURIComponent(projectId)}/cards/${encodeURIComponent(firebaseId)}`;
+export async function updateCard({ projectId, cardId: _cardId, firebaseId, updates, apiUrl, timeoutMs = DEFAULT_TIMEOUT_MS }) {
+  const url = `${getApiUrl(apiUrl)}/projects/${encodeURIComponent(projectId)}/cards/${encodeURIComponent(firebaseId)}`;
   const response = await fetchWithRetry(
     url,
     {
@@ -79,8 +93,8 @@ export async function updateCard({ projectId, cardId: _cardId, firebaseId, updat
   return parseJsonResponse(response);
 }
 
-export async function createCard({ projectId, card, timeoutMs = DEFAULT_TIMEOUT_MS }) {
-  const url = `${getApiUrl()}/projects/${encodeURIComponent(projectId)}/cards`;
+export async function createCard({ projectId, card, apiUrl, timeoutMs = DEFAULT_TIMEOUT_MS }) {
+  const url = `${getApiUrl(apiUrl)}/projects/${encodeURIComponent(projectId)}/cards`;
   const response = await fetchWithRetry(
     url,
     {
@@ -93,8 +107,8 @@ export async function createCard({ projectId, card, timeoutMs = DEFAULT_TIMEOUT_
   return parseJsonResponse(response);
 }
 
-export async function relateCards({ projectId, sourceCardId, targetCardId, relationType, timeoutMs = DEFAULT_TIMEOUT_MS }) {
-  const url = `${getApiUrl()}/projects/${encodeURIComponent(projectId)}/cards/relate`;
+export async function relateCards({ projectId, sourceCardId, targetCardId, relationType, apiUrl, timeoutMs = DEFAULT_TIMEOUT_MS }) {
+  const url = `${getApiUrl(apiUrl)}/projects/${encodeURIComponent(projectId)}/cards/relate`;
   const response = await fetchWithRetry(
     url,
     {
