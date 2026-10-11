@@ -65,7 +65,11 @@ El caveat que el loop engineering recalca — *los bucles desatendidos cometen e
 
 Las versiones más recientes, la última primero. Las anteriores están en [Arquitectura › Historia](/docs/es/architecture/history/) y en el [CHANGELOG](https://github.com/manufosela/karajan-code/blob/main/CHANGELOG.md).
 
-### v4.49.0: planes que convergen, gates que dejan de gritarle a kj (actual)
+### v4.49.1: runs de plan que commitean y un presupuesto de tamaño que no pregunta (actual)
+
+`kj run --plan` se paraba antes de commitear cada HU, bloqueado por sus propios gates de card-first y de veredicto, volvía a revisar el spec del plan y nunca le pasaba al coder el contexto de dominio; las tres cosas están arregladas, y el contexto de dominio llega ahora al coder en todos los runs. El tamaño de PR tiene dos tramos: unas 150 líneas es lo ideal, hasta 200 se permite sin preguntar y por encima se parte. `kj harden --report` nombra ahora el Sentinel y los git hooks cuando faltan, y `kj harden` ya no pide sellar sin nada que sellar.
+
+### v4.49.0: planes que convergen, gates que dejan de gritarle a kj
 
 Cinco avisos de campo de una misma sesión contra `kj plan`: el bucle de arreglo archivaba HUs con un estado que validate rechazaba, solo sabía añadir dependencias y podía cerrar un ciclo que luego llegaba al run. Ahora las HUs archivadas validan y las sustitutas heredan sus aristas, el fixer quita dependencias y recorta alcances cuando el feedback lo pide, y un ciclo se nombra y para el run. El gate de privacidad ya no toma un id de plan por una tarjeta, `pr-size` deja fuera el plan compartido, el catálogo de skills ya no mete fixtures de test en el proyecto y las guardas que CI no ve las avala la firma del padrón.
 
