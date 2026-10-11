@@ -557,7 +557,7 @@ kj sonar stop       # Parar cuando termines
 | `KJ_SONAR_ADMIN_PASSWORD` | Contraseña admin SonarQube | de config |
 | `SONAR_TOKEN` | Token SonarQube alternativo | fallback |
 | `HU_BOARD_TOKEN` | Token Bearer para autenticacion del HU Board | — |
-| `PG_API_URL` | URL del API del Planning Game | `https://planning-game.geniova.com/api` |
+| `PG_API_URL` | URL del API del Planning Game; tiene prioridad sobre `planning_game.api_url` de la config (por defecto `http://localhost:3000/api`) | `https://pg.example.com/api` |
 | `VISUAL` | Editor de texto para `kj config --edit` | fallback a `EDITOR` |
 | `EDITOR` | Editor de texto fallback | `vi` |
 
