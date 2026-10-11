@@ -76,8 +76,8 @@ ${panel ? `${panel}\n` : ""}- Security findings are never overridable — not ev
   \`kj audit --security\` (zero tokens) and remediate BEFORE the review.
 - A design decision the card's AC don't cover belongs to the USER: record
   it as a proposed ADR (\`kj adr add\`) and ask — never bury it in a PR
-  bullet. An oversized-diff warning is not an opinion either: partition,
-  or get an explicit OK.
+  bullet. Diff size: ~150 net lines of code is the ideal, up to 200 is
+  allowed without asking, above 200 partition, always.
 - A non-trivial plan names at least two approaches — one as if the
   codebase didn't exist — and says why the winner won. Following the
   legacy line is a choice, never a default.

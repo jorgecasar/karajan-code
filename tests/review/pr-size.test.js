@@ -65,6 +65,32 @@ describe("pr-size policy", () => {
     expect(r.verdict).toBe("rejected");
   });
 
+  // KJC-BUG-0326 (#2085): ~150 is the ideal and up to 200 is allowed without asking;
+  // above 200, partition, always. The agent asked for an OK inside the allowed band.
+  it("between the ideal and the limit it only informs, even with block, and asks nothing", async () => {
+    fs.writeFileSync(path.join(dir, "a.js"), Array.from({ length: 170 }, (_, i) => `line ${i}`).join("\n"));
+    execFileSync("git", ["-C", dir, "add", "a.js"]);
+    const logs = [];
+    const spy = vi.spyOn(console, "log").mockImplementation((...a) => logs.push(a.join(" ")));
+    const r = await reviewGateCommand({ config: cfg("block"), flags: { staged: true } });
+    spy.mockRestore();
+    expect(r.verdict).toBe("approved");
+    const said = logs.join("\n");
+    expect(said).toMatch(/over the ~150 ideal, within the 200 limit/);
+    expect(said).not.toMatch(/ask your user|explicit OK/);
+  });
+
+  it("above the limit the warning says partition, and never offers asking for an OK", async () => {
+    const logs = [];
+    const spy = vi.spyOn(console, "log").mockImplementation((...a) => logs.push(a.join(" ")));
+    await reviewGateCommand({ config: cfg(undefined), flags: { staged: true } });
+    spy.mockRestore();
+    const said = logs.join("\n");
+    expect(said).toMatch(/over the 200-line limit/);
+    expect(said).toMatch(/partition/);
+    expect(said).not.toMatch(/ask your user/);
+  });
+
   it("default policy stays warn — review proceeds", async () => {
     const r = await reviewGateCommand({ config: cfg(undefined), flags: { staged: true } });
     expect(r.verdict).toBe("approved");

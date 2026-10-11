@@ -246,7 +246,11 @@ export async function reviewGateCommand({ config, logger = null, flags = {} }) {
   const locInv = pol.errors.length === 0
     ? (pol.policy.invariants || []).find((i) => i.kind === "diff-threshold" && i.metric === "net_lines_added")
     : null;
-  const sizeWarn = locInv?.max ?? config?.method_gates?.pr_size_warn ?? 150;
+  // KJC-BUG-0326 (#2085): two tiers. ~150 is the ideal (method_gates.pr_size_warn);
+  // up to the limit (the policy's net_lines_added max, else method_gates.pr_size_max,
+  // 200) is allowed without asking; above the limit, partition.
+  const sizeIdeal = config?.method_gates?.pr_size_warn ?? 150;
+  const sizeWarn = locInv?.max ?? config?.method_gates?.pr_size_max ?? 200;
   const sizeSource = locInv ? `policy [${locInv.id}]` : "method_gates";
   if (sizeWarn > 0) {
     const numstat = await rawDiff(flags.range, ["--numstat"]);
@@ -258,6 +262,9 @@ export async function reviewGateCommand({ config, logger = null, flags = {} }) {
     // Said out loud: an exemption nobody sees is indistinguishable from a gate
     // that is not looking.
     if (exempt > 0) console.log(`ℓ pr-size: ${exempt} line(s) exempt from the budget (generated output and human docs; AI-rule files always count)`);
+    if (added > sizeIdeal && added <= sizeWarn) {
+      console.log(`ℓ pr-size: ${added} lines added, over the ~${sizeIdeal} ideal, within the ${sizeWarn} limit: allowed, nothing to ask`);
+    }
     if (added > sizeWarn) {
       // KJC-TSK-0795 AC5: say how much of the weight is the module's OWN tests —
       // partitioning is a decision, and it must never split code from its tests.
@@ -265,12 +272,12 @@ export async function reviewGateCommand({ config, logger = null, flags = {} }) {
       const sizePolicy = config?.method_gates?.pr_size || "warn";
       // ADR 0015: no env escape — an exception is the user's label on the PR, judged in CI.
       if (sizePolicy === "block") {
-        const reason = `${added} lines added${split} exceeds the ${sizeWarn}-line budget (${sizeSource}; method_gates.pr_size: block) — partition the work; an exception is your user's large-pr-justified label on the PR`;
+        const reason = `${added} lines added${split} is over the ${sizeWarn}-line limit (${sizeSource}; method_gates.pr_size: block) — partition the work; an exception is your user's large-pr-justified label on the PR`;
         console.log(`✗ pr-size gate: ${reason}`);
         process.exitCode = 1;
         return { verdict: "rejected", reviewer: "pr-size", issues: [{ severity: "high", description: reason }] };
       } else {
-        console.log(`⚠ pr-size: ${added} lines added${split} (guideline ~${sizeWarn}, source: ${sizeSource}) — an oversized warning is not an opinion: partition, or ask your user (method_gates.pr_size: block to harden)`);
+        console.log(`⚠ pr-size: ${added} lines added${split}, over the ${sizeWarn}-line limit (ideal ~${sizeIdeal}, source: ${sizeSource}) — partition the work before committing (method_gates.pr_size: block to harden)`);
       }
     }
   }

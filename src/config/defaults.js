@@ -81,9 +81,11 @@ const DEFAULTS = {
     card_first_exempt_branches: ["chore/release-"],
     // MG-B: source changes without a test change — "warn" | "block".
     tests_with_code: "warn",
-    // MG-C: informative nudge when the staged diff exceeds this many
-    // added lines (0 disables). The project's CI owns any hard budget.
+    // MG-C + KJC-BUG-0326: ~pr_size_warn added lines is the ideal; up to
+    // pr_size_max is allowed without asking; above it, partition (warn, or
+    // block with pr_size: "block"). A policy net_lines_added max wins over pr_size_max.
     pr_size_warn: 150,
+    pr_size_max: 200,
     // CLM-B (claims-with-evidence ADR): the Stop gate crosses the hard data of
     // the turn's final message against that turn's tool outputs. "off" (adoption
     // is explicit) | "warn" (report only) | "block" (a datum DENIED by its own

@@ -52,7 +52,7 @@ Karajan projects MAY enforce a CI gate that fails any PR whose net delta exceeds
 
 - Stay under **~150 LOC per iteration** (safety margin against the 200 hard limit).
 - The gate counts the SUM of every changed file, not per-file. Tests count too. 5 files × 40 LOC = 200 = on the limit.
-- If the task clearly requires >150 LOC, STOP and report the partition needed. Don't ship a 500-LOC PR — the gate rejects it and the work is redone, burning tokens twice.
+- Up to 200 LOC is allowed without asking. If the task clearly requires >200 LOC, STOP and report the partition needed. Don't ship a 500-LOC PR — the gate rejects it and the work is redone, burning tokens twice.
 - Excluded from the count: lockfiles, snapshots, `dist/`, `node_modules/`, generated `tests/_diet/`, `public/docs/`. Source + tests count.
 
 ## Task completeness

@@ -73,7 +73,8 @@ describe("pr-size con la policy como fuente unica", () => {
 
   it("sin invariante declarado, method_gates sigue mandando (sin policy no cambia nada)", async () => {
     const { out, spy } = logs();
-    const r = await reviewGateCommand({ config: { projectDir: dir, method_gates: { pr_size_warn: 10, pr_size: "block" } }, flags: { staged: true } });
+    // KJC-BUG-0326: pr_size_warn is the ideal; the limit that blocks is pr_size_max.
+    const r = await reviewGateCommand({ config: { projectDir: dir, method_gates: { pr_size_warn: 5, pr_size_max: 10, pr_size: "block" } }, flags: { staged: true } });
     spy.mockRestore();
     expect(r).toMatchObject({ verdict: "rejected", reviewer: "pr-size" });
     expect(out.join("\n")).not.toMatch(/policy file/);
