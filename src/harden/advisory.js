@@ -166,9 +166,28 @@ export function classifyArtifact(searchDir, artifact, altDirs = [searchDir]) {
  * own root (monorepo-aware, mirroring installConfigsForRoots). `minimal`
  * profile ships no config, so there is nothing to compare.
  */
+// KJC-BUG-0335 (#2094): the method's own pieces, not only the configs. Without
+// them the report said "0 missing" while the review gate demanded the Sentinel.
+const METHOD_PIECES = [
+  { id: "sentinel", what: "the Sentinel (it records the session, the RAG queries the review gate needs among them)",
+    files: [".karajan/harness/pretooluse-sentinel.mjs", ".karajan/harness/posttooluse.mjs", ".karajan/harness/stop.mjs"] },
+  { id: "git-hooks", what: "the git hooks", files: [".karajan/hooks/pre-commit", ".karajan/hooks/commit-msg", ".karajan/hooks/pre-push"] },
+];
+
+function methodPiece(projectDir, { id, what, files }) {
+  const head = { dir: ".", id, file: files[0], currentVersion: null, managedVersion: null, upToDate: null, improvements: [], mergeable: false };
+  const missing = files.filter((f) => !existsSync(join(projectDir, f)));
+  return missing.length === 0
+    ? { ...head, status: "KJ_MANAGED", foundAt: files[0], recommendation: "keep", rationale: `${what}: installed` }
+    : { ...head, status: "MISSING", foundAt: null, missing, recommendation: "install", rationale: `kj harden (without --report) installs ${what}; missing: ${missing.join(", ")}` };
+}
+
 export function compareHarden({ projectDir = process.cwd(), profile = "standard", only = [], exclude = [] } = {}) {
   if (profile === "minimal") return { artifacts: [] };
-  const artifacts = UNIVERSAL_CONFIGS.map((cfg) => ({ dir: ".", ...classifyArtifact(projectDir, toArtifact(cfg)) }));
+  const artifacts = [
+    ...METHOD_PIECES.map((piece) => methodPiece(projectDir, piece)),
+    ...UNIVERSAL_CONFIGS.map((cfg) => ({ dir: ".", ...classifyArtifact(projectDir, toArtifact(cfg)) })),
+  ];
   for (const { dir, language } of detectStackRoots(projectDir, { only, exclude })) {
     const searchDir = dir === "." ? projectDir : join(projectDir, dir);
     for (const cfg of CONFIGS_BY_LANGUAGE[language] ?? []) {
