@@ -51,6 +51,19 @@ describe("installSentinelHooks respeta el sello (KJC-BUG-0193)", () => {
     expect(res.deferred).toEqual(["stop.mjs"]);
   });
 
+  // KJC-BUG-0325: un guardia sellado IGUAL a la plantilla actual no espera nada; nombrarlo
+  // como pendiente de sello hizo que el usuario sellara para nada.
+  it("un guardia sellado identico a la plantilla no se nombra como pendiente", () => {
+    const installed = read("stop.mjs");
+    const res = installSentinelHooks({
+      projectDir: repo,
+      logger: quiet,
+      gitShowFn: sealedInGit([{ file: ".karajan/harness/stop.mjs", sha256: sha(installed) }]),
+    });
+    expect(read("stop.mjs")).toBe(installed);
+    expect(res.deferred).toEqual([]);
+  });
+
   it("reescribe un guardia que nadie sello: restaurar lo manipulado sigue siendo lo correcto", () => {
     const pristine = read("stop.mjs");
     writeFileSync(guard("stop.mjs"), "// alguien ha estado aqui\n");
