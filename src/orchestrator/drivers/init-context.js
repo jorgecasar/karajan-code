@@ -36,6 +36,17 @@ import { getIntegration } from "../integrations.js";
 import { tryAutoStartBoard } from "./post-loop.js";
 import { runPreLoopStages } from "./pre-loop.js";
 
+/**
+ * KJC-BUG-0324: the coder is built before the pre-loop, with the run's first
+ * config, so what the pre-loop resolves (the Domain Curator's domainContext,
+ * the methodology) never reached its prompt. The run and the coder both take
+ * the resolved config; the coder is initialized after this.
+ */
+export function adoptPreLoopConfig(ctx, updatedConfig) {
+  ctx.config = updatedConfig;
+  ctx.coderRoleInstance.config = updatedConfig;
+}
+
 export async function initFlowContext({ task, config, logger, emitter, askQuestion, pgTaskId, pgProject, flags }) {
   // Auto-init .karajan/ if missing (copies coder-rules, review-rules, role templates)
   const initProjectDir = config.projectDir || process.cwd();
@@ -182,7 +193,7 @@ export async function initFlowContext({ task, config, logger, emitter, askQuesti
 
   const preLoopResult = await runPreLoopStages({ config, logger, emitter, eventBase: ctx.eventBase, session: ctx.session, flags, pipelineFlags: ctx.pipelineFlags, coderRole: ctx.coderRole, trackBudget: ctx.trackBudget, task, askQuestion, pgTaskId, pgProject, stageResults: ctx.stageResults, brainCtx: ctx.brainCtx });
   ctx.plannedTask = preLoopResult.plannedTask;
-  ctx.config = preLoopResult.updatedConfig;
+  adoptPreLoopConfig(ctx, preLoopResult.updatedConfig);
 
   // --- Session Journal: persist pre-loop outputs + display plan summary ---
   const reportDir = ctx.config.output?.report_dir || ".reviews";
