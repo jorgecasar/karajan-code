@@ -95,3 +95,24 @@ describe("standing global en evaluateGate", () => {
     expect(res.exempted).toHaveLength(0);
   });
 });
+
+// KJC-BUG-0337: the global store sat under homedir() and not under the Karajan
+// home, so it ignored KARAJAN_HOME and the suite read the machine's real
+// grants (a live one turned the review-gate tests red for a night).
+describe("the global store lives in the Karajan home", () => {
+  it("without an injected home it is under KARAJAN_HOME, never the real ~/.karajan", async () => {
+    const { globalExceptionsFile } = await import("../../src/policy/exceptions.js");
+    const kh = fs.mkdtempSync(path.join(os.tmpdir(), "kj-kh-"));
+    const saved = process.env.KARAJAN_HOME;
+    process.env.KARAJAN_HOME = kh;
+    try {
+      expect(globalExceptionsFile()).toBe(path.join(kh, "policy-exceptions.jsonl"));
+    } finally {
+      if (saved === undefined) delete process.env.KARAJAN_HOME; else process.env.KARAJAN_HOME = saved;
+      fs.rmSync(kh, { recursive: true, force: true });
+    }
+    // Back to the suite's own home (KARAJAN_HOME unset under VITEST resolves to a temp
+    // dir): the isolation this bug is about, never the machine's real store.
+    expect(globalExceptionsFile()).not.toBe(path.join(os.homedir(), ".karajan", "policy-exceptions.jsonl"));
+  });
+});

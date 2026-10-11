@@ -6,7 +6,8 @@
  */
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { homedir, userInfo } from "node:os";
+import { userInfo } from "node:os";
+import { getKarajanHome } from "../utils/paths.js";
 import { spawnSync } from "node:child_process";
 import { recordPolicyException as kernelRecord } from "@karajan-family/governance";
 
@@ -36,7 +37,10 @@ export function loadStandingExceptions(projectDir, { home } = {}) {
  * Ruta del almacén GLOBAL (~/.karajan): excepciones de la máquina, no de un
  * proyecto. `home` es inyectable SOLO para tests.
  */
-export const globalExceptionsFile = ({ home } = {}) => join(home ?? homedir(), ".karajan", "policy-exceptions.jsonl");
+// KJC-BUG-0337: with no injected home it is the Karajan home (honours KARAJAN_HOME,
+// and the suite's temp home), not homedir(): the tests read the machine's real grants.
+const globalDir = (home) => (home ? join(home, ".karajan") : getKarajanHome());
+export const globalExceptionsFile = ({ home } = {}) => join(globalDir(home), "policy-exceptions.jsonl");
 
 function readRecordsAt(file, origin) {
   let raw;
@@ -85,7 +89,7 @@ function defaultAppend(projectDir, line) {
 }
 
 const globalAppend = (home) => (_projectDir, line) => {
-  const dir = join(home ?? homedir(), ".karajan");
+  const dir = globalDir(home);
   mkdirSync(dir, { recursive: true });
   appendFileSync(join(dir, "policy-exceptions.jsonl"), line, "utf8");
 };
