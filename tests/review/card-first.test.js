@@ -47,6 +47,18 @@ describe("checkCardFirst — hu-board (verifiable, blocks by default)", () => {
     expect(closed.reason).toMatch(/OLD-9|live|kj hu/i);
   });
 
+  // KJC-BUG-0323 (#2077): `kj run --plan` moves the HU to coding/reviewing while it
+  // works it, and a certified HU is ready to run; the gate blocked the pipeline's own
+  // commit on its own HU. An archived (skipped) HU stays dead.
+  it("an HU the run is working, or certified to run, is live; an archived one is not", async () => {
+    await savePlan(dir, {
+      version: 2, planId: generatePlanId(), name: "run", task: "t", status: "ready", createdAt: new Date().toISOString(),
+      hus: ["coding", "reviewing", "certified", "skipped"].map((status, i) => ({ id: `hu_r_00${i}`, short_id: `RUN-${i}`, title: status, status })),
+    });
+    for (const ref of ["RUN-0", "RUN-1", "RUN-2"]) expect(await hu(`feat/${ref}-x`)).toMatchObject({ ok: true, ref });
+    expect(await hu("feat/RUN-3-x")).toMatchObject({ ok: false, mode: "block" });
+  });
+
   it("policy can be relaxed to warn via method_gates.card_first", async () => {
     const r = await hu("feat/sin-card", { method_gates: { card_first: "warn" } });
     expect(r).toMatchObject({ ok: true, mode: "warn" });

@@ -11,7 +11,9 @@ import { listPlans, loadPlan } from "../plan/plan-store.js";
 import { escapeRegExp } from "../utils/escape-regexp.js";
 import { verifyCardAlive } from "./card-verify.js";
 
-const LIVE_STATUSES = new Set(["pending", "running", "failed"]);
+// KJC-BUG-0323: coding/reviewing are the run working the HU, certified is ready
+// to run; the gate blocked the pipeline's own commit on its own HU.
+const LIVE_STATUSES = new Set(["pending", "running", "failed", "certified", "coding", "reviewing"]);
 // Card-shaped reference: LIN-123, bb-002 and multi-segment ids like
 // KJC-TSK-0684 (optional middle segments) — tight enough to skip slugs.
 // Shared with the method report (MG-D): one pattern, one truth.

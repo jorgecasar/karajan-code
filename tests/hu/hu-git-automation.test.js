@@ -9,10 +9,14 @@ vi.mock("../../src/utils/git.js", () => ({
   createPullRequest: vi.fn(),
   hasChanges: vi.fn(),
 }));
+vi.mock("../../src/review/verdict-store.js", () => ({
+  stampStagedVerdict: vi.fn(async () => ({ stamped: true })),
+}));
 
 const { buildHuBranchName, resolveHuBase, prepareHuBranch, finalizeHuCommit, collectGitWarnings, branchReferencesCard } = await import("../../src/git/hu-automation.js");
 const { runCommand } = await import("../../src/utils/process.js");
 const { hasChanges, commitAll, pushBranch, createPullRequest } = await import("../../src/utils/git.js");
+const { stampStagedVerdict } = await import("../../src/review/verdict-store.js");
 
 describe("buildHuBranchName", () => {
   it("builds branch name with prefix, id and slug", () => {
@@ -233,6 +237,19 @@ describe("finalizeHuCommit says what failed (KJC-BUG-0248)", () => {
     expect(r.pushed).toBe(true);
     expect(r.errors).toEqual([expect.objectContaining({ step: "pr", message: expect.stringMatching(/no commits between/) })]);
     expect(r.errors[0].remedy).toMatch(/gh pr create --base main --head feat\/HU-01-scaffold/);
+  });
+
+  // KJC-BUG-0323 (#2077): the HU commit runs after the HU's reviewer approved, so it
+  // records that verdict for the staged diff, in the HU's tree, as the other
+  // post-review commits do; the pre-commit review gate refused it otherwise.
+  it("the HU commit records the approved verdict for its staged diff, in the HU's tree", async () => {
+    pushBranch.mockResolvedValue(undefined);
+    createPullRequest.mockResolvedValue({ url: "u" });
+    await finalizeHuCommit({ story, branchName: "feat/HU-01-scaffold", config: { ...config, reviewer: "codex" }, logger, cwd: "/lane" });
+    const [, cwd, opts] = commitAll.mock.calls[0];
+    expect(cwd).toBe("/lane");
+    await opts.beforeCommit({ paths: ["a.js"] });
+    expect(stampStagedVerdict).toHaveBeenCalledWith(expect.objectContaining({ projectDir: "/lane", paths: ["a.js"], reviewer: "codex" }));
   });
 
   it("collectGitWarnings names the HU, the step, the message and the remedy", () => {
