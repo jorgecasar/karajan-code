@@ -4,6 +4,7 @@
  */
 import { commitAll, pushBranch, createPullRequest, hasChanges } from "../utils/git.js";
 import { runCommand } from "../utils/process.js";
+import { stampStagedVerdict } from "../review/verdict-store.js";
 
 /**
  * Build a git-safe branch name for an HU story.
@@ -184,7 +185,16 @@ export async function finalizeHuCommit({ story, branchName, config, logger, cwd 
   const title = story.title || story.id;
   const commitMsg = `feat(${story.id}): ${title}`;
   if (config.git?.auto_commit) {
-    const commitRes = await commitAll(commitMsg, cwd);
+    // KJC-BUG-0323: this commit runs after the HU's reviewer approved, so it
+    // records that verdict for the staged diff, as the other post-review commits do.
+    const commitRes = await commitAll(commitMsg, cwd, {
+      beforeCommit: ({ paths } = {}) => stampStagedVerdict({
+        projectDir: cwd || config.projectDir || process.cwd(),
+        paths,
+        reviewer: config.reviewer || "pipeline-reviewer",
+        summary: `kj run HU ${story.id}: reviewer approved`,
+      }),
+    });
     if (commitRes) {
       result.committed = true;
       logger.info(`HU ${story.id}: committed on '${branchName}'`);
