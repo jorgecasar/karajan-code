@@ -1423,8 +1423,11 @@ export function installSentinelHooks({ projectDir = process.cwd(), logger = cons
   };
   const [lib, post, stop, pre] = Object.entries(SCRIPT_BODIES).map(([name, body]) => {
     if (keepsItsSeal(name)) {
-      deferred.push(name);
-      return join(projectDir, ".karajan", "harness", name);
+      const abs = join(projectDir, ".karajan", "harness", name);
+      // KJC-BUG-0325: only a sealed guard the current template would change is
+      // waiting for the human; one identical to it has nothing to advance.
+      if (readFileSync(abs, "utf8") !== body) deferred.push(name);
+      return abs;
     }
     return writeHarnessScript(projectDir, name, body);
   });
