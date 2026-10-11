@@ -23,6 +23,22 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
+// KJC-BUG-0335 (#2094): the report compared configs only and said "0 missing" in a
+// repo without the Sentinel, while the review gate demanded it: the report names
+// the method's own pieces too.
+describe("compareHarden — the method's own pieces", () => {
+  it("names the Sentinel and the git hooks as missing, and as kept once installed", () => {
+    expect(find(run(), "sentinel")).toMatchObject({ status: "MISSING", recommendation: "install", file: ".karajan/harness/pretooluse-sentinel.mjs" });
+    expect(find(run(), "git-hooks")).toMatchObject({ status: "MISSING", recommendation: "install", file: ".karajan/hooks/pre-commit" });
+    for (const f of ["harness/pretooluse-sentinel.mjs", "harness/posttooluse.mjs", "harness/stop.mjs", "hooks/pre-commit", "hooks/commit-msg"]) touch(`.karajan/${f}`, "x");
+    expect(find(run(), "sentinel")).toMatchObject({ recommendation: "keep" });
+    // A partial set is not installed: it names what is missing.
+    expect(find(run(), "git-hooks")).toMatchObject({ recommendation: "install", missing: [".karajan/hooks/pre-push"] });
+    touch(".karajan/hooks/pre-push", "x");
+    expect(find(run(), "git-hooks")).toMatchObject({ recommendation: "keep" });
+  });
+});
+
 describe("compareHarden", () => {
   // KJC-BUG-0201: commitlint joined the JS set, so like eslint it needs a JS
   // root to be in scope. The universal set keeps only what costs nothing in any
