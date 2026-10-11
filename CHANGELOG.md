@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.49.1] - 2026-10-12
+
+### Fixed
+
+- **`kj run --plan` no longer spec-reviews the plan's task again** (KJC-BUG-0321, #2074): the plan was reviewed when it was generated and its HUs certified since; reviewing the original task in the run flagged the plan, not the HUs being run.
+- **A plan run's HU commit passes its own gates** (KJC-BUG-0323, #2077): an HU in `coding`, `reviewing` or `certified` counts as a live card, and the HU commit, made after the HU's reviewer approved, records that verdict for its staged diff.
+- **The coder takes the config the pre-loop resolved** (KJC-BUG-0324, #2077): the domain context (from `--domain` or the project's domains) and the methodology never reached the coder's prompt, in any run.
+- **The Planning Game client honours `planning_game.api_url`** (KJC-BUG-0322, #2076): order `PG_API_URL`, the config, localhost; a network error names the URL it tried, without credentials.
+- **pr-size: ~150 lines is the ideal, up to 200 is allowed without asking** (KJC-BUG-0326, #2085): between the two the gate only informs; above the limit it says to partition and never offers to ask for an OK. The playbook says both numbers.
+- **`kj harden --report` names the Sentinel and the git hooks** (KJC-BUG-0335, #2094): it compared configs only and said 0 missing in a repo without the Sentinel the review gate demanded.
+- **`kj harden` no longer asks for a seal with nothing to seal** (KJC-BUG-0325): only a sealed guard the current template would change is named as waiting for the human.
+- **The global policy-exceptions store lives in the Karajan home** (KJC-BUG-0337): it honours `KARAJAN_HOME`, and the test suite no longer reads the machine's real grants.
+
 ## [4.49.0] - 2026-10-11
 
 Plans that converge, and gates that stop shouting at kj's own output. Five
