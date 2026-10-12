@@ -5,8 +5,36 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execSync } from "node:child_process";
-import { shellSegments, headIndex, shortOpts, optionValues, stripInertQuotes, withoutRedirections } from "../../src/harden/sentinel/sentinel-shell.mjs";
+import { shellSegments, headIndex, shortOpts, optionValues, stripInertQuotes, withoutRedirections, isPublishCommand } from "../../src/harden/sentinel/sentinel-shell.mjs";
 import { installSentinelHooks, canonicalHarnessBody, verifySentinelScripts } from "../../src/harden/sentinel-hooks.js";
+
+// KJC-BUG-0333 (#2093): the release gate fired on a read-only chain because a quoted
+// argument of another command (a kj rag query text) said "npm ... publish". A publish
+// is a simple command whose head is npm/firebase/gh, read by the shell's words.
+describe("isPublishCommand (KJC-BUG-0333)", () => {
+  it("reads real publish and deploy commands, flags in between, after other commands", () => {
+    for (const cmd of [
+      "npm publish --ignore-scripts --otp=123456",
+      "npm --prefix /x publish /x --otp=1",
+      "firebase --account a@b --project p --config c.json deploy --only hosting:main",
+      "gh release create v1.2.3 --notes-file n.md",
+      "cd x && /usr/bin/npm publish",
+      "npm test; npm publish",
+    ]) expect(isPublishCommand(cmd), cmd).toBe(true);
+  });
+
+  it("does not read words inside a quoted argument of another command", () => {
+    for (const cmd of [
+      "kj rag query --no-rag-update 'how does npm publish work in the release flow'",
+      'kj report-issue --title "firebase deploy fails" --error "gh release create denied"',
+      'git commit -m "docs: npm publish needs an OTP"',
+      "npm test && kj pr-size",
+      // the value of an option is not the subcommand
+      "npm --tag publish test",
+      "firebase --project deploy hosting:channel:list",
+    ]) expect(isPublishCommand(cmd), cmd).toBe(false);
+  });
+});
 
 describe("optionValues (KJC-BUG-0245)", () => {
   it("ends a path at ; && | and reads both --opt value and --opt=value", () => {

@@ -473,20 +473,14 @@ import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { doc, CODE, TESTS, ROOT, BASE_BRANCHES, CARD, STATE, branchOf, foreignLane, load, save, session, violations, boardGate, pendingMoves, pendingText } from "./sentinel-lib.mjs";
 // KJC-TSK-0915 (ADR 0014): the shell reader is a real, unit-tested module copied here as is.
-import { isGhIssueCreate, optionValues, shellSegments, stripInertQuotes, stripTextOptionValues } from "./sentinel-shell.mjs";
+import { isGhIssueCreate, isPublishCommand, optionValues, shellSegments, stripInertQuotes, stripTextOptionValues } from "./sentinel-shell.mjs";
 import { DISCARD_VERBS, discardOf, foreignLost, removedFiles } from "./sentinel-discard.mjs";
 import { shellWrites, writesRepo } from "./sentinel-bash-write.mjs";
 const EDIT_TOOLS = ["Write", "Edit", "MultiEdit", "NotebookEdit"];
-// KJC-BUG-0204: el comando real lleva flags EN MEDIO del verbo
-// (firebase --account a@b --project p deploy --only hosting:main), asi que la
-// adyacencia dejaba pasar sin mirar justo el despliegue que el gate vigila.
-// Las palabras del verbo tienen que aparecer en orden, no pegadas.
-const PUBLISH_VERBS = [["npm", "publish"], ["firebase", "deploy"], ["gh", "release", "create"]];
-// Cada palabra se lee por su basename: /usr/bin/npm publish es la misma
-// publicacion que npm publish (catch de la review).
-const wordsOf = (text) => String(text).split(/[^A-Za-z0-9_.@:/-]+/).filter(Boolean).map((w) => w.slice(w.lastIndexOf("/") + 1)).filter(Boolean);
 const inOrder = (want, got) => { let i = 0; for (const w of got) if (w === want[i] && ++i === want.length) return true; return false; };
-const isPublish = (cmd) => { const got = wordsOf(cmd); return PUBLISH_VERBS.some((verb) => inOrder(verb, got)); };
+// KJC-BUG-0333: a publish is read per simple command by the shell reader, so
+// words inside a quoted argument of another command are not a publish.
+const isPublish = isPublishCommand;
 const PUSH = /\\bgit\\s+push\\b/;
 const PROTECTED = /\\.claude\\/settings\\.json\\b|\\.karajan\\/(hooks|harness)\\//;
 let raw = "";

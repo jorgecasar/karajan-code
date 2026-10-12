@@ -86,6 +86,38 @@ export const isGhIssueCreate = (cmd) => shellSegments(cmd).some((words) => {
   return subcommand[0] === "issue" && subcommand[1] === "create";
 });
 
+// KJC-BUG-0204: the real command puts flags between the verb's words
+// (firebase --account a@b deploy), so they are read in order, not adjacent.
+const PUBLISH_VERBS = [["npm", "publish"], ["firebase", "deploy"], ["gh", "release", "create"]];
+// Known options that take a separate value: that value is not a subcommand word
+// (npm --tag publish test does not publish). An unknown option is not skipped, so
+// a real publish behind it is still read (a false positive costs less than a miss).
+const VALUE_OPTIONS = {
+  npm: ["--prefix", "--tag", "--registry", "--userconfig", "--workspace", "-w", "--otp", "--access", "--cache", "--loglevel", "-C"],
+  firebase: ["--account", "--project", "-P", "--config", "-c", "--only", "--except", "--token", "--message", "-m"],
+  gh: ["--repo", "-R", "--hostname"],
+};
+
+/**
+ * KJC-BUG-0333 (#2093): a simple command whose head is npm, firebase or gh and
+ * whose own words then say publish/deploy/release create. Words inside a quoted
+ * argument of another command (a kj rag query text, a commit message) are one
+ * word of THAT command, so they never read as a publish.
+ * @param {string} cmd
+ */
+export const isPublishCommand = (cmd) => shellSegments(cmd).some((words) => PUBLISH_VERBS.some(([head, ...rest]) => {
+  const i = headIndex(words, [head]);
+  if (words[i]?.split("/").at(-1) !== head) return false;
+  let k = 0;
+  let skipValue = false;
+  for (const w of words.slice(i + 1)) {
+    if (skipValue) { skipValue = false; continue; }
+    if (VALUE_OPTIONS[head].includes(w)) { skipValue = true; continue; }
+    if (w === rest[k] && ++k === rest.length) return true;
+  }
+  return false;
+}));
+
 // KJC-BUG-0286: a $ expands only when something expandable follows it ($x, ${x},
 // $(cmd), $1, $@...). A lone "$ " in a grep pattern is a literal dollar sign.
 const LIVE_EXPANSION = /\$(?=[A-Za-z0-9_{(@*#?$!-])|`/;
