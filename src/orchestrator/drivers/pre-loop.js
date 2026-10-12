@@ -62,6 +62,23 @@ import {
 import { tryCiComment } from "../ci-integration.js";
 import { getIntegration } from "../integrations.js";
 
+/**
+ * KJC-BUG-0332 (#2092, root of #2090/#2091): a plan run implements the plan's
+ * certified HUs. Triaging the plan's original task auto-generated other HUs
+ * (HU-01..) that ran instead, and could call it analysis-only, skipping the
+ * coder and approving an empty diff. In a plan run there is no triage; each HU
+ * carries its own task type, which the HU batch applies.
+ */
+export async function triageForRun({ flags, runTriage }) {
+  if (flags?.plan) {
+    return {
+      roleOverrides: null,
+      stageResult: { ok: true, taskType: "sw", level: null, roles: [], shouldDecompose: false, subtasks: [], fromPlan: flags.plan, summary: "plan run: the plan's HUs are the work" },
+    };
+  }
+  return (await runTriage()) ?? { roleOverrides: null, stageResult: null };
+}
+
 export async function runPreLoopStages({ config, logger, emitter, eventBase, session, flags, pipelineFlags, coderRole, trackBudget, task, askQuestion, pgTaskId, pgProject, stageResults, brainCtx }) {
   // KJC-BUG-0058: on `kj resume` `stageResults` is rehydrated from
   // `session.stage_results`. Persist after every successful pre-loop stage
@@ -121,7 +138,8 @@ export async function runPreLoopStages({ config, logger, emitter, eventBase, ses
   // stages it gates (researcher, architect, planner) ARE skipped if
   // already complete.
   const triageCtx = { config, logger, emitter, eventBase, session, coderRole, trackBudget, pipelineFlags };
-  const triageResult = await runStage(stageRegistry.get("triage"), triageCtx) ?? { roleOverrides: null, stageResult: null };
+  const triageResult = await triageForRun({ flags, runTriage: () => runStage(stageRegistry.get("triage"), triageCtx) });
+  if (triageResult.stageResult?.fromPlan) logger.info(`Triage skipped: plan ${flags.plan} runs its own certified HUs`);
   applyTriageOverrides(pipelineFlags, triageResult.roleOverrides);
   await persistStage("triage", triageResult.stageResult);
 
