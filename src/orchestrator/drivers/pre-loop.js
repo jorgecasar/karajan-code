@@ -72,7 +72,7 @@ import { getIntegration } from "../integrations.js";
 export async function triageForRun({ flags, runTriage }) {
   if (flags?.plan) {
     return {
-      roleOverrides: null,
+      roleOverrides: {}, // applyTriageOverrides reads its keys: no override, never null
       stageResult: { ok: true, taskType: "sw", level: null, roles: [], shouldDecompose: false, subtasks: [], fromPlan: flags.plan, summary: "plan run: the plan's HUs are the work" },
     };
   }

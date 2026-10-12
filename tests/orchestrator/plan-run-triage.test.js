@@ -11,7 +11,7 @@ describe("triageForRun", () => {
     const runTriage = vi.fn();
     const r = await triageForRun({ flags: { plan: "plan-20261011000000-abcd" }, runTriage });
     expect(runTriage).not.toHaveBeenCalled();
-    expect(r.roleOverrides).toBeNull();
+    expect(r.roleOverrides).toEqual({}); // applyTriageOverrides reads its keys
     expect(r.stageResult).toMatchObject({ ok: true, taskType: "sw", roles: [], shouldDecompose: false, fromPlan: "plan-20261011000000-abcd" });
   });
 
