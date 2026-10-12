@@ -30,12 +30,12 @@ describe("Agent implementations", () => {
 
       const args = runCommand.mock.calls[0][1];
       expect(args).toContain("-p");
-      expect(args).toContain("fix bug");
+      expect(args).not.toContain("fix bug"); // KJC-BUG-0344: the prompt goes on stdin
       expect(args).toContain("--output-format");
       expect(args).toContain("json");
       expect(runCommand.mock.calls[0][2]).toMatchObject({
         env: expect.any(Object),
-        stdin: "ignore"
+        input: "fix bug"
       });
     });
 
@@ -87,7 +87,7 @@ describe("Agent implementations", () => {
       expect(runCommand.mock.calls[0][2].onOutput).not.toBe(onOutput);
     });
 
-    it("strips CLAUDECODE from env and ignores stdin", async () => {
+    it("strips CLAUDECODE from env and gives the prompt on stdin", async () => {
       process.env.CLAUDECODE = "1";
       const { ClaudeAgent } = await import("../../src/agents/claude-agent.js");
       const agent = new ClaudeAgent("claude", baseConfig, logger);
@@ -96,7 +96,7 @@ describe("Agent implementations", () => {
       const opts = runCommand.mock.calls[0][2];
       expect(opts.env).toBeDefined();
       expect(opts.env).not.toHaveProperty("CLAUDECODE");
-      expect(opts.stdin).toBe("ignore");
+      expect(opts.input).toBe("test"); // KJC-BUG-0344: stdin carries the prompt and closes
       delete process.env.CLAUDECODE;
     });
 

@@ -289,10 +289,12 @@ export function createStreamJsonFilter(onOutput) {
  *    sessions.  The spawned `claude -p` is a separate non-interactive
  *    invocation, not a true nested session.
  *
- * 2. Detach stdin (stdin: "ignore") — When launched from Node.js (which is
- *    how Claude Code / Karajan MCP runs), the child inherits the parent's
- *    stdin.  `claude -p` then blocks waiting to read from a stdin that the
- *    parent is already consuming.  Ignoring stdin prevents the hang.
+ * 2. Never inherit stdin — When launched from Node.js (which is how Claude
+ *    Code / Karajan MCP runs), an inherited stdin made `claude -p` block
+ *    reading what the parent was consuming. KJC-BUG-0344: the prompt now
+ *    travels ON stdin (input), which also closes it, so there is nothing to
+ *    wait on, and a large prompt no longer hits the kernel's per-argument
+ *    limit (E2BIG).
  *
  * 3. Claude Code 2.x writes all structured output (stream-json, json) to
  *    stderr, NOT stdout.  The agent must read from stderr for the actual
@@ -303,7 +305,7 @@ function cleanExecaOpts(extra = {}) {
   // PAR-H (KJC-TSK-0631): extra.env ADDS to the inherited env (lane slot
   // vars) instead of replacing it wholesale.
   const { env: extraEnv, ...rest } = extra;
-  return { env: extraEnv ? { ...env, ...extraEnv } : env, stdin: "ignore", ...rest };
+  return { env: extraEnv ? { ...env, ...extraEnv } : env, ...rest };
 }
 
 /**
@@ -332,11 +334,12 @@ const ALLOWED_TOOLS = [
  * the volatile block goes in the -p message. Without the split, legacy
  * single-prompt behavior is unchanged.
  */
+// KJC-BUG-0344: the -p message goes on stdin (`input`), never as an argument.
 function buildPromptArgs(task) {
   if (task.stablePrompt && task.volatilePrompt) {
-    return ["-p", task.volatilePrompt, "--append-system-prompt", task.stablePrompt, "--allowedTools", ...ALLOWED_TOOLS];
+    return { args: ["-p", "--append-system-prompt", task.stablePrompt, "--allowedTools", ...ALLOWED_TOOLS], input: task.volatilePrompt };
   }
-  return ["-p", task.prompt, "--allowedTools", ...ALLOWED_TOOLS];
+  return { args: ["-p", "--allowedTools", ...ALLOWED_TOOLS], input: String(task.prompt ?? "") };
 }
 
 export class ClaudeAgent extends BaseAgent {
@@ -353,7 +356,7 @@ export class ClaudeAgent extends BaseAgent {
   }
 
   async _runTaskExec(task, model, _role) {
-    const args = buildPromptArgs(task);
+    const { args, input } = buildPromptArgs(task);
     if (model) args.push("--model", model);
     // PL-C (KJC-TSK-0735): el rol del subproceso viaja en KJ_POLICY_ROLE —
     // si su harness corre hooks (claude -p), el tier A evalúa la policy con
@@ -366,6 +369,7 @@ export class ClaudeAgent extends BaseAgent {
       args.push("--output-format", "stream-json", "--verbose");
       const streamFilter = createStreamJsonFilter(task.onOutput);
       const res = await this.runCommand(resolveBin("claude"), args, cleanExecaOpts({
+        input,
         onOutput: streamFilter,
         silenceTimeoutMs: task.silenceTimeoutMs,
         timeout: task.timeoutMs,
@@ -380,7 +384,7 @@ export class ClaudeAgent extends BaseAgent {
 
     // Without streaming, use json output to get structured response via stderr
     args.push("--output-format", "json");
-    const res = await this.runCommand(resolveBin("claude"), args, cleanExecaOpts({ env: roleEnv, cwd: task.cwd }));
+    const res = await this.runCommand(resolveBin("claude"), args, cleanExecaOpts({ input, env: roleEnv, cwd: task.cwd }));
     const raw = pickOutput(res);
     const output = extractTextFromStreamJson(raw);
     const usage = extractUsageFromStreamJson(raw);
@@ -388,9 +392,11 @@ export class ClaudeAgent extends BaseAgent {
   }
 
   async _reviewTaskExec(task, model) {
-    const args = [...buildPromptArgs(task), "--output-format", "stream-json", "--verbose"];
+    const prompt = buildPromptArgs(task);
+    const args = [...prompt.args, "--output-format", "stream-json", "--verbose"];
     if (model) args.push("--model", model);
     const res = await this.runCommand(resolveBin("claude"), args, cleanExecaOpts({
+      input: prompt.input,
       onOutput: task.onOutput,
       silenceTimeoutMs: task.silenceTimeoutMs,
       timeout: task.timeoutMs,

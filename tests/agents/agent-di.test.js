@@ -80,7 +80,7 @@ describe("ClaudeAgent — runTask with MockCommandRunner", () => {
     expect(res.model).toBe("claude-sonnet");
     expect(runner.lastCall.command).toMatch(/claude/);
     expect(runner.lastCall.args).toContain("-p");
-    expect(runner.lastCall.args).toContain("ping");
+    expect(runner.lastCall.args).not.toContain("ping"); // KJC-BUG-0344: on stdin
   });
 
   it("reports non-zero exit code via sanitized error", async () => {
