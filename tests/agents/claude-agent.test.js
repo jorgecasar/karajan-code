@@ -28,7 +28,9 @@ describe("ClaudeAgent", () => {
     it.each([
       ["runTask",    (a) => a.runTask({ prompt: "t", role: "coder" })],
       ["reviewTask", (a) => a.reviewTask({ prompt: "r", role: "reviewer" })]
-    ])("%s strips CLAUDECODE, preserves PATH, sets stdin=ignore", async (_n, call) => {
+    // KJC-BUG-0344: the prompt travels by stdin (input), which also closes stdin, so
+    // claude -p never waits on the parent's stdin (what stdin: "ignore" was for).
+    ])("%s strips CLAUDECODE, preserves PATH, and hands the prompt on stdin", async (_n, call) => {
       process.env.CLAUDECODE = "1";
       await call(new ClaudeAgent("claude", baseConfig, logger));
 
@@ -36,7 +38,16 @@ describe("ClaudeAgent", () => {
       expect(opts.env).toBeDefined();
       expect(opts.env).not.toHaveProperty("CLAUDECODE");
       expect(opts.env).toHaveProperty("PATH");
-      expect(opts.stdin).toBe("ignore");
+      expect(opts.stdin).toBeUndefined();
+      expect(typeof opts.input).toBe("string");
+    });
+
+    it("a prompt over the kernel's per-argument limit never travels as an argument", async () => {
+      const huge = "x".repeat(300_000);
+      await new ClaudeAgent("claude", baseConfig, logger).runTask({ prompt: huge, role: "coder" });
+      const [, args, opts] = runCommand.mock.calls[0];
+      expect(args.every((a) => a.length < 1000)).toBe(true);
+      expect(opts.input).toBe(huge);
     });
 
     it("propaga el rol del task como KJ_POLICY_ROLE al subproceso (PL-C, KJC-TSK-0735)", async () => {
@@ -104,8 +115,9 @@ describe("ClaudeAgent", () => {
         volatilePrompt: "VOLATILE TASK"
       });
 
-      const args = runCommand.mock.calls[0][1];
-      expect(args[args.indexOf("-p") + 1]).toBe("VOLATILE TASK");
+      const [, args, opts] = runCommand.mock.calls[0];
+      expect(opts.input).toBe("VOLATILE TASK");
+      expect(args).not.toContain("VOLATILE TASK");
       expect(args[args.indexOf("--append-system-prompt") + 1]).toBe("STABLE RULES");
       expect(args).not.toContain("joined full prompt");
     });
@@ -117,21 +129,21 @@ describe("ClaudeAgent", () => {
     ])("falls back to -p prompt when %s is provided", async (_n, task) => {
       await new ClaudeAgent("claude", baseConfig, logger).runTask({ ...task, role: "coder" });
 
-      const args = runCommand.mock.calls[0][1];
-      expect(args[args.indexOf("-p") + 1]).toBe("full");
+      const [, args, opts] = runCommand.mock.calls[0];
+      expect(opts.input).toBe("full");
       expect(args).not.toContain("--append-system-prompt");
     });
   });
 
   // merged-from: 4 buildArgs tests (-p prompt, json default, stream-json+verbose).
   describe("buildArgs — -p flag and output format", () => {
-    it("includes -p with the task prompt", async () => {
+    it("runs in print mode (-p) with the task prompt on stdin", async () => {
       await new ClaudeAgent("claude", baseConfig, logger).runTask({ prompt: "implement X", role: "coder" });
 
-      const args = runCommand.mock.calls[0][1];
-      const pIdx = args.indexOf("-p");
-      expect(pIdx).toBeGreaterThanOrEqual(0);
-      expect(args[pIdx + 1]).toBe("implement X");
+      const [, args, opts] = runCommand.mock.calls[0];
+      expect(args).toContain("-p");
+      expect(args).not.toContain("implement X");
+      expect(opts.input).toBe("implement X");
     });
 
     it.each([
