@@ -9,6 +9,7 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { stripTextOptionValues } from "../harden/sentinel/sentinel-shell.mjs";
 import {
   ALLOW_VERDICT,
   checkArtifacts,
@@ -72,7 +73,10 @@ export function loadPolicy({ projectDir = process.cwd(), deps = {} } = {}) {
  *  es no-verificable ⇒ deny (roles sin declarar quedan como hoy). */
 export function evalToolCall(policy, { role = "coder", tool, input = {}, root = null }) {
   if (WRITE_TOOLS.has(tool)) return evalWrite(policy, role, input.file_path || input.notebook_path, root);
-  if (tool === "Bash") return evalShell(policy, role, input.command);
+  // KJC-BUG-0343: the inert prose of a text option (--title, --error, -m...) is
+  // not a target: a report naming a supervisor path is not a write to it. A path
+  // anywhere else, or a value that can expand, is still judged.
+  if (tool === "Bash") return evalShell(policy, role, stripTextOptionValues(String(input.command ?? "")));
   if (READONLY_TOOLS.has(tool) || !policy.roles?.[role]) return ALLOW_VERDICT;
   return denyVerdict(`roles.${role}.tools`, `tool "${tool}" fuera del registro de la policy — no verificable para el rol declarado ${role}`);
 }
