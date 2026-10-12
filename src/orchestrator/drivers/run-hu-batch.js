@@ -26,6 +26,7 @@ import { emitProgress, makeEvent } from "../../utils/events.js";
 import { needsSubPipeline, runHuSubPipeline } from "../hu-sub-pipeline.js";
 import { runCoderStage } from "../stages/coder-stage.js";
 import { runSonarStage } from "../stages/sonar-stage.js";
+import { runSuiteGreenStage, suiteGreenRequired } from "../stages/suite-green-stage.js";
 import { runIterationLoop } from "./iteration-loop.js";
 import { classifyFailure, createFailureTracker } from "../repair/repair-detector.js";
 import { runRepair } from "../repair/repair-runner.js";
@@ -232,6 +233,16 @@ export async function runHuBatch({ ctx, task, askQuestion, emitter, logger }) {
               }
             } catch (err) {
               logger.warn(`HU ${story.id}: sonar stage failed (non-blocking): ${err.message}`);
+            }
+          }
+
+          // KJC-BUG-0328 (#2088): a code HU is never approved over a red project
+          // suite; it goes back to the coder, as in the iteration loop.
+          if ((huPolicies.tdd || huPolicies.testsRequired) && suiteGreenRequired(laneConfig)) {
+            const green = await runSuiteGreenStage({ config: laneConfig, logger, emitter, eventBase: ctx.eventBase, session: laneSession, iteration: attempt });
+            if (green.action === "continue") {
+              lanePlannedTask = `${huTask}\n\n--- TEST SUITE RED ---\n${laneSession.last_reviewer_feedback}`;
+              continue;
             }
           }
 

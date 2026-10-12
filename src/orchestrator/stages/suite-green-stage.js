@@ -17,6 +17,11 @@ import { resolveCmds } from "../../commands/harden.js";
 const TAIL_CHARS = 2000;
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 
+/** Whether the project asks for a green suite (opt-out, and off in the test harness). */
+export function suiteGreenRequired(config) {
+  return config?.development?.require_green_suite !== false && config?.testHarness?.disableSuiteGreenStage !== true;
+}
+
 /** @returns {Promise<{action: "ok"|"continue", result: object}>} */
 export async function runSuiteGreenStage({ config, logger, emitter, eventBase, session, iteration, resolveCmdsImpl = resolveCmds, runTestsImpl = null }) {
   const projectDir = config?.projectDir || process.cwd();
