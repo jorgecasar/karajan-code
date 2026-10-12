@@ -179,4 +179,27 @@ describe("checkStagedDiff — el gate del resultado", () => {
   });
 });
 
+// KJC-BUG-0343 (#2105, lateral): the supervisor rule denied a kj report-issue whose
+// title or error TEXT named a supervisor path. Prose of a text option is not a
+// target; a path anywhere else in the command still is.
+describe("supervisor paths in the prose of a text option", () => {
+  const { policy } = load("version: 1\n");
+  const bash = (command) => evalToolCall(policy, { tool: "Bash", input: { command } });
+
+  it("a supervisor path inside --title, --error or -m text is not a write", () => {
+    for (const cmd of [
+      "kj report-issue --title 'release check flags .karajan/hooks/pre-commit' --error 'deny on .claude/settings.json'",
+      "git commit -m 'docs: explain .karajan/harness/stop.mjs'",
+    ]) expect(bash(cmd).decision, cmd).toBe("allow");
+  });
+
+  it("the same path as an argument, a redirect target or a live substitution still denies", () => {
+    for (const cmd of [
+      "git commit -m 'x' .karajan/hooks/pre-commit",
+      "echo x > .karajan/hooks/pre-commit",
+      'kj report-issue --title "$(cp a .karajan/hooks/pre-commit)"',
+    ]) expect(bash(cmd)).toMatchObject({ decision: "deny", rule_id: "defaults.supervisor.write" });
+  });
+});
+
 // (globToRegExp/matchesAny se prueban en tests/governance/glob.test.js — #1429.)
