@@ -76,6 +76,7 @@
     "postinstall": "node scripts/postinstall.js",
     "setup": "node scripts/install.js",
     "test": "vitest run",
+    "test:scenarios": "vitest run --config tests/scenarios/vitest.config.js --root .",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "lint": "eslint src/ packages/",
