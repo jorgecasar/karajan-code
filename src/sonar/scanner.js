@@ -8,7 +8,7 @@ import { waitForAnalysis } from "./api.js";
 import { resolveSonarProjectKey } from "./project-key.js";
 import {
   resolveSonarHost,
-  resolveSonarToken as resolveToken,
+  resolveSonarTokenAsync,
   resolveSonarCredentials,
 } from "./config-resolver.js";
 
@@ -210,8 +210,9 @@ async function maybeRunCoverage(config) {
   return checkLcovExists(lcovPath, blockOnFailure, run.stdout || "");
 }
 
-async function resolveSonarTokenWithFallback(config, apiHost) {
-  const explicitToken = resolveToken(config);
+export async function resolveSonarTokenWithFallback(config, apiHost) {
+  // KJC-BUG-0350: the async resolver also reads the token the bootstrap persisted.
+  const explicitToken = await resolveSonarTokenAsync(config);
   if (explicitToken) return explicitToken;
 
   const { user: adminUser, passwords } = await resolveSonarCredentials(config);
