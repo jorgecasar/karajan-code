@@ -65,7 +65,11 @@ The caveat loop engineering insists on — *unattended loops make unattended mis
 
 The most recent releases, newest first. Older versions live in [Architecture › History](/docs/architecture/history/) and the [CHANGELOG](https://github.com/manufosela/karajan-code/blob/main/CHANGELOG.md).
 
-### v4.49.3: large prompts that fit (current)
+### v4.49.4: evidence the reviewer reads (current)
+
+`kj review --staged --task-file` now hands the file to the reviewer: the evidence a session passed (an official doc, a spec) used to be dropped, and the reviewer kept rejecting what it never saw. The Sonar pre-gate also finds the token kj saved in its home, so a valid token no longer blocks every code commit.
+
+### v4.49.3: large prompts that fit
 
 claude now receives its prompt on stdin, so a security review over a big diff no longer fails with E2BIG, and generated files such as lockfiles enter the reviewer and Solomon prompts as one summary line, so the reviewer sees the real hunks. `kj env install` also commits the `.mcp.json` it wires, so a fresh clone keeps the RAG as a native tool.
 
