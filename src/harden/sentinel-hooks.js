@@ -792,7 +792,9 @@ process.stdin.on("end", () => {
       // puede ejecutar cualquier cosa (reviewer catch: grep foo $(rm ...)).
       // (find fuera: -delete/-exec mutan — reviewer catch; sus tokens de
       // carril los caza el escaner de abajo.)
-      const READONLY = /^[ \\t]*(grep|rg|cat|head|tail|less|ls|wc|diff|stat|file|du|tree|git (log|show|diff|status|blame))\\b[^;|&<>$\`(){}\\n\\r]*$/;
+      // KJC-BUG-0338: kj rag query only reads, and the rag-first gate asks for it
+      // with a quoted question that names the file.
+      const READONLY = /^[ \\t]*(grep|rg|cat|head|tail|less|ls|wc|diff|stat|file|du|tree|git (log|show|diff|status|blame)|kj rag query)\\b[^;|&<>$\`(){}\\n\\r]*$/;
       // KJC-BUG-0286 (#1982): a command whose EVERY segment only reads mutates
       // nothing, however it is chained (grep | grep, git show | grep, cd && git
       // status). A cd with a literal target is one such segment: the paths after
