@@ -36,6 +36,8 @@ export const DEFAULT_RECOVERY_POLICY = Object.freeze({
     // the next link straight away. Without a chain it aborts, because
     // retrying the same dead model is how a run burns quota saying nothing.
     [ERROR_CLASS.MODEL_UNAVAILABLE]: { mode: "abort", maxRetries: 0, fallbackEligible: true, fallbackImmediate: true },
+    // KJC-BUG-0327: the same oversized invocation fails again; take the next link.
+    [ERROR_CLASS.INVOCATION_TOO_LARGE]: { mode: "abort", maxRetries: 0, fallbackEligible: true, fallbackImmediate: true },
     [ERROR_CLASS.API_DOWN]: { mode: "backoff", maxRetries: 3, baseMs: 5_000, factor: 3, jitterPct: 0.2 },
     [ERROR_CLASS.NETWORK_TIMEOUT]: { mode: "backoff", maxRetries: 3, baseMs: 5_000, factor: 3, jitterPct: 0.2 },
     [ERROR_CLASS.SILENCED]: { mode: "backoff", maxRetries: 2, baseMs: 30_000, factor: 2, jitterPct: 0.15 },
@@ -144,7 +146,8 @@ export async function withBrainRecovery({
     const attempt = attemptsByClass[cls.class];
 
     emit(emitter, "brain:agent-error", eventBase, { role, class: cls.class, attempt, message: cls.message, provider: effectiveProvider });
-    logger?.warn?.(`[brain] ${role} (${effectiveProvider}) → ${cls.class} attempt ${attempt}/${classPolicy.maxRetries}: ${cls.message}`);
+    // KJC-BUG-0327: "attempt 4/3" read as one over budget; it is failure 4 with 3 retries allowed.
+    logger?.warn?.(`[brain] ${role} (${effectiveProvider}) → ${cls.class} failure ${attempt} (retries allowed: ${classPolicy.maxRetries}): ${cls.message}`);
 
     // KJC-TSK-0859: un modelo retirado se resuelve ANTES de abortar. No hay
     // cooldown que esperar, así que la condición de la cadena por cuota

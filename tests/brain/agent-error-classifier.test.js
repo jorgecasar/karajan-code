@@ -194,6 +194,25 @@ describe("retired gemini CLI (KJC-BUG-0113)", () => {
   });
 });
 
+// KJC-BUG-0327 (#2087): the OS refusing a prompt passed as an argument (E2BIG)
+// was read as a rate limit, because the error echoes the command and the prompt
+// said "rate limit"; it waited and retried the same oversized command.
+describe("classifyAgentError — INVOCATION_TOO_LARGE", () => {
+  it("E2BIG is its own class, ahead of whatever words the echoed prompt carries", () => {
+    const stderr = "Command failed with E2BIG: claude -p Review this: on 429 rate limit, auth 401 unauthorized, retry in 60s";
+    const r = classifyAgentError({ provider: "claude", stderr, exitCode: null });
+    expect(r.class).toBe(ERROR_CLASS.INVOCATION_TOO_LARGE);
+    expect(r.recoverable).toBe(true);
+    expect(r.retryAfter).toBeNull();
+    expect(classifyAgentError({ provider: "agy", stderr: "spawn agy: Argument list too long" }).class).toBe(ERROR_CLASS.INVOCATION_TOO_LARGE);
+  });
+
+  it("is never retried on the same agent: it takes the next provider straight away", async () => {
+    const { DEFAULT_RECOVERY_POLICY } = await import("../../src/brain/with-brain-recovery.js");
+    expect(DEFAULT_RECOVERY_POLICY.classes[ERROR_CLASS.INVOCATION_TOO_LARGE]).toMatchObject({ maxRetries: 0, fallbackEligible: true, fallbackImmediate: true });
+  });
+});
+
 // KJC-TSK-0859: un modelo retirado por el proveedor lo detectaba cada agente
 // por su cuenta para reintentar con su default, pero el brain no se enteraba
 // y lo archivaba como UNKNOWN_FATAL, abortando el run.
