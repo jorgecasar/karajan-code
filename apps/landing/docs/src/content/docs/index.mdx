@@ -65,7 +65,11 @@ The caveat loop engineering insists on — *unattended loops make unattended mis
 
 The most recent releases, newest first. Older versions live in [Architecture › History](/docs/architecture/history/) and the [CHANGELOG](https://github.com/manufosela/karajan-code/blob/main/CHANGELOG.md).
 
-### v4.49.1: plan runs that commit, and a size budget that does not ask (current)
+### v4.49.2: plan runs that implement their HU, and a Sentinel that reads commands (current)
+
+A plan run no longer triages the plan's original task: it was generating other HUs that ran instead of the plan's, dropping its Gherkin, and could skip the coder and approve an empty diff. A code HU is no longer approved over a red project suite, and the first release of a freshly hardened repo is no longer blocked by the files its own setup installed. The Sentinel stops reacting to words inside quoted text, accepts the `kj rag query` it recommends, and no longer reads a body file's path as an attribution. E2BIG goes straight to the next provider, version ranges are no longer secrets, and the audit keeps to the current project's Sonar issues.
+
+### v4.49.1: plan runs that commit, and a size budget that does not ask
 
 `kj run --plan` stopped before committing every HU, blocked by its own card-first and verdict gates, spec-reviewed the plan again and never handed the coder the domain context; the three are fixed, and the domain context now reaches the coder in every run. The PR size has two tiers: about 150 lines is the ideal, up to 200 is allowed without asking, above it partition. `kj harden --report` now names the Sentinel and the git hooks when they are missing, and `kj harden` no longer asks for a seal with nothing to seal.
 

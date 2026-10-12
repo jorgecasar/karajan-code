@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.49.2] - 2026-10-12
+
+### Fixed
+
+- **A plan run implements its own HUs** (KJC-BUG-0332, KJC-BUG-0330, #2092, #2090): `kj run --plan --hu` triaged the plan's original task, auto-generated other HUs (HU-01..) that ran instead, without the plan HU's Gherkin, and could call the task analysis-only, skipping the coder and approving an empty diff. A plan run no longer triages; each HU keeps its own task type.
+- **A code HU is not approved over a red project suite** (KJC-BUG-0328, #2088): the HU batch runs the project's test command before the acceptance tests, and a red suite goes back to the coder.
+- **The first release of a repo is not blocked by the files kj setup installed** (KJC-BUG-0342, #2105): with no previous tag, the supervisor files the setup commit introduced, unchanged since, are not judged as writes.
+- **E2BIG is an oversized invocation, not a rate limit** (KJC-BUG-0327, #2087): it is never retried on the same agent and goes to the next provider at once; the recovery log says failure N with the retries allowed.
+- **A version range is not a secret** (KJC-BUG-0329, #2089): lockfile dependencies named `*-token`, `*-auth` or `*-secret` no longer warn `[secret-assignment]`.
+- **Open SonarQube issues keep to the current project** (KJC-BUG-0339, #2099): `kj audit --security` no longer lists other projects' issues and paths.
+- **The Sentinel reads commands, not words in quotes** (KJC-BUG-0333, 0338, 0340, 0343, #2093, #2095): a publish is a command whose head is npm, firebase or gh, not words inside another command's quoted text; `kj rag query` is read-only for the lane guard; the attribution gate ignores the path of a body file; a supervisor path named in the prose of `--title`, `--error` or `-m` is not a write.
+
 ## [4.49.1] - 2026-10-12
 
 ### Fixed
