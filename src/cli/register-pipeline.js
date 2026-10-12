@@ -259,7 +259,12 @@ export function registerPipeline(program, { pkgVersion }) {
         // ENV-B1 (KJC-TSK-0637): the gate mode records a verdict tied to
         // the exact diff so the pre-commit hook can enforce cross-AI review.
         if (flags.staged || flags.check || flags.range || flags.installGate || flags.prune) {
-          await reviewGateCommand({ config, logger, flags: { ...flags, task } });
+          // KJC-BUG-0349: the gate's task is optional, but --task-file carries
+          // the evidence the reviewer must weigh; it was never read here.
+          const gateTask = task || flags.taskFile
+            ? await resolveTaskInput({ task, taskFile: flags.taskFile, projectDir: config.projectDir, logger })
+            : task;
+          await reviewGateCommand({ config, logger, flags: { ...flags, task: gateTask } });
           return;
         }
         const resolvedTask = await resolveTaskInput({ task, taskFile: flags.taskFile, projectDir: config.projectDir, logger });
