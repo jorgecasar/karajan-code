@@ -48,6 +48,15 @@ describe("commitContract", () => {
 
   // kj init captures the baseline BEFORE ensureGitRepo: outside a repository git
   // cannot answer, and the baseline is empty (everything generated later is kj's).
+  // KJC-BUG-0346: kj env install wires the native RAG tool in .mcp.json; left out of
+  // the contract, a fresh clone lost it and the agent found a file it never made.
+  it("takes the .mcp.json kj env install wires, and only when kj generated it now", () => {
+    const before = contractChanges(dir);
+    write(".mcp.json", '{"mcpServers":{"kj-rag":{"command":"kj-rag-mcp","args":[]}}}\n');
+    expect(contractChanges(dir).has(".mcp.json")).toBe(true);
+    expect(before.has(".mcp.json")).toBe(false);
+  });
+
   it("contractChanges is empty, not an error, in a directory that is not a repository", () => {
     const plain = fs.mkdtempSync(path.join(os.tmpdir(), "kj-plain-"));
     try {

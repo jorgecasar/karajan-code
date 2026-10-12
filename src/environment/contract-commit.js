@@ -32,6 +32,9 @@ export const CONTRACT_PATHS = [
   ".karajan/supervisor-signers.json",
   // KJC-TSK-0995 (HUM-D, ADR 0018): the security level the whole team inherits.
   ".karajan/security-level.json",
+  // KJC-BUG-0346: kj env install wires kj_rag_query as a native tool here; a clone
+  // without it loses the tool. Only committed when kj changed it in this run.
+  ".mcp.json",
 ];
 
 const FRESH_MESSAGE = "chore(bootstrap): el contrato del método, para que quien clone lo herede";
