@@ -113,7 +113,8 @@ describe("[opt-in: sonar] sonar/api", () => {
     it("returns issues for successful response", async () => {
       runCommand.mockResolvedValue({
         exitCode: 0,
-        stdout: JSON.stringify({ total: 2, issues: [{ key: "i1" }, { key: "i2" }] }) + "\n200",
+        // KJC-BUG-0339: real issues name their project; one that cannot is not kept.
+        stdout: JSON.stringify({ total: 2, issues: [{ key: "i1", project: "my-project" }, { key: "i2", component: "my-project:src/a.js" }] }) + "\n200",
         stderr: ""
       });
 
