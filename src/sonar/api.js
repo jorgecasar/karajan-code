@@ -126,13 +126,20 @@ export async function getQualityGateStatus(config, projectKey = null) {
 
 export async function getOpenIssues(config, projectKey = null) {
   const effectiveProjectKey = await resolveSonarProjectKey(config, { projectKey, cwd: queryCwd(config) });
-  const body = await sonarFetch(config, `/api/issues/search?projectKeys=${effectiveProjectKey}&statuses=OPEN`);
+  // KJC-BUG-0339 (#2099): current SonarQube ignores projectKeys and answered with
+  // every project's issues, so the audit of one repo listed others' paths. The
+  // project goes in `components` (and projectKeys stays for old servers), and the
+  // answer is filtered by the key too: an issue of another project never leaves.
+  const key = encodeURIComponent(effectiveProjectKey);
+  const body = await sonarFetch(config, `/api/issues/search?components=${key}&projectKeys=${key}&statuses=OPEN`);
 
   let parsedIssues = [];
   let parsedRaw = body;
   try {
     const parsed = JSON.parse(body);
-    parsedIssues = parsed.issues || [];
+    // A project key may hold colons (Maven-style): match the whole key as a prefix.
+    const ownComponent = (c) => c === effectiveProjectKey || String(c ?? "").startsWith(`${effectiveProjectKey}:`);
+    parsedIssues = (parsed.issues || []).filter((i) => (i.project != null ? i.project === effectiveProjectKey : ownComponent(i.component)));
     parsedRaw = parsed;
   } catch { /* SonarQube response is not valid JSON */ }
 
