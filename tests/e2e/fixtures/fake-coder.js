@@ -71,6 +71,7 @@ function recordCall(role, prompt) {
     role,
     iteration: COUNTERS.get(role) || 0,
     promptHead: String(prompt || "").slice(0, 200),
+    promptLength: String(prompt || "").length,
     ts: Date.now()
   });
   // Sync write so a chokidar / synchronous reader of the file sees

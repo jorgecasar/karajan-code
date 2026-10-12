@@ -12,10 +12,12 @@ import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const KJ_BIN = path.resolve(HERE, "..", "..", "..", "bin", "kj.js");
+const FAKE_AGENT = path.resolve(HERE, "..", "..", "e2e", "fixtures", "fake-coder.js");
+const OFFLINE_RUN = path.join(HERE, "offline-run.js");
 
 export function makeScenarioProject({ prefix = "kj-scn-" } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -45,6 +47,14 @@ export function makeScenarioProject({ prefix = "kj-scn-" } = {}) {
   git("commit", "-q", "-m", "chore: init");
 
   const kj = (...args) => spawnSync(shim, args, { cwd: dir, env, encoding: "utf8", timeout: 180_000 });
+  /** kj with the e2e fake agent registered (agents read their script from fixtureDir). */
+  const kjFake = (fixtureDir, ...args) => spawnSync(shim, args, {
+    cwd: dir, encoding: "utf8", timeout: 180_000,
+    env: {
+      ...env, TEST_FIXTURE_DIR: fixtureDir,
+      NODE_OPTIONS: [env.NODE_OPTIONS, ...[OFFLINE_RUN, FAKE_AGENT].map((f) => `--import=${pathToFileURL(f).href}`)].filter(Boolean).join(" "),
+    },
+  });
 
   /** Run a Sentinel hook script as Claude Code would. */
   const hook = (name, payload) => {
@@ -55,5 +65,5 @@ export function makeScenarioProject({ prefix = "kj-scn-" } = {}) {
   };
   const bash = (command) => hook("pretooluse-sentinel.mjs", { tool_name: "Bash", tool_input: { command } });
 
-  return { root, dir, env, git, kj, hook, bash, cleanup: () => fs.rmSync(root, { recursive: true, force: true }) };
+  return { root, dir, env, kjHome, git, kj, kjFake, hook, bash, cleanup: () => fs.rmSync(root, { recursive: true, force: true }) };
 }
