@@ -235,3 +235,23 @@ describe("un id de regla no es un telefono", () => {
     }
   });
 });
+
+// KJC-BUG-0329 (#2089): a dependency named *-token, *-auth or *-secret in a lockfile
+// has a version as its value, and every dependency change warned [secret-assignment].
+describe("una version no es un secreto", () => {
+  const none = { personal: [], allow: [] };
+  const secrets = (text) => scanText(text, { list: none }).filter((f) => f.type === "secret-assignment");
+
+  it("un valor con forma de version o rango semver se descarta y se cuenta", () => {
+    const found = scanText('    "@octokit/auth-token": "^5.1.2",\n    "jwt-secret": ">= 12.0.0 || 14.x.1",\n    "auth": ">=1.2.3 <2.0.0",\n    "token": "1.2.3-beta-1+build.5"', { list: none });
+    expect(found.filter((f) => f.type === "secret-assignment")).toHaveLength(0);
+    expect(found.discardedByContext).toBeGreaterThan(0);
+  });
+
+  it("lo que no es una version SIGUE avisando: digitos sin punto, texto, version pegada a texto", () => {
+    // "1.2.3 4.5.6": two versions with no operator between them is not a range.
+    for (const value of ["12345678", "hunter22x", "1.2.3secret", "abc1.2.3", "1.2.3 4.5.6"]) {
+      expect(secrets(`"token": "${value}"`), value).toHaveLength(1);
+    }
+  });
+});

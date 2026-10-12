@@ -70,6 +70,17 @@ const SECRET_HEURISTICS = [
 const FIREBASE_WEB_MARKERS = /firebaseConfig|authDomain|firebasestorage|firestore\.googleapis\.com|firebaseapp\.com/;
 const FIREBASE_KEY_HINT = "si es la clave web de Firebase (publica por diseno): declarala en el allow de ~/.karajan/privacy.yml y restringela por dominio en la consola de Google";
 
+// KJC-BUG-0329 (#2089): a lockfile dependency named *-token/*-auth/*-secret has a
+// version for value. Only a WHOLE value made of versions (digits.x[.y], optional
+// prerelease) joined by range operators is discarded (and counted); digits with
+// no dot, or a version glued to text, are still a secret assignment.
+// Prerelease and build metadata with the full SemVer charset (1.2.3-beta-1+build.5).
+const SEMVER_TOKEN = String.raw`\d+\.(?:\d+|x|\*)(?:\.(?:\d+|x|\*))?(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?`;
+const SEMVER_OP = String.raw`(?:[\^~]|[<>]=?|=)`;
+// Between two versions there is always an operator (||, a hyphen range, or a comparator).
+const SEMVER_JOIN = String.raw`\s*(?:(?:\|\||-)\s*${SEMVER_OP}?|${SEMVER_OP})\s*`;
+const SEMVER_VALUE = new RegExp(String.raw`^\s*${SEMVER_OP}?\s*${SEMVER_TOKEN}(?:${SEMVER_JOIN}${SEMVER_TOKEN})*\s*$`);
+
 const CONTEXT_DISCARDS = [
   { type: "git-sha", re: /\b(?:[0-9a-f]{64}|[0-9a-f]{40})\b/g },
   { type: "doc-domain-email", re: /\b[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)*(?:example\.(?:com|org|net)|test|invalid|localhost|example)\b/g },
@@ -138,6 +149,12 @@ export function scanText(text, { list = loadPrivacyList(), source = "<text>" } =
       re.lastIndex = 0;
       let m;
       while ((m = re.exec(probe)) !== null) {
+        if (type === "secret-assignment" && SEMVER_VALUE.test(m[1])) {
+          discarded += 1;
+          probe = probe.slice(0, m.index) + " ".repeat(m[0].length) + probe.slice(m.index + m[0].length);
+          re.lastIndex = m.index + m[0].length;
+          continue;
+        }
         findings.push({ severity: "warn", type, source, line: i + 1, masked: `${maskValue(m[1])} — move it to .env or a secret manager` });
         probe = probe.slice(0, m.index) + " ".repeat(m[0].length) + probe.slice(m.index + m[0].length);
         re.lastIndex = m.index + m[0].length;
