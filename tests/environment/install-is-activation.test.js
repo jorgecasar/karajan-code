@@ -72,7 +72,8 @@ describe("env install — installing IS activating (KJC-BUG-0133)", () => {
     });
     await envInstallCommand({ config: { projectDir: dir, rag: {} }, flags: { rag: false } });
     expect(git("log", "-1", "--format=%s").trim()).toMatch(/^chore\(kj\):/);
-    expect(git("show", "--name-only", "--format=", "HEAD").trim().split("\n").sort()).toEqual([".claude/skills/kj-run/SKILL.md", "CLAUDE.md"]);
+    // KJC-BUG-0346: the .mcp.json env install wires is contract too.
+    expect(git("show", "--name-only", "--format=", "HEAD").trim().split("\n").sort()).toEqual([".claude/skills/kj-run/SKILL.md", ".mcp.json", "CLAUDE.md"]);
     expect(git("status", "--porcelain")).toMatch(/src\.js/);
   });
 
