@@ -635,6 +635,22 @@ describe("pretooluse-sentinel lane boundary (MONO-0)", () => {
     expect(bash("git commit -n -m x | cat").status).toBe(2);
   });
 
+  // KJC-BUG-0338 (#2095): the rag-first gate asks for a kj rag query naming the
+  // file, quoted; the lane guard then denied it as a quoted path in a mutating
+  // command. kj rag query only reads.
+  it("KJC-BUG-0338: kj rag query with a quoted question naming a path passes", () => {
+    const bash = (command) => run(gate, { session_id: "s1", tool_name: "Bash", tool_input: { command } });
+    for (const cmd of [
+      "kj rag query 'what does src/review/card first.js do and where else'",
+      'kj rag query --no-rag-update --top-k 5 "where is src/a b.js used"',
+    ]) {
+      const r = bash(cmd);
+      expect(r.status, cmd + "\n" + r.stderr).toBe(0);
+    }
+    // Chained with a write, it is judged as before.
+    expect(bash(`kj rag query 'x' && rm -rf ${path.join(lane, "src")}`).status).toBe(2);
+  });
+
   it("a write under a NOT-yet-existing lane subdir is denied — walks up to an existing ancestor (reviewer catch)", () => {
     const res = run(gate, { session_id: "s1", tool_name: "Write", tool_input: { file_path: path.join(lane, "newdir", "deep", "file.js") } });
     expect(res.status).toBe(2);
