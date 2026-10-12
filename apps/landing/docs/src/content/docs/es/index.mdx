@@ -65,7 +65,11 @@ El caveat que el loop engineering recalca — *los bucles desatendidos cometen e
 
 Las versiones más recientes, la última primero. Las anteriores están en [Arquitectura › Historia](/docs/es/architecture/history/) y en el [CHANGELOG](https://github.com/manufosela/karajan-code/blob/main/CHANGELOG.md).
 
-### v4.49.3: prompts grandes que caben (actual)
+### v4.49.4: la evidencia que el reviewer lee (actual)
+
+`kj review --staged --task-file` entrega ahora el fichero al reviewer: la evidencia que pasaba una sesión (una documentación oficial, una especificación) se perdía, y el reviewer seguía rechazando lo que nunca vio. El pre-gate de Sonar encuentra también el token que kj guardó en su home, así que un token válido ya no bloquea cada commit con código.
+
+### v4.49.3: prompts grandes que caben
 
 claude recibe ahora el prompt por stdin, así que una revisión de seguridad sobre un diff grande ya no falla con E2BIG, y los ficheros generados como los lockfiles entran en los prompts del reviewer y de Solomon como una línea de resumen, de modo que el reviewer ve los cambios reales. `kj env install` commitea también el `.mcp.json` que configura, así que un clon nuevo conserva el RAG como herramienta nativa.
 

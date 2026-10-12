@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.49.4] - 2026-10-12
+
+### Fixed
+
+- **`kj review --staged` reads `--task-file`** (KJC-BUG-0349): the gate modes (`--staged`, `--check`, `--range`) took only the positional task, so the evidence passed in a file never reached the reviewer, which kept rejecting a GitHub Actions schedule timezone the official docs support.
+- **The Sonar scanner finds the token kj saved in its home** (KJC-BUG-0350): it used the resolver that never reads `<karajan home>/sonar.token`, so a valid token read as "Unable to resolve Sonar token" and the review pre-gate blocked every code commit.
+
 ## [4.49.3] - 2026-10-12
 
 ### Fixed
