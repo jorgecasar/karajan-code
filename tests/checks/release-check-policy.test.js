@@ -87,3 +87,37 @@ describe("release check — policy at the effect boundary", () => {
     expect(c.detail).toMatch(/invalid/);
   });
 });
+
+// KJC-BUG-0342 (#2105): with no previous tag the whole history counted, and the
+// hooks and settings the human's kj setup commit installed read as supervisor
+// writes, so a freshly hardened repo could never ship its first release. Without a
+// tag the range starts after the commit that introduced the kj hooks.
+describe("release check — first release, no previous tag", () => {
+  it("the kj setup commit is not judged; a later write to the supervisor still is", async () => {
+    git("tag", "-d", "v1.0.0");
+    write(".karajan/policy.yml", "version: 1\nroles:\n  coder:\n    write: { deny: ['**/*.secret'], enforcement: deny }\n");
+    git("add", "-A"); git("commit", "-qm", "policy");
+    write(".karajan/hooks/pre-commit", "hook\n");
+    write(".claude/settings.json", "{}\n");
+    git("add", "-A"); git("commit", "-qm", "chore(kj): setup");
+    const clean = await policy();
+    expect(clean.ok).toBe(true);
+    commit(".karajan/hooks/pre-commit", "an agent edits the hook");
+    const red = await policy();
+    expect(red.ok).toBe(false);
+    expect(red.detail).toContain("defaults.supervisor.write");
+    expect(red.detail).toContain(".karajan/hooks/pre-commit");
+    expect(red.detail).not.toContain(".claude/settings.json"); // still as the setup left it
+  });
+
+  it("a deny violation committed before the setup is still judged", async () => {
+    git("tag", "-d", "v1.0.0");
+    write(".karajan/policy.yml", "version: 1\nroles:\n  coder:\n    write: { deny: ['**/*.secret'], enforcement: deny }\n");
+    commit("prod.secret", "oops, before the setup");
+    write(".karajan/hooks/pre-commit", "hook\n");
+    git("add", "-A"); git("commit", "-qm", "chore(kj): setup");
+    const c = await policy();
+    expect(c.ok).toBe(false);
+    expect(c.detail).toContain("prod.secret");
+  });
+});

@@ -16,11 +16,37 @@ import { liftSealedSupervisorViolations } from "../policy/supervisor-verify.js";
 // policy IN FORCE now, not the one each PR was merged under. Artifact rules
 // only: diff-threshold invariants are PR-scoped by definition — skipped, and
 // said — so no line metric is needed (without a tag, the whole tree counts).
+/** The commit that introduced the kj pre-commit hook (kj setup), or null. */
+async function setupCommitOf(projectDir) {
+  const res = await runCommand("git", ["-C", projectDir, "log", "--diff-filter=A", "--format=%H", "--", ".karajan/hooks/pre-commit"]);
+  if (res.exitCode !== 0) return null;
+  return res.stdout.trim().split("\n").filter(Boolean).at(-1) ?? null;
+}
+
+/** Supervisor violations on files the setup commit added and nothing changed since. */
+async function withoutSetupInstalls(projectDir, setup, violations) {
+  const added = await runCommand("git", ["-C", projectDir, "diff-tree", "--root", "--no-commit-id", "--name-only", "-r", "--diff-filter=A", setup]);
+  const installed = new Set(added.exitCode === 0 ? added.stdout.split("\n").map((s) => s.trim()).filter(Boolean) : []);
+  const kept = [];
+  for (const v of violations) {
+    if (v.rule_id === "defaults.supervisor.write" && installed.has(v.file)) {
+      const changed = await runCommand("git", ["-C", projectDir, "diff", "--quiet", setup, "HEAD", "--", v.file]);
+      if (changed.exitCode === 0) continue;
+    }
+    kept.push(v);
+  }
+  return kept;
+}
+
 async function policyRangeCheck(projectDir) {
   const { policy, errors } = loadPolicy({ projectDir });
   if (errors.length > 0) return { name: "policy", ok: false, detail: `policy.yml invalid — ${errors[0]}` };
   const described = await runCommand("git", ["-C", projectDir, "describe", "--tags", "--abbrev=0", "--match", "v[0-9]*"]);
   const tag = described.exitCode === 0 ? described.stdout.trim() : null;
+  // KJC-BUG-0342 (#2105): with no tag the whole tree is judged, and the supervisor
+  // files the human's kj setup commit installed read as writes. Only those, and only
+  // while unchanged since that commit, are the setup and not judged.
+  const setup = tag ? null : await setupCommitOf(projectDir);
   const scope = tag ? `${tag}..HEAD` : "whole history (no previous tag)";
   const prScoped = new Set((policy.invariants ?? []).filter((i) => i.kind === "diff-threshold").map((i) => i.id));
   try {
@@ -37,7 +63,7 @@ async function policyRangeCheck(projectDir) {
     // KJC-BUG-0259: the history is judged on what is versioned (hooks, provenance);
     // the machine-local guards were verified when the seal was reviewed.
     const sup = liftSealedSupervisorViolations({ projectDir, violations: raw, trackedOnly: true });
-    const violations = sup.violations;
+    const violations = setup ? await withoutSetupInstalls(projectDir, setup, sup.violations) : sup.violations;
     const hard = violations.filter((v) => v.enforcement === "deny");
     const skipped = prScoped.size > 0 ? `; ${prScoped.size} diff-threshold invariant(s) skipped (PR-scoped)` : "";
     if (hard.length > 0) {
