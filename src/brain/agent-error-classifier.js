@@ -26,6 +26,9 @@ export const ERROR_CLASS = Object.freeze({
   // un problema de cuota — es motivo para tomar el siguiente eslabón de la
   // cadena declarada. No tiene cooldown: esperar no lo va a resucitar.
   MODEL_UNAVAILABLE: "MODEL_UNAVAILABLE",
+  // KJC-BUG-0327: the OS refused the invocation (E2BIG: the prompt, passed as an
+  // argument, is too large). The same command will fail again: no waiting.
+  INVOCATION_TOO_LARGE: "INVOCATION_TOO_LARGE",
   API_DOWN: "API_DOWN",
   AUTH_FAILED: "AUTH_FAILED",
   NETWORK_TIMEOUT: "NETWORK_TIMEOUT",
@@ -73,6 +76,12 @@ function pickMessage(combined, pattern) {
 export function classifyAgentError({ provider = "unknown", stdout = "", stderr = "", exitCode = null }) {
   const combined = `${stderr}\n${stdout}`;
   const base = { provider, exitCode, retryAfter: null, retryUntil: null };
+
+  // 0. KJC-BUG-0327 (#2087): E2BIG first. The error echoes the command, prompt
+  //    included, so any word the prompt carries (rate limit, 401...) would win.
+  if (/\bE2BIG\b|argument list too long/i.test(combined)) {
+    return { ...base, class: ERROR_CLASS.INVOCATION_TOO_LARGE, message: "the prompt is too large to pass as a command argument (E2BIG)", recoverable: true };
+  }
 
   // 1. AUTH_FAILED tiene prioridad absoluta — no es recuperable, escalar al usuario.
   if (AUTH_PATTERNS.test(combined)) {
