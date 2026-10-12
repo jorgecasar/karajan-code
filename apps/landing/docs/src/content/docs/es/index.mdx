@@ -65,7 +65,11 @@ El caveat que el loop engineering recalca — *los bucles desatendidos cometen e
 
 Las versiones más recientes, la última primero. Las anteriores están en [Arquitectura › Historia](/docs/es/architecture/history/) y en el [CHANGELOG](https://github.com/manufosela/karajan-code/blob/main/CHANGELOG.md).
 
-### v4.49.2: runs de plan que implementan su HU y un Sentinel que lee comandos (actual)
+### v4.49.3: prompts grandes que caben (actual)
+
+claude recibe ahora el prompt por stdin, así que una revisión de seguridad sobre un diff grande ya no falla con E2BIG, y los ficheros generados como los lockfiles entran en los prompts del reviewer y de Solomon como una línea de resumen, de modo que el reviewer ve los cambios reales. `kj env install` commitea también el `.mcp.json` que configura, así que un clon nuevo conserva el RAG como herramienta nativa.
+
+### v4.49.2: runs de plan que implementan su HU y un Sentinel que lee comandos
 
 Un run de plan ya no hace el triage del encargo original del plan: generaba otras HUs que se ejecutaban en lugar de las del plan, perdía sus Gherkin y podía saltarse el coder y aprobar un diff vacío. Una HU de código ya no se aprueba con la suite del proyecto en rojo, y la primera release de un repo recién preparado ya no se bloquea por los ficheros que instaló su propio setup. El Sentinel deja de reaccionar a palabras dentro de texto entrecomillado, acepta el `kj rag query` que él mismo recomienda y ya no toma la ruta de un fichero de cuerpo por una atribución. El E2BIG pasa enseguida al siguiente proveedor, los rangos de versión ya no son secretos y el audit se queda con las issues de Sonar del proyecto actual.
 

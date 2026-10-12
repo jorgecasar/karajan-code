@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.49.3] - 2026-10-12
+
+### Fixed
+
+- **claude gets its prompt on stdin, never as an argument** (KJC-BUG-0344, #2087): a large prompt (a security review over a big diff) hit the kernel's per-argument limit with E2BIG; verified against the real binary with a 300 KB prompt.
+- **Generated files are summarized in the reviewer and Solomon prompts** (KJC-BUG-0347, #2101): a 4800-line lockfile hid the real hunks from the reviewer and blew Solomon's prompt; each generated file now enters as one summary line, and the verdict still binds to the full diff.
+- **The `.mcp.json` that `kj env install` wires is part of the contract it commits** (KJC-BUG-0346): it stayed untracked, so a fresh clone lost `kj_rag_query` as a native tool.
+
 ## [4.49.2] - 2026-10-12
 
 ### Fixed
