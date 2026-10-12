@@ -15,6 +15,7 @@ import { resolveReviewProfile } from "./profiles.js";
 import { parseMaybeJsonString, normalizeReviewPayload } from "./parser.js";
 import { detectAvailableAgents, detectHostAgent } from "../utils/agent-detect.js";
 import { saveVerdict, diffHash } from "./verdict-store.js";
+import { summarizeGeneratedFiles } from "./prompt-diff.js";
 import { reportUnparseableVerdict } from "./unparseable-verdict.js";
 import { detectWorkspace } from "./workspace.js";
 import { isQuotaExhausted, candidateStatus, pickQuotaFallback, formatCandidateMenu } from "./reviewer-fallback.js";
@@ -69,7 +70,8 @@ export async function runOneShotReview({
   const attempt = async (who, cfg = config) => {
     const prompt = await buildReviewerPrompt({
       task: task || "Review the following diff for correctness, security and maintainability.",
-      diff, reviewRules: rules, mode: "standard", provider: who, projectDir,
+      // KJC-BUG-0347: generated files summarized; the verdict still binds to the full diff.
+      diff: summarizeGeneratedFiles(diff), reviewRules: rules, mode: "standard", provider: who, projectDir,
     });
     logger?.info?.(`kj review: host=${hostAgent || "none"} → reviewer=${who} (cross-AI)`);
     return createAgentFn(who, cfg, logger).reviewTask({ prompt, role: "reviewer" });

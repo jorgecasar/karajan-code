@@ -16,6 +16,7 @@ import { createAgent } from "../agents/index.js";
 import { parseMaybeJsonString } from "./parser.js";
 import { detectAvailableAgents, detectHostAgent } from "../utils/agent-detect.js";
 import { diffHash, loadVerdict, saveVerdict } from "./verdict-store.js";
+import { summarizeGeneratedFiles } from "./prompt-diff.js";
 
 const SECURITY_PATTERN = /injection|xss|csrf|secret|credential|password|token leak|auth(entication|orization)?|crypt|session|sanitiz|traversal|rce\b/i;
 
@@ -75,7 +76,8 @@ export async function runSolomonArbitration({
     "", "## Reviewer's blocking issues",
     JSON.stringify(verdict.issues || [], null, 2),
     "", "## Brain's position", position,
-    "", "## The diff under dispute", diff,
+    // KJC-BUG-0347: generated files summarized; the ruling still binds to the full diff.
+    "", "## The diff under dispute", summarizeGeneratedFiles(diff),
   ].join("\n");
 
   logger?.info?.(`kj solomon: brain=${hostAgent || "?"} vs reviewer=${verdict.reviewer} → arbiter=${solomon}`);

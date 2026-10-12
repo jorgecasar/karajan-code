@@ -19,8 +19,9 @@
  * unbounded growth there dilutes the signal the agent receives.
  */
 
-const EXEMPT = [
-  // Generated or vendored: nobody typed it.
+// Generated or vendored: nobody typed it. KJC-BUG-0347: also what the review and
+// Solomon prompts summarize instead of pasting whole.
+const GENERATED = [
   /(^|\/)dist\//,
   /(^|\/)build\//,
   /(^|\/)coverage\//,
@@ -35,6 +36,10 @@ const EXEMPT = [
   /(^|\/)tests\/_diet\//,
   // KJC-BUG-0318: the plan `kj plan share` writes, at the project root only.
   /^\.karajan-shared\/plans\/[^/]+\.json$/,
+];
+
+const EXEMPT = [
+  ...GENERATED,
   // Human documentation, wherever the project keeps it. The landing's docs
   // moved into the monorepo (MONO-3) and the old root-anchored `docs/` rule
   // stopped matching them, which is how documenting started costing budget.
@@ -45,6 +50,11 @@ const EXEMPT = [
 
 // The exceptions to the exception: these ARE the agent's context.
 const AI_RULES = [/^CLAUDE\.md$/, /^AGENTS\.md$/, /^GEMINI\.md$/, /(^|\/)templates\//];
+
+/** Whether nobody typed this file (lockfile, build output, snapshot...). */
+export function isGenerated(file) {
+  return Boolean(file) && GENERATED.some((re) => re.test(file));
+}
 
 /** @param {string} file @returns {boolean} */
 export function countsTowardBudget(file) {
