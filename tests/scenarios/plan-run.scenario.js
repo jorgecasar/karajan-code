@@ -8,20 +8,19 @@ import os from "node:os";
 import path from "node:path";
 import { makeScenarioProject } from "./helpers/scenario-project.js";
 
-let p;
-let fixtureDir;
-let run;
-let planPath;
+const opened = [];
 
-beforeAll(() => {
-  p = makeScenarioProject();
+/** A project with a one-HU certified plan whose shell acceptance test is `acceptance`, run once. */
+function planRun(acceptance) {
+  const p = makeScenarioProject();
+  const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), "kj-scn-fixture-"));
+  opened.push(() => { p.cleanup(); fs.rmSync(fixtureDir, { recursive: true, force: true }); });
   fs.writeFileSync(path.join(p.dir, "SPEC.md"), "# Greeting\n\n## 1. Greeting\n\nThe system shall print hello.\n");
   p.git("add", "SPEC.md");
   p.git("commit", "-q", "-m", "docs: spec");
-  fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), "kj-scn-fixture-"));
   const planner = JSON.stringify({
     approach: "one code HU",
-    steps: [{ description: "print hello", commit: "feat: hello", spec_section: "1", acceptance_tests: ["true"] }],
+    steps: [{ description: "print hello", commit: "feat: hello", spec_section: "1", acceptance_tests: [acceptance] }],
     risks: [], outOfScope: [],
   });
   fs.writeFileSync(path.join(fixtureDir, "coder-script.json"), JSON.stringify({ planner: { output: planner } }));
@@ -30,17 +29,25 @@ beforeAll(() => {
   const plansRoot = path.join(p.kjHome, "plans");
   const slug = fs.readdirSync(plansRoot)[0];
   const file = fs.readdirSync(path.join(plansRoot, slug)).find((f) => f.endsWith(".json"));
-  planPath = path.join(plansRoot, slug, file);
+  const planPath = path.join(plansRoot, slug, file);
   const plan = JSON.parse(fs.readFileSync(planPath, "utf8"));
   for (const h of plan.hus) h.status = "certified";
   fs.writeFileSync(planPath, JSON.stringify(plan, null, 2));
-  run = p.kjFake(fixtureDir, "run", "--plan", plan.planId, "--hu", plan.hus[0].id, "-y",
+  const run = p.kjFake(fixtureDir, "run", "--plan", plan.planId, "--hu", plan.hus[0].id, "-y",
     "--coder", "fake", "--reviewer", "fake", "--planner", "fake", "--max-iterations", "1");
-}, 300_000);
-afterAll(() => {
-  p?.cleanup();
-  if (fixtureDir) fs.rmSync(fixtureDir, { recursive: true, force: true });
-});
+  const huStatus = () => JSON.parse(fs.readFileSync(planPath, "utf8")).hus[0].status;
+  return { run, huStatus };
+}
+
+let run;
+let huStatus;
+let failing;
+
+beforeAll(() => {
+  ({ run, huStatus } = planRun("true"));
+  failing = planRun("test -f tests/does-not-exist.test.js");
+}, 600_000);
+afterAll(() => { for (const close of opened) close(); });
 
 describe("scenario: kj run --plan --hu on a code HU", () => {
   it("does not triage the plan's task (0332)", () => {
@@ -54,7 +61,12 @@ describe("scenario: kj run --plan --hu on a code HU", () => {
   });
 
   it("finishes the HU", () => {
-    const plan = JSON.parse(fs.readFileSync(planPath, "utf8"));
-    expect(plan.hus[0].status, `${run.stderr.slice(-1500)}`).toBe("done");
+    expect(huStatus(), `${run.stderr.slice(-1500)}`).toBe("done");
+  });
+
+  it("does not approve an HU whose shell acceptance test fails (0331)", () => {
+    const out = `${failing.run.stdout}\n${failing.run.stderr}`;
+    expect(out).toMatch(/0\/1 shell tests passed/);
+    expect(failing.huStatus(), out.slice(-1500)).not.toBe("done");
   });
 });
