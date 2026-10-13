@@ -4,21 +4,27 @@ import path from "node:path";
 
 const BIN = path.resolve(process.cwd(), "bin/kj-rag-mcp.js");
 
+// KJC-BUG-0319: the binary loads kj's modules before it answers; under the
+// full parallel suite that took more than the old 4 s and the test failed
+// while passing alone. The bound is a hang detector, not a speed check.
+const RESPONSE_TIMEOUT_MS = 60_000;
+
 function send(child, msg) {
   return new Promise((resolve, reject) => {
     let buf = "";
+    const timer = setTimeout(() => reject(new Error("timeout")), RESPONSE_TIMEOUT_MS);
     const onData = (chunk) => {
       buf += chunk.toString();
       const nl = buf.indexOf("\n");
       if (nl !== -1) {
         const line = buf.slice(0, nl);
         child.stdout.off("data", onData);
+        clearTimeout(timer);
         try { resolve(JSON.parse(line)); } catch (e) { reject(e); }
       }
     };
     child.stdout.on("data", onData);
     child.stdin.write(JSON.stringify(msg) + "\n");
-    setTimeout(() => reject(new Error("timeout")), 4000);
   });
 }
 
