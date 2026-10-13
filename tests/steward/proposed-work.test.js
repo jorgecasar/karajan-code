@@ -56,10 +56,10 @@ describe("syncProposedWork", () => {
     expect(map["main-ci"]).toBeUndefined();
   });
 
-  it("a board kj does not own (planning-game/external) is never mirrored: synced false, said with its reason", async () => {
+  // KJC-BUG-0305: the HU Board is always kj's board; an external tracker gets the replica.
+  it("with an external tracker the HU Board still gets the card, and the sync names where to replicate it", async () => {
     const r = await syncProposedWork({ projectDir: dir, config: { projectDir: dir, state_backend: "planning-game" }, results: [broken("main-ci")], sweptAt: "2026-08-27T00:00:00Z" });
-    expect(r.synced).toBe(false);
-    expect(r.reason).toMatch(/planning-game/);
-    expect(await allHus()).toHaveLength(0);
+    expect(r).toMatchObject({ synced: true, created: 1, replicateIn: "planning-game" });
+    expect(await allHus()).toHaveLength(1);
   });
 });

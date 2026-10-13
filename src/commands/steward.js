@@ -113,7 +113,10 @@ export async function stewardSweepCommand({ flags = {}, config = {}, logger = co
   try {
     const sync = await syncProposedWork({ projectDir, config, results, sweptAt: report.sweptAt });
     if (!sync.synced) logger.warn?.(`⚠ steward: broken invariants not carded — ${sync.reason}`);
-    else if (sync.created || sync.updated || sync.resolved) logger.info?.(`steward board: ${sync.created} card(s) proposed, ${sync.updated} updated, ${sync.resolved} resolved`);
+    else if (sync.created || sync.updated || sync.resolved) {
+      logger.info?.(`steward board: ${sync.created} card(s) proposed, ${sync.updated} updated, ${sync.resolved} resolved`);
+      if (sync.replicateIn) logger.info?.(`→ replicate them in ${sync.replicateIn} through your agent's board tools (kj hu list shows them)`);
+    }
   } catch (err) { logger.warn?.(`⚠ steward: carding the broken invariants failed (${err.message}) — the report and the seal stand`); }
 
   // A report nobody can see is not shared state — say it, do not fix their tree.

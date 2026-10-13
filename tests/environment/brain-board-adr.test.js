@@ -164,14 +164,24 @@ describe("kj hu", () => {
       .rejects.toThrow(/task-type/);
   });
 
-  // KJC-TSK-0684 (issue #1287): an external board is the source of truth —
-  // kj refuses to write a parallel HU Board and points at the real one.
-  it("add and move are refused when the project declares an external board", async () => {
+  // KJC-BUG-0305 (issue #2042): the HU Board is always kj's board; with an
+  // external tracker it coexists, each card pointing at its replica there.
+  it("add and move work with an external board, and --ref links the replica", async () => {
     const external = { projectDir: dir, state_backend: "external", board: { name: "Linear" } };
-    await expect(huCommand({ config: external, action: "add", args: ["X"], flags: {} }))
-      .rejects.toThrow(/Linear/);
-    await expect(huCommand({ config: external, action: "move", args: ["A", "done"], flags: {} }))
-      .rejects.toThrow(/external/);
+    const added = await huCommand({ config: external, action: "add", args: ["X"], flags: { json: true, ref: "LIN-42" } });
+    expect(added.external_ref).toBe("LIN-42");
+    await huCommand({ config: external, action: "move", args: [added.id, "running"], flags: { json: true } });
+    const rows = await huCommand({ config: external, action: "list", flags: { json: true } });
+    expect(rows.find((r) => r.id === added.id)).toMatchObject({ status: "running", external_ref: "LIN-42" });
+  });
+
+  it("add with an external board and no --ref says where the replica goes", async () => {
+    const external = { projectDir: dir, state_backend: "external", board: { name: "Linear" } };
+    const logs = [];
+    const spy = vi.spyOn(console, "log").mockImplementation((m) => logs.push(String(m)));
+    try { await huCommand({ config: external, action: "add", args: ["Y"], flags: {} }); }
+    finally { spy.mockRestore(); }
+    expect(logs.join("\n")).toMatch(/Linear[\s\S]*--ref/);
   });
 
   it("second add reuses the same backlog plan", async () => {

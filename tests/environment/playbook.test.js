@@ -38,15 +38,16 @@ describe("renderPlaybook", () => {
     });
   }
 
-  // KJC-TSK-0684 (issue #1287): card-first points at THE project's board.
-  it("external backend names the declared board and drops the HU Board", () => {
+  // KJC-BUG-0305 (issue #2042): the HU Board stays kj's board; the external
+  // tracker gets a replica of each card, linked with --ref.
+  it("external backend keeps the HU Board and asks for the linked replica", () => {
     const text = renderPlaybook({ stateBackend: "external", boardName: "Linear" });
-    expect(text).toMatch(/tracked card in Linear/);
-    expect(text).toMatch(/never create a parallel HU Board/);
-    expect(text).not.toMatch(/kj hu add` \/ `kj board/); // hu-board line gone
+    expect(text).toMatch(/HU Board/);
+    expect(text).toMatch(/kj hu add[\s\S]*--ref/);
+    expect(text).toMatch(/replica in Linear/);
+    expect(text).not.toMatch(/never create a parallel HU Board/);
     expect(text.split("\n").length).toBeLessThanOrEqual(60);
   });
-
   it("both targets come from the same source (same method lines)", () => {
     const a = renderPlaybook({ target: "claude" });
     const b = renderPlaybook({ target: "codex" });

@@ -28,10 +28,10 @@ describe("playbook renders the chosen backend", () => {
     expect(text).not.toMatch(/Planning Game MCP/);
   });
 
-  it("planning-game: orders tracking in the Planning Game MCP", () => {
+  // KJC-BUG-0305: the HU Board is always kj's board; the Planning Game gets the replica.
+  it("planning-game: the HU Board card plus its replica in the Planning Game", () => {
     const text = renderPlaybook({ stateBackend: "planning-game" });
-    expect(text).toMatch(/Planning Game MCP/);
-    expect(text).not.toMatch(/HU Board/);
+    expect(text).toMatch(/card in the HU Board[\s\S]*replica in the Planning Game/);
   });
 
   it("default render matches the shipped default backend", () => {
