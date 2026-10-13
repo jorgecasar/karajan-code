@@ -239,3 +239,32 @@ describe("el release check juzga lo versionado (KJC-BUG-0259, decision del usuar
     expect(verifiedSupervisorFiles({ projectDir: repo, trackedOnly: true }).complete).toBe(false);
   });
 });
+
+// KJC-TSK-1032: the governance config has no canonical render; the sealed hash
+// (signed by the roster where there is one) is the proof.
+describe("the governance config verifies by its sealed hash (KJC-TSK-1032)", () => {
+  const policy = ".karajan/policy.yml";
+  const hook = () => renderCanonicalHook("pre-commit", generation);
+
+  it("a policy.yml matching its sealed hash verifies, and the provenance stays complete", () => {
+    writeFileSync(join(repo, ".karajan", "hooks", "pre-commit"), hook());
+    writeFileSync(join(repo, policy), "version: 1\nmax: 500\n");
+    writeProvenance([{ file: ".karajan/hooks/pre-commit", sha256: sha(hook()) }, { file: policy, sha256: sha("version: 1\nmax: 500\n") }]);
+    const v = verifiedSupervisorFiles({ projectDir: repo });
+    expect(v.files.has(policy)).toBe(true);
+    expect(v.complete).toBe(true);
+  });
+
+  it("a policy.yml changed after the seal does not verify", () => {
+    writeFileSync(join(repo, policy), "version: 1\nmax: 900\n");
+    writeProvenance([{ file: policy, sha256: sha("version: 1\nmax: 500\n") }]);
+    expect(verifiedSupervisorFiles({ projectDir: repo }).files.has(policy)).toBe(false);
+  });
+
+  it("a sealed deletion verifies only while policy.yml stays gone", () => {
+    writeProvenance([{ file: policy, deleted: true }]);
+    expect(verifiedSupervisorFiles({ projectDir: repo }).files.has(policy)).toBe(true);
+    writeFileSync(join(repo, policy), "version: 1\n");
+    expect(verifiedSupervisorFiles({ projectDir: repo }).files.has(policy)).toBe(false);
+  });
+});
