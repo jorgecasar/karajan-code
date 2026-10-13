@@ -10,6 +10,7 @@ import { indexFile, indexProject, indexProjectDelta, sourceKind } from "../rag/i
 import { indexableReason, ragExclude } from "../rag/indexable.js";
 import { fileIndexState } from "../rag/coverage.js";
 import { query } from "../rag/retriever.js";
+import { pathNamedHits, withPathNamedHits } from "../rag/path-hits.js";
 import { installPostMergeHook, maybeAutoUpdate } from "../rag/auto-update.js";
 import { indexLibrary, LIBRARY_PROJECT } from "../rag/library.js";
 import { loadGoldenQueries, runEval } from "../rag/eval.js";
@@ -166,7 +167,8 @@ export async function ragQueryCommand({ text, config, logger, flags = {} }) {
     let where = flags.where || null;
     if (library) where = flags.where ? `kind=library AND ${flags.where}` : "kind=library";
     const rerankOpts = flags.rerank ? { model: flags.rerankModel } : null;
-    const hits = await query(db, makeGovernedEmbedder(config), text, { topK, scope, project, mode, alpha, where, rerankOpts });
+    const ranked = await query(db, makeGovernedEmbedder(config), text, { topK, scope, project, mode, alpha, where, rerankOpts });
+    const hits = library ? ranked : withPathNamedHits(pathNamedHits(db, text, { project, projectDir: config?.projectDir || process.cwd() }), ranked, topK);
     if (flags.json) {
       process.stdout.write(`${JSON.stringify(hits)}\n`);
     } else {

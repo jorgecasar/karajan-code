@@ -9,6 +9,7 @@ import { makeGovernedEmbedder } from "../../rag/governed-embedder.js";
 import { indexProject } from "../../rag/indexer.js";
 import { ragExclude } from "../../rag/indexable.js";
 import { query } from "../../rag/retriever.js";
+import { pathNamedHits, withPathNamedHits } from "../../rag/path-hits.js";
 import { getKarajanHome } from "../../utils/paths.js";
 import { resolveProjectDir, buildConfig, responseText, failPayload } from "../shared-helpers.js";
 
@@ -40,7 +41,9 @@ export async function handleRagQuery(args, server) {
         const remedy = emptyIndexRemedy({ slug: project, legacyPath: join(getKarajanHome(), "rag.db"), dim });
         return responseText({ hits: [], empty: true, topK, scope, project, remedy });
       }
-      const hits = await query(db, makeGovernedEmbedder(config), text, { topK, scope, project });
+      const ranked = await query(db, makeGovernedEmbedder(config), text, { topK, scope, project });
+      // KJC-BUG-0348: a file the question names comes first, as in the CLI.
+      const hits = withPathNamedHits(pathNamedHits(db, text, { project, projectDir }), ranked, topK);
       return responseText({ hits, empty: false, topK, scope, project });
     } finally { db.close(); }
   } catch (err) {
