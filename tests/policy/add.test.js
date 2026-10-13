@@ -75,4 +75,18 @@ describe("kj policy add", () => {
     await run({ fragment: GOOD_FRAGMENT, logs });
     expect(logs.join("\n")).toMatch(/comentario/i);
   });
+
+  // KJC-BUG-0355: "las PRs pueden tener hasta 500 líneas" added a second threshold
+  // beside the 200 one, and the stricter kept ruling: the spoken rule did nothing.
+  it("a threshold on a metric the policy already measures changes that invariant, not a new one", async () => {
+    const logs = [];
+    const fragment = "invariants:\n  - { id: pr-max-500, kind: diff-threshold, metric: net_lines_added, max: 500, enforcement: deny }\n";
+    expect(await run({ fragment, yes: true, logs })).toBe(0);
+    const written = fs.readFileSync(policyPath(), "utf8");
+    expect(written.match(/net_lines_added/g)).toHaveLength(1);
+    expect(written).toMatch(/id: loc/);
+    expect(written).toMatch(/max: 500/);
+    expect(written).toMatch(/enforcement: deny/);
+    expect(logs.join("\n")).toMatch(/- .*max: 200[\s\S]*\+ .*max: 500|max: 200[\s\S]*max: 500/);
+  });
 });
