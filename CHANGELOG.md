@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.51.0] - 2026-10-13
+
+### Changed
+
+- **A policy change only enters sealed by the human** (KJC-TSK-1032, KJC-TSK-1033): the Sentinel already kept the agent from writing `.karajan/policy.yml` and `.karajan/rules.yml`, but a change that landed anyway was committed, and CI judged the PR against the very policy it brought. Now authorization is checked where the policy is used: a new engine rule, `defaults.governance.write`, makes any diff touching those files a security deny in the commit gate, `kj policy check` (CI) and the release check, naming the way out. `kj harden --commit` seals them with the supervisor, signed from the phone, and the sealed hash lifts the deny. `kj.config.yml` stays out of the seal: it is machine-local and CI never sees it. Note: a Bash command that names `policy.yml` is now denied to the agent too; it reads the file with its Read tool.
+
 ## [4.50.0] - 2026-10-13
 
 ### Changed

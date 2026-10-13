@@ -1803,6 +1803,12 @@ Desde KJC-TSK-0684, kj se apartaba cuando un proyecto declaraba el Planning Game
 
 Alrededor, una tanda de bugs de campo: `kj review --staged` por fin lee `--task-file`, así que la evidencia, como una documentación oficial, llega al reviewer; el pre-gate de Sonar encuentra el token que kj guardó en su home; una consulta al RAG que nombra un fichero indexado lo devuelve primero; se resuelven tres avisos de dependencias, y una batería de escenarios ejecuta los gates reales juntos en un proyecto temporal, como los encuentra una sesión.
 
+## Phase 143: v4.51.0, la política solo cambia con tu sello
+
+Preparando una demo, el owner hizo la pregunta buena: no si un agente puede encontrar cómo escribir la política, porque es de suponer que siempre existe alguna manera, sino si un cambio no autorizado se puede usar. Se podía. El Sentinel denegaba toda escritura de `policy.yml` desde la sesión (Edit, Write y cualquier Bash que escribiera un fichero del repo), pero un cambio que llegara igualmente se commiteaba, y `kj policy check` juzgaba la PR con la misma política que la PR traía. La autorización solo se comprobaba donde se escribía el fichero.
+
+Ahora se comprueba donde se usa. Una regla nueva del motor, `defaults.governance.write`, convierte cualquier diff que toque `policy.yml` o `rules.yml` en un deny de seguridad en el gate del commit, en la CI y en el release check. La salida es el acto humano que ya sellaba el supervisor: `kj harden --commit` guarda el hash de esos ficheros en la procedencia firmada, y el verificador levanta el deny solo mientras el fichero coincide con el hash sellado. Un escenario recorre la historia completa con una firma real verificada contra el padrón.
+
 ## Decisiones Arquitectonicas Clave
 
 ### CLI wrapping vs llamadas directas a API
