@@ -73,6 +73,25 @@ describe("checkCardFirst — external / planning-game (presence check, warns by 
       .toMatchObject({ ok: true });
   });
 
+  // KJC-BUG-0353: the HU Board is always kj's board (0305); its live HU, found
+  // by its own id or by the replica it links, satisfies the gate first.
+  it("passes at hu-board level on a live HU named in the branch or linked by --ref", async () => {
+    await savePlan(dir, {
+      version: 2, planId: generatePlanId(), name: "linked", task: "t", status: "ready", createdAt: new Date().toISOString(),
+      hus: [{ id: "hu_l_001", short_id: "HU-0007", title: "Enlazada", status: "running", external_ref: "LIN-77" }],
+    });
+    for (const branch of ["feat/LIN-77-fix", "feat/HU-0007-fix"]) {
+      expect(await checkCardFirst({ config: ext, projectDir: dir, branch, env: {} }))
+        .toMatchObject({ ok: true, mode: "pass", level: "hu-board" });
+    }
+  });
+
+  it("a tracker reference no HU links still passes, naming the HU Board remedy", async () => {
+    const r = await checkCardFirst({ config: ext, projectDir: dir, branch: "jorge/lin-123-fix", env: {} });
+    expect(r).toMatchObject({ ok: true, ref: "lin-123" });
+    expect(r.note).toMatch(/HU Board[\s\S]*kj hu add[\s\S]*--ref lin-123/);
+  });
+
   it("warns (not blocks) by default without a reference; block via config", async () => {
     const w = await checkCardFirst({ config: ext, projectDir: dir, branch: "feat/cosas", env: {} });
     expect(w).toMatchObject({ ok: true, mode: "warn" });
