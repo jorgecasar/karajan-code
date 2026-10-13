@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.51.1] - 2026-10-13
+
+### Fixed
+
+- **`kj policy add` changes the threshold a metric already has** (KJC-BUG-0355): "PRs can have up to 500 lines" added a second `net_lines_added` invariant beside the 200 one, and the stricter kept ruling. A threshold on a kind and metric the policy already measures now changes that invariant, keeping its id, and the diff shows the old max becoming the new one.
+
 ## [4.51.0] - 2026-10-13
 
 ### Changed

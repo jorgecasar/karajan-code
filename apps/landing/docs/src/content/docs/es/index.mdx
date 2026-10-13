@@ -65,7 +65,11 @@ El caveat que el loop engineering recalca — *los bucles desatendidos cometen e
 
 Las versiones más recientes, la última primero. Las anteriores están en [Arquitectura › Historia](/docs/es/architecture/history/) y en el [CHANGELOG](https://github.com/manufosela/karajan-code/blob/main/CHANGELOG.md).
 
-### v4.51.0: la política solo cambia con tu sello (actual)
+### v4.51.1: un umbral dicho en palabras que cambia de verdad (actual)
+
+`kj policy add "las PRs pueden tener hasta 500 líneas"` cambia ahora el límite de líneas que la política ya tiene, en vez de añadir otro a su lado que el más estricto seguía anulando.
+
+### v4.51.0: la política solo cambia con tu sello
 
 Un agente no podía escribir tu política, pero un cambio que llegara igualmente pasaba el commit y la CI, juzgado por la misma política que traía. Ahora un cambio en `policy.yml` o `rules.yml` se rechaza allí donde se usa (commit, CI y release) hasta que lo sellas con `kj harden --commit`, firmado desde tu móvil.
 
