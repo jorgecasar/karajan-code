@@ -261,6 +261,15 @@ describe("the governance config verifies by its sealed hash (KJC-TSK-1032)", () 
     expect(verifiedSupervisorFiles({ projectDir: repo }).files.has(policy)).toBe(false);
   });
 
+  it("a sealed policy.yml lifts its governance violation; an unsealed one keeps it", () => {
+    writeFileSync(join(repo, policy), "version: 1\nmax: 500\n");
+    const violations = [{ rule_id: "defaults.governance.write", file: policy }];
+    writeProvenance([{ file: policy, sha256: sha("version: 1\nmax: 500\n") }]);
+    expect(liftSealedSupervisorViolations({ projectDir: repo, violations }).violations).toEqual([]);
+    writeProvenance([{ file: policy, sha256: sha("version: 1\nmax: 200\n") }]);
+    expect(liftSealedSupervisorViolations({ projectDir: repo, violations }).violations).toEqual(violations);
+  });
+
   it("a sealed deletion verifies only while policy.yml stays gone", () => {
     writeProvenance([{ file: policy, deleted: true }]);
     expect(verifiedSupervisorFiles({ projectDir: repo }).files.has(policy)).toBe(true);

@@ -139,13 +139,14 @@ export function verifiedSupervisorFiles({ projectDir, trackedOnly = false }) {
  * mas laxo de lo que parece no pase por silencio (KJC-BUG-0212).
  */
 export function liftSealedSupervisorViolations({ projectDir, violations, trackedOnly = false }) {
-  const RULE = "defaults.supervisor.write";
-  if (!violations.some((v) => v.rule_id === RULE && v.file)) return { violations, lifted: 0 };
+  // KJC-TSK-1033: the governance config is lifted by the same seal.
+  const RULES = new Set(["defaults.supervisor.write", "defaults.governance.write"]);
+  if (!violations.some((v) => RULES.has(v.rule_id) && v.file)) return { violations, lifted: 0 };
   const sealed = verifiedSupervisorFiles({ projectDir, trackedOnly });
   // La violación sobre la PROPIA provenance solo se alza si la provenance
   // entera verificó — a medias no describe la verdad y sigue denegada.
   const liftable = (v) =>
-    v.rule_id === RULE
+    RULES.has(v.rule_id)
     && v.file
     && (sealed.files.has(v.file) || (v.file === PROVENANCE_FILE && sealed.complete === true));
   const kept = violations.filter((v) => !liftable(v));
