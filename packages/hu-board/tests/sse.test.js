@@ -50,7 +50,7 @@ afterEach(async () => {
  * collected `want` full SSE messages (each "\n\n"-terminated). Kills
  * the socket after, so the server's close handler fires.
  */
-function collectSseMessages(want, timeoutMs = 2000) {
+function collectSseMessages(want, timeoutMs = 2000, onFrame = () => {}) {
   return new Promise((resolve, reject) => {
     const req = http.get({ host: 'localhost', port, path: '/api/events' }, (res) => {
       let buf = '';
@@ -65,6 +65,7 @@ function collectSseMessages(want, timeoutMs = 2000) {
         while ((idx = buf.indexOf('\n\n')) !== -1) {
           frames.push(buf.slice(0, idx));
           buf = buf.slice(idx + 2);
+          onFrame(frames);
           if (frames.length >= want) {
             clearTimeout(timer);
             req.destroy();
@@ -87,9 +88,13 @@ describe('GET /api/events', () => {
   });
 
   it('streams a published bus event to the connected client', async () => {
-    // Kick the bus on the next tick so the client is already subscribed.
-    setTimeout(() => busMod.publish({ type: 'plan', planId: 'p1', projectId: 'proj' }), 50);
-    const frames = await collectSseMessages(2);
+    // KJC-BUG-0356: publishing on a fixed 50 ms timer raced a slow runner's
+    // connect (the event went out before the subscription). The server
+    // subscribes in the same tick it writes hello, so publish on hello.
+    const publishOnHello = (frames) => {
+      if (frames.length === 1) busMod.publish({ type: 'plan', planId: 'p1', projectId: 'proj' });
+    };
+    const frames = await collectSseMessages(2, 2000, publishOnHello);
     const dataFrame = frames.find((f) => f.startsWith('data:'));
     expect(dataFrame).toBeDefined();
     const payload = JSON.parse(dataFrame.replace(/^data:\s*/, ''));
