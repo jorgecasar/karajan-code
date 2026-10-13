@@ -214,6 +214,48 @@ describe("kj harden --commit (KJC-BUG-0161)", () => {
 // son los que vigilan la sesion, asi que nada externo podia decir si un guardia
 // instalado era autentico. Siguen gitignorados a proposito: lo que viaja y se
 // firma es su HUELLA, dentro de una procedencia que si esta trackeada.
+// KJC-TSK-1032 (owner's decision, 13-oct): the governance config is sealed with
+// the supervisor, so a policy change only enters with the human's signed act.
+describe("the seal covers the governance config (KJC-TSK-1032)", () => {
+  const policy = () => join(repo, ".karajan", "policy.yml");
+  beforeEach(() => {
+    writeFileSync(policy(), "version: 1\ninvariants: []\n");
+    git(["add", "-A"]);
+    git(["commit", "-qm", "policy", "--no-verify"]);
+  });
+
+  it("a changed policy.yml is sealed: hashed in the provenance and in the sealed commit", async () => {
+    writeFileSync(policy(), "version: 1\ninvariants:\n  - id: loc\n    kind: diff-threshold\n    metric: net_lines_added\n    max: 500\n");
+    const res = await commitSupervisorRegeneration({ projectDir: repo, kjVersion: "9.9.9", generation, ...HUMAN });
+    expect(res.committed).toBe(true);
+    const prov = JSON.parse(readFileSync(join(repo, PROVENANCE_FILE), "utf8"));
+    const sha = createHash("sha256").update(readFileSync(policy())).digest("hex");
+    expect(prov.files).toContainEqual({ file: ".karajan/policy.yml", sha256: sha });
+    expect(git(["show", "--name-only", "--format=", "HEAD"])).toContain(".karajan/policy.yml");
+  });
+
+  it("a staged policy.yml is part of the seal, not foreign work", async () => {
+    writeFileSync(policy(), "version: 1\ninvariants: []\n# loosened\n");
+    git(["add", ".karajan/policy.yml"]);
+    expect((await commitSupervisorRegeneration({ projectDir: repo, kjVersion: "9.9.9", generation, ...HUMAN })).committed).toBe(true);
+  });
+
+  it("a governance file the project does not have is not listed", async () => {
+    writeFileSync(policy(), "version: 1\ninvariants: []\n# v2\n");
+    await commitSupervisorRegeneration({ projectDir: repo, kjVersion: "9.9.9", generation, ...HUMAN });
+    const prov = JSON.parse(readFileSync(join(repo, PROVENANCE_FILE), "utf8"));
+    expect(prov.files.map((f) => f.file)).not.toContain(".karajan/rules.yml");
+  });
+
+  it("a deleted policy.yml is recorded as deleted and committed", async () => {
+    rmSync(policy());
+    expect((await commitSupervisorRegeneration({ projectDir: repo, kjVersion: "9.9.9", generation, ...HUMAN })).committed).toBe(true);
+    const prov = JSON.parse(readFileSync(join(repo, PROVENANCE_FILE), "utf8"));
+    expect(prov.files).toContainEqual({ file: ".karajan/policy.yml", deleted: true });
+    expect(git(["ls-files", ".karajan/policy.yml"]).trim()).toBe("");
+  });
+});
+
 describe("el sello cubre los guardias del Sentinel (KJC-BUG-0197)", () => {
   const writeGuard = (name, body) => {
     mkdirSync(join(repo, ".karajan", "harness"), { recursive: true });

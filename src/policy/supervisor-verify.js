@@ -11,7 +11,7 @@ import { resolve, sep } from "node:path";
 import { renderCanonicalHook } from "../harden/harden-engine.js";
 import { provenanceSignature } from "../harden/phone-sign.js";
 import { canonicalHarnessBody } from "../harden/sentinel-hooks.js";
-import { PROVENANCE_FILE } from "../harden/supervisor-commit.js";
+import { GOVERNANCE_FILES, PROVENANCE_FILE } from "../harden/supervisor-commit.js";
 
 const HOOKS_PREFIX = ".karajan/hooks/";
 const HARNESS_PREFIX = ".karajan/harness/";
@@ -67,6 +67,15 @@ export function verifiedSupervisorFiles({ projectDir, trackedOnly = false }) {
   const ROOTS = [HOOKS_PREFIX, HARNESS_PREFIX].map((p) => [p, resolve(projectDir, p)]);
   for (const entry of entries) {
     if (typeof entry?.file !== "string") continue;
+    // KJC-TSK-1032: the governance config has no canonical render; the sealed
+    // hash, signed by the roster where there is one, is the proof.
+    if (GOVERNANCE_FILES.includes(entry.file)) {
+      const abs = resolve(projectDir, entry.file);
+      let st = null;
+      try { st = lstatSync(abs); } catch { /* absent */ }
+      if (entry.deleted === true ? st === null : st?.isFile() && sha256(readFileSync(abs)) === entry.sha256) ok.add(entry.file);
+      continue;
+    }
     const kind = ROOTS.find(([prefix]) => entry.file.startsWith(prefix));
     if (!kind) continue;
     const [prefix, root] = kind;

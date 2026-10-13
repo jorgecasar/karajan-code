@@ -26,6 +26,10 @@ const HOOKS_PREFIX = ".karajan/hooks/";
 // veredictos son locales por diseño); lo que viaja y se firma es su HUELLA,
 // dentro de una procedencia que sí está trackeada.
 const HARNESS_PREFIX = ".karajan/harness/";
+// KJC-TSK-1032 (owner's decision, 13-oct): the governance config that travels
+// with the repo is sealed with the supervisor, so a policy change enters only
+// with the human's signed act. kj.config.yml is machine-local: CI never sees it.
+export const GOVERNANCE_FILES = [".karajan/policy.yml", ".karajan/rules.yml"];
 
 const sha256 = (abs) => createHash("sha256").update(readFileSync(abs)).digest("hex");
 
@@ -79,7 +83,7 @@ export async function commitSupervisorRegeneration({
   // KJC-BUG-0244 (grebla #958): el commit sellado solo lleva el supervisor, pero
   // un stage ajeno se quedaba en esta rama y el siguiente commit caía aquí con la
   // card equivocada. Se para ANTES de pedir nada al humano y se nombra.
-  const foreign = run(["diff", "--cached", "--name-only"]).split("\n").filter((f) => f && !f.startsWith(HOOKS_PREFIX) && f !== PROVENANCE_FILE);
+  const foreign = run(["diff", "--cached", "--name-only"]).split("\n").filter((f) => f && !f.startsWith(HOOKS_PREFIX) && f !== PROVENANCE_FILE && !GOVERNANCE_FILES.includes(f));
   if (foreign.length > 0) {
     throw new Error(
       `harden --commit: hay cambios en el stage que no son del supervisor (${foreign.slice(0, 5).join(", ")}${foreign.length > 5 ? ", …" : ""}): commitéalos en su rama o sácalos del stage (git restore --staged <ficheros>) antes de sellar`,
@@ -88,13 +92,17 @@ export async function commitSupervisorRegeneration({
   // Capa 4 (test adversarial 6-sep: un huérfano a init con pty falso y
   // prompts a ciegas llegó hasta aquí): nonce aleatorio tecleado de vuelta.
   seal.confirm(deps.confirm);
-  const drift = supervisorDrift({ projectDir, gitFn: run });
+  const tracked = new Set(run(["ls-files", "--", ...GOVERNANCE_FILES]).split("\n").filter(Boolean));
+  const governance = GOVERNANCE_FILES.filter((f) => existsSync(join(projectDir, f)) || tracked.has(f));
+  const governanceDrift = governance.length === 0 ? [] : run(["status", "--porcelain", "--", ...governance]).split("\n").map((l) => l.slice(3).trim()).filter(Boolean);
+  const drift = [...supervisorDrift({ projectDir, gitFn: run }), ...governanceDrift];
   // La provenance describe SIEMPRE el estado COMPLETO del supervisor (cazado
   // en el primer estreno real: un sello parcial pisaba al anterior y dejaba
   // ficheros sin respaldo). Borrados del drift ⇒ deleted (catch de codex).
   const current = [
     ...readdirSync(join(projectDir, HOOKS_PREFIX)).map((f) => HOOKS_PREFIX + f),
     ...harnessGuards(projectDir),
+    ...governance.filter((f) => existsSync(join(projectDir, f))),
   ].sort();
   // KJC-BUG-0197: un guardia BORRADO se anota como borrado, igual que un hook.
   // No hacía falta para desencadenar el re-sello (la lista encoge, así que la
@@ -159,7 +167,7 @@ export async function commitSupervisorRegeneration({
   // Por DIRECTORIO, no por fichero: un rename ya staged deja la ruta vieja
   // sin existir y `git add -- <vieja>` falla; `-A` sobre el dir del
   // supervisor versiona altas, cambios, borrados y renombrados por igual.
-  run(["add", "-A", "--", PROVENANCE_FILE, ".karajan/hooks"]);
+  run(["add", "-A", "--", PROVENANCE_FILE, ".karajan/hooks", ...governance]);
   run([
     "commit",
     "--no-verify",
@@ -168,6 +176,7 @@ export async function commitSupervisorRegeneration({
     "--",
     PROVENANCE_FILE,
     ".karajan/hooks",
+    ...governance,
   ]);
   logger.info?.(`harden --commit: ${hashed.length} fichero(s) de supervisor versionados con procedencia sellada`);
   return { committed: true, files: hashed };
