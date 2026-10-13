@@ -53,7 +53,7 @@ Invariants (the git gates enforce these — they are not suggestions):
 - The project RAG answers before you assume: `kj rag query` — never guess
   what the codebase does. In MCP hosts the same index is the native
   `kj_rag_query` tool: reach for it before grepping by hand.
-- Every piece of work has a tracked card in the Planning Game MCP before it starts (In Progress while you work it).
+- Every piece of work has a card in the HU Board before it starts (`kj hu list`, then `kj hu add --ref <id>`) and its replica in the Planning Game, created through its MCP/tools; move both as you work it.
 - Tests prove behavior: the failing test exists first (TDD), and the suite
   is never left red. Green is not proof: with `method_gates.mutation`
   declared, run `kj mutate --since <base>` after green and BEFORE the
