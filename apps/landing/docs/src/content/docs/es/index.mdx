@@ -65,7 +65,11 @@ El caveat que el loop engineering recalca — *los bucles desatendidos cometen e
 
 Las versiones más recientes, la última primero. Las anteriores están en [Arquitectura › Historia](/docs/es/architecture/history/) y en el [CHANGELOG](https://github.com/manufosela/karajan-code/blob/main/CHANGELOG.md).
 
-### v4.49.5: el fichero que nombras vuelve (actual)
+### v4.50.0: un tablero para kj y una réplica en el tuyo (actual)
+
+Con el Planning Game o un tablero externo como Jira o Linear, kj se apartaba y no mantenía HU Board. Ahora el HU Board es siempre el tablero de kj: cada card vive ahí, `kj hu add --ref <id>` enlaza su réplica en tu tracker y card-first reconoce la rama por cualquiera de los dos ids.
+
+### v4.49.5: el fichero que nombras vuelve
 
 Una consulta al RAG que nombra un fichero indexado devuelve ahora ese fichero primero, así que el gate rag-first se abre para una página recién indexada que el ranking dejaba fuera de los primeros resultados, como una página `.astro` en un índice grande. Se resuelven tres avisos altos o críticos de dependencias con versiones parcheadas dentro de los rangos existentes.
 

@@ -65,7 +65,11 @@ The caveat loop engineering insists on — *unattended loops make unattended mis
 
 The most recent releases, newest first. Older versions live in [Architecture › History](/docs/architecture/history/) and the [CHANGELOG](https://github.com/manufosela/karajan-code/blob/main/CHANGELOG.md).
 
-### v4.49.5: the file you name comes back (current)
+### v4.50.0: one board for kj, a replica in yours (current)
+
+With the Planning Game or an external board such as Jira or Linear, kj used to step aside and leave no HU Board. Now the HU Board is always kj's board: every card lives there, `kj hu add --ref <id>` links its replica in your tracker, and card-first recognises a branch by either id.
+
+### v4.49.5: the file you name comes back
 
 A RAG query that names an indexed file now returns that file first, so the rag-first gate opens for a freshly indexed page that ranking alone left out of the top hits, such as an `.astro` page in a large index. Three high or critical dependency advisories are cleared with patched releases inside the existing ranges.
 

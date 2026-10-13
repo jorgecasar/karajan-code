@@ -1797,6 +1797,12 @@ Una sesión que planificaba un proyecto grande mandó cinco avisos en una tarde,
 
 El mismo plan, compartido con `kj plan share`, disparó dos gates contra la salida del propio kj: sus ids llevan un sello de 14 dígitos que el gate de privacidad tomaba por un número de tarjeta, y su JSON contaba como código contra el presupuesto de la PR. Las dos exenciones toman la forma literal entera y nada más ancho. El catálogo de skills clonaba un repositorio entero con sus fixtures de evaluación, que luego ejecutaba el runner de tests del proyecto; ahora solo trae las skills. Y las guardas del Sentinel que solo viven en la máquina del usuario, que CI aceptaba por un hash conocido, las avala la firma del padrón sobre el sello.
 
+## Phase 142: v4.50.0, un tablero para kj y una réplica en el tuyo
+
+Desde KJC-TSK-0684, kj se apartaba cuando un proyecto declaraba el Planning Game o un tablero externo: `kj hu add` se negaba y el método prohibía a los agentes mantener un HU Board paralelo, porque un segundo tablero a medio llenar parecía peor que ninguno. En la práctica, kj se quedaba ciego a su propio trabajo justo en los proyectos con más proceso. El owner lo invirtió: el HU Board es siempre el tablero de kj y el tracker del equipo recibe una réplica. `kj hu add --ref <id>` enlaza las dos, el método pide ambas cards, el Steward registra los invariantes rotos en el HU Board en cualquier backend y card-first reconoce la rama por el id de la HU o por el de su réplica.
+
+Alrededor, una tanda de bugs de campo: `kj review --staged` por fin lee `--task-file`, así que la evidencia, como una documentación oficial, llega al reviewer; el pre-gate de Sonar encuentra el token que kj guardó en su home; una consulta al RAG que nombra un fichero indexado lo devuelve primero; se resuelven tres avisos de dependencias, y una batería de escenarios ejecuta los gates reales juntos en un proyecto temporal, como los encuentra una sesión.
+
 ## Decisiones Arquitectonicas Clave
 
 ### CLI wrapping vs llamadas directas a API

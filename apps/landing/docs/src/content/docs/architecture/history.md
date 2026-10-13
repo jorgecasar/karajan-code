@@ -1798,6 +1798,12 @@ One session planning a large project sent five reports in an evening, and togeth
 
 The same plan, shared with `kj plan share`, set off two gates against kj's own output: its ids carry a 14-digit timestamp that the privacy gate read as a card number, and its JSON counted as code against the PR budget. Both exemptions take the whole literal shape and nothing wider. The skills catalog cloned a whole repository with its evaluation fixtures, which a project's test runner then executed; it checks out only the skills now. And the Sentinel guards that only live on the user's machine, which CI used to accept by a known hash, are vouched by the roster's signature over the seal.
 
+## Phase 142: v4.50.0, one board for kj, a replica in yours
+
+Since KJC-TSK-0684 kj stepped aside when a project declared the Planning Game or an external board: `kj hu add` refused and the method told agents never to keep a parallel HU Board, on the grounds that a half-empty second board is worse than none. In practice that left kj blind to its own work on exactly the projects with the most process. The owner reversed it: the HU Board is always kj's board, and the team's tracker gets a replica. `kj hu add --ref <id>` links the two, the method asks for both cards, the Steward cards broken invariants on the HU Board on every backend, and card-first recognises a branch by the HU's id or by its replica's id.
+
+Around it, a field-bug run: `kj review --staged` finally reads `--task-file`, so evidence such as an official doc reaches the reviewer; the Sonar pre-gate finds the token kj saved in its home; a RAG query that names an indexed file returns that file first; three dependency advisories are cleared; and a scenario battery runs the real gates together in a throwaway project, the way a session meets them.
+
 ## Key Architectural Decisions
 
 ### CLI wrapping vs direct API calls

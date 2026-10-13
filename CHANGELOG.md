@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.50.0] - 2026-10-13
+
+### Changed
+
+- **The HU Board is always kj's board, and your tracker gets the replica** (KJC-BUG-0305, #2042): with the Planning Game or an external board (Linear, Jira, Trello...), `kj hu add` and `kj hu move` used to refuse, and kj told agents never to keep a parallel HU Board. Now the HU Board records every card on every backend, `kj hu add --ref <id>` links the card's replica in your tracker (`kj hu list` shows it), the method asks for both cards, and the Steward cards broken invariants on the HU Board, naming where to replicate them.
+- **Card-first checks the HU Board with an external tracker too** (KJC-BUG-0353): a live HU the branch names, by its own id or by its replica's id, passes at hu-board level instead of a mere check of the reference's shape. A tracker reference no HU links still passes, with the remedy in the note.
+
 ## [4.49.5] - 2026-10-13
 
 ### Fixed
