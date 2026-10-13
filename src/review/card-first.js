@@ -2,8 +2,8 @@
  * Card-first gate (KJC-TSK-0686, MG-A of épica KJC-PCS-0068): the rule
  * that work starts from a card moves from playbook text into the gate.
  * hu-board → the branch must reference a LIVE card (block by default);
- * planning-game/external → card-shaped reference required (warn default,
- * block via method_gates.card_first). Exemptions explicit and visible:
+ * planning-game/external → a live HU on the HU Board first, else a card-shaped
+ * reference (warn default, block via method_gates.card_first). Exemptions explicit and visible:
  * base branch and configured prefixes (releases). No escape (ADR 0015): a
  * gate an agent can switch off is a suggestion.
  */
@@ -40,7 +40,8 @@ async function findLiveCardInBranch(projectDir, branch) {
   for (const meta of await listPlans(projectDir)) {
     const plan = await loadPlan(projectDir, meta.planId);
     for (const h of plan.hus || []) {
-      for (const ref of [h.short_id, h.id]) {
+      // KJC-BUG-0353: an HU is also named by the id of its replica in an external tracker.
+      for (const ref of [h.short_id, h.id, h.external_ref]) {
         if (ref && refInBranch(ref, needle)) {
           if (LIVE_STATUSES.has(h.status)) return { ref, live: true, status: h.status };
           closedHit = { ref, live: false, status: h.status };
@@ -83,6 +84,10 @@ export async function checkCardFirst({ config = {}, projectDir = process.cwd(), 
   // result names its level so nobody mistakes branch-ref for tracker.
   const boardName = config.board?.name || backend;
   const effective = policy === "auto" ? "warn" : policy;
+  // KJC-BUG-0353: the HU Board is always kj's board (KJC-BUG-0305) — a live HU
+  // the branch names, or whose replica it names, is checked here, not guessed.
+  const huHit = await findLiveCardInBranch(projectDir, branch);
+  if (huHit?.live) return { ok: true, mode: "pass", ref: huHit.ref, level: "hu-board" };
   if (CARD_REF_RE.test(branch)) {
     const ref = branch.match(CARD_REF_RE)[0];
     const { verifyFn = verifyCardAlive } = deps;
@@ -105,7 +110,8 @@ export async function checkCardFirst({ config = {}, projectDir = process.cwd(), 
         reason: `branch references ${ref} but the card could not be verified against ${boardName} — ${v.note} (board.unverifiable: block refuses to approve a check kj did not make)`,
       };
     }
-    return { ok: true, mode: "pass", ref, level: v.level, ...(v.note ? { note: v.note } : {}) };
+    const huNote = `no live HU on the HU Board links ${ref}: kj hu add "…" --ref ${ref}`;
+    return { ok: true, mode: "pass", ref, level: v.level, note: v.note ? `${v.note}; ${huNote}` : huNote };
   }
   const reason = `no card reference in branch "${branch}" — card-first on ${boardName}: create the card there and name the branch after it (e.g. feat/ABC-123-summary)`;
   return effective === "block"
