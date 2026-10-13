@@ -7,11 +7,9 @@
  * a daily sweep must never flood the board with twins — and a green
  * invariant resolves it with the green evidence.
  *
- * kj only writes the board it owns (hu-board). planning-game and external
- * boards are never mirrored (KJC-TSK-0684: a half-empty parallel board is
- * worse than none): there the sweep reports synced:false LOUDLY, and the
- * Sentinel's inevitable notice (STW-C) pushes the host agent — who does
- * have the board's MCP — to card them.
+ * KJC-BUG-0305: the HU Board is always kj's board, so the cards land there on
+ * every backend. With planning-game or an external board the result names it
+ * (replicateIn): the host agent, who has that board's MCP, replicates them.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -34,13 +32,11 @@ const cardText = (r, brokenSince) => [
  */
 export async function syncProposedWork({ projectDir, config = {}, results = [], sweptAt }) {
   const backend = config.state_backend || "hu-board";
-  if (backend !== "hu-board") {
-    return { synced: false, reason: `the board lives in ${backend} — kj never mirrors a board it does not own; card the broken invariants through your agent's board tools` };
-  }
+  const replica = backend === "hu-board" ? {} : { replicateIn: backend };
   const map = readMap(projectDir);
   const broken = results.filter((r) => r.verdict === "broken");
   const okAgain = results.filter((r) => r.verdict === "ok" && map[r.id]);
-  if (broken.length === 0 && okAgain.length === 0) return { synced: true, created: 0, updated: 0, resolved: 0 };
+  if (broken.length === 0 && okAgain.length === 0) return { synced: true, created: 0, updated: 0, resolved: 0, ...replica };
 
   const plan = await backlogPlan(projectDir);
   let created = 0, updated = 0, resolved = 0;
@@ -64,5 +60,5 @@ export async function syncProposedWork({ projectDir, config = {}, results = [], 
   await savePlan(projectDir, plan);
   fs.mkdirSync(path.dirname(mapPath(projectDir)), { recursive: true });
   fs.writeFileSync(mapPath(projectDir), `${JSON.stringify(map, null, 2)}\n`);
-  return { synced: true, created, updated, resolved };
+  return { synced: true, created, updated, resolved, ...replica };
 }

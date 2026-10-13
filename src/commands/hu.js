@@ -62,15 +62,9 @@ export async function huCommand({ config = null, action, args = [], flags = {} }
   const projectDir = config?.projectDir || process.cwd();
   const emit = (obj, human) => { console.log(flags.json ? JSON.stringify(obj) : human); return obj; };
 
-  // KJC-TSK-0684 (issue #1287): with an external board declared, kj never
-  // maintains a parallel HU Board — writes are refused with the pointer.
-  if (config?.state_backend === "external" && (action === "add" || action === "move")) {
-    const name = config?.board?.name || "an external board";
-    throw new Error(
-      `this project's board lives in ${name} (state_backend: external) — create and move cards there, `
-      + `through your agent's MCP/tools. kj does not mirror external boards.`
-    );
-  }
+  // KJC-BUG-0305 (issue #2042): the HU Board is always kj's board. An external
+  // tracker coexists with it: each HU points at its replica there (--ref).
+  const externalBoard = config?.state_backend === "external" ? (config?.board?.name || "the external board") : null;
 
   if (action === "list") {
     const plans = await listPlans(projectDir);
@@ -84,12 +78,14 @@ export async function huCommand({ config = null, action, args = [], flags = {} }
           // KJC-TSK-0661: provenance — where a card came from is part of
           // the card. Older HUs predate the stamp: shown as "?".
           created_by: h.created_by || null, created_at: h.createdAt || null,
+          external_ref: h.external_ref || null,
         });
       }
     }
     if (flags.json) { console.log(JSON.stringify(rows)); return rows; }
     for (const r of rows) {
-      const origin = `${r.plan} · by ${r.created_by || "?"}${r.created_at ? ` · ${r.created_at.slice(0, 10)}` : ""}`;
+      const suffixes = [r.created_at?.slice(0, 10), r.external_ref].filter(Boolean).map((s) => ` · ${s}`).join("");
+      const origin = `${r.plan} · by ${r.created_by || "?"}${suffixes}`;
       console.log(`${(r.short_id || r.id).padEnd(28)} ${r.status.padEnd(8)} ${r.title}  [${origin}]`);
     }
     if (rows.length === 0) console.log("no HUs yet — create one with: kj hu add \"<story>\"");
@@ -164,7 +160,11 @@ export async function huCommand({ config = null, action, args = [], flags = {} }
       task_type: flags.taskType || undefined,
     });
     hu.created_by = creatorLabel();
+    if (flags.ref) hu.external_ref = String(flags.ref).trim();
     await savePlan(projectDir, plan);
+    if (externalBoard && !hu.external_ref) {
+      console.log(`→ replicate it in ${externalBoard} through your agent's MCP/tools and link both: kj hu add ... --ref <id in ${externalBoard}>`);
+    }
     const missing = [];
     if (hu.acceptance_criteria.length === 0) missing.push("acceptance criteria (--ac \"...\")");
     if (hu.acceptance_tests.length === 0) missing.push("tests (--tests \"...\")");
@@ -174,7 +174,7 @@ export async function huCommand({ config = null, action, args = [], flags = {} }
     return emit({
       id: hu.id, short_id: hu.short_id, status: hu.status, created_by: hu.created_by,
       acceptance_criteria: hu.acceptance_criteria, acceptance_tests: hu.acceptance_tests,
-      scope: hu.scope, task_type: hu.task_type,
+      scope: hu.scope, task_type: hu.task_type, external_ref: hu.external_ref || null,
     }, `✓ HU created: ${hu.short_id || hu.id} (pending, by ${hu.created_by}) — it shows up in \`kj board\``);
   }
 

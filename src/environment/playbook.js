@@ -30,20 +30,20 @@ const TARGET_FILES = {
 
 // ENV-D1 (KJC-TSK-0642): the tracking invariant names the CHOSEN state
 // backend — a playbook that says "board or PG" makes the host guess.
-// KJC-TSK-0684 (issue #1287): external boards (Linear, Trello, Jira…) are
-// first-class — card-first points at THE project's board, worked through
-// the host agent's own MCP/tools. kj never mirrors it: a half-empty
-// parallel board is worse than none.
+// KJC-BUG-0305 (issue #2042, replaces KJC-TSK-0684): the HU Board is always
+// kj's board. An external board (Linear, Trello, Jira…) coexists with it: the
+// host agent replicates each card there through its own MCP/tools, and
+// `kj hu add --ref` links the two.
 const BACKEND_TRACKING = {
   "hu-board": "Every piece of work has a tracked story/bug in the HU Board (`kj hu add` / `kj board`) before it starts — and `kj hu list` BEFORE `kj hu add`: reuse the existing card if one covers the work. Cards are permanent — never delete or recreate one; discard with `kj hu move <id> skipped`. `kj brief board` explains the board.",
-  "planning-game": "Every piece of work has a tracked card in the Planning Game MCP before it starts (In Progress while you work it).",
 };
 
 const externalTracking = (boardName) =>
-  `Every piece of work has a tracked card in ${boardName} — the project's board — before it starts (use its MCP/tools; move the card as you work it). kj does not mirror it: never create a parallel HU Board.`;
+  `Every piece of work has a card in the HU Board before it starts (\`kj hu list\`, then \`kj hu add --ref <id>\`) and its replica in ${boardName}, created through its MCP/tools; move both as you work it.`;
 
 function trackingLine(stateBackend, boardName) {
   if (stateBackend === "external") return externalTracking(boardName || "the project's external board");
+  if (stateBackend === "planning-game") return externalTracking("the Planning Game");
   return BACKEND_TRACKING[stateBackend] || BACKEND_TRACKING["hu-board"];
 }
 

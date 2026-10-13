@@ -315,6 +315,7 @@ export function registerMeta(program, { pkgVersion }) {
     .option("--scope <text>", "Scope of the story (files/areas)")
     .option("--task-type <type>", "sw | infra | doc | add-tests | refactor")
     .option("--criteria <text>", "Legacy alias for a single acceptance criterion")
+    .option("--ref <id>", "Id of this card's replica in the external tracker (Planning Game, Jira, Linear...)")
     .option("--json", "Machine-readable output")
     .action(async (title, flags) => {
       await withConfig(pkgVersion, "hu", flags, async ({ config }) => {
