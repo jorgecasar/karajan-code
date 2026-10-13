@@ -1,7 +1,7 @@
 > **⚠️ README de v3 — archivo histórico.** Este documento describe el pipeline headless v3 tal y como se anunció. Karajan v4 se une al agente de IA con el que ya trabajas — empieza por el **[README actual](README.es.md)** o [karajancode.com](https://karajancode.com). El pipeline descrito abajo sigue vivo como modo headless de v4.
 
 <p align="center">
-  <img src="karajan-code-logo-small.png" alt="Karajan Code" width="180">
+  <img src="https://karajancode.com/img/logo-240.png" alt="Karajan Code" width="180">
 </p>
 
 <h1 align="center">Karajan Code</h1>

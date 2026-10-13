@@ -33,6 +33,7 @@ export default defineConfig({
 			logo: {
 				src: './src/assets/karajan-orbit.svg',
 			},
+			favicon: '/favicon-robot.svg',
 			defaultLocale: 'root',
 			locales: {
 				root: { label: 'English', lang: 'en' },
