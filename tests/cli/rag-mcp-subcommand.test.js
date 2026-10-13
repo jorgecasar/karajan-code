@@ -4,21 +4,26 @@ import path from "node:path";
 
 const KJ = path.resolve(process.cwd(), "bin/kj.js");
 
+// KJC-BUG-0352: kj loads its CLI before the MCP server answers; under the
+// full parallel suite that took more than the old 6 s. A hang detector only.
+const RESPONSE_TIMEOUT_MS = 60_000;
+
 function send(child, msg) {
   return new Promise((resolve, reject) => {
     let buf = "";
+    const timer = setTimeout(() => reject(new Error("timeout")), RESPONSE_TIMEOUT_MS);
     const onData = (chunk) => {
       buf += chunk.toString();
       const nl = buf.indexOf("\n");
       if (nl !== -1) {
         const line = buf.slice(0, nl);
         child.stdout.off("data", onData);
+        clearTimeout(timer);
         try { resolve(JSON.parse(line)); } catch (e) { reject(e); }
       }
     };
     child.stdout.on("data", onData);
     child.stdin.write(JSON.stringify(msg) + "\n");
-    setTimeout(() => reject(new Error("timeout")), 6000);
   });
 }
 
