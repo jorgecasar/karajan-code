@@ -95,19 +95,33 @@ describe("release check — policy at the effect boundary", () => {
 describe("release check — first release, no previous tag", () => {
   it("the kj setup commit is not judged; a later write to the supervisor still is", async () => {
     git("tag", "-d", "v1.0.0");
+    // KJC-TSK-1033: the policy the setup installs is the setup's, not an unsealed change.
+    git("rm", "-q", ".karajan/policy.yml"); git("commit", "-qm", "no policy yet");
     write(".karajan/policy.yml", "version: 1\nroles:\n  coder:\n    write: { deny: ['**/*.secret'], enforcement: deny }\n");
-    git("add", "-A"); git("commit", "-qm", "policy");
     write(".karajan/hooks/pre-commit", "hook\n");
     write(".claude/settings.json", "{}\n");
     git("add", "-A"); git("commit", "-qm", "chore(kj): setup");
     const clean = await policy();
-    expect(clean.ok).toBe(true);
+    expect(clean.ok, clean.detail).toBe(true);
     commit(".karajan/hooks/pre-commit", "an agent edits the hook");
     const red = await policy();
     expect(red.ok).toBe(false);
     expect(red.detail).toContain("defaults.supervisor.write");
     expect(red.detail).toContain(".karajan/hooks/pre-commit");
     expect(red.detail).not.toContain(".claude/settings.json"); // still as the setup left it
+  });
+
+  // KJC-TSK-1033: a policy change committed after the setup without the human's seal.
+  it("a policy.yml changed after the setup and never sealed is judged", async () => {
+    git("tag", "-d", "v1.0.0");
+    write(".karajan/hooks/pre-commit", "hook\n");
+    write(".karajan/policy.yml", "version: 1\n");
+    git("add", "-A"); git("commit", "-qm", "chore(kj): setup");
+    write(".karajan/policy.yml", "version: 1\ninvariants: []\n");
+    git("add", ".karajan/policy.yml"); git("commit", "-qm", "loosened without a seal");
+    const red = await policy();
+    expect(red.ok).toBe(false);
+    expect(red.detail).toContain("defaults.governance.write");
   });
 
   it("a deny violation committed before the setup is still judged", async () => {

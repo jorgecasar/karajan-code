@@ -202,4 +202,22 @@ describe("supervisor paths in the prose of a text option", () => {
   });
 });
 
+// KJC-TSK-1033: the governance config only enters sealed. A diff touching it is a
+// security violation the seal lifts, wherever the change came from.
+describe("governance config in a diff (KJC-TSK-1033)", () => {
+  const { policy } = load("version: 1\n");
+
+  it("a diff touching policy.yml or rules.yml is a security deny that names the seal", () => {
+    for (const file of [".karajan/policy.yml", ".karajan/rules.yml"]) {
+      const [v] = checkStagedDiff(policy, { role: "coder", files: [file], netLinesAdded: 1 });
+      expect(v, file).toMatchObject({ rule_id: "defaults.governance.write", file, enforcement: "deny", class: "security" });
+      expect(v.reason).toMatch(/kj harden --commit/);
+    }
+  });
+
+  it("other config files are not governance", () => {
+    expect(checkStagedDiff(policy, { role: "coder", files: [".karajan/policy-anchor.json", "src/policy.yml"], netLinesAdded: 1 })).toEqual([]);
+  });
+});
+
 // (globToRegExp/matchesAny se prueban en tests/governance/glob.test.js — #1429.)

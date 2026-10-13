@@ -31,6 +31,13 @@ export const SUPERVISOR_DEFAULTS = [
     pattern: /\.claude\/settings\.json\b|\.karajan\/(hooks|harness)\/|\.karajan\/supervisor-provenance\.json\b/,
     message: "nombra ficheros del supervisor — solo el humano los modifica, fuera de la sesión",
   },
+  {
+    // KJC-TSK-1033 (owner's decision, 13-oct): a policy change is authorized where
+    // it is USED (commit, CI, release), whatever wrote it: only the human's seal lifts it.
+    id: "defaults.governance.write",
+    pattern: /(^|\/)\.karajan\/(policy|rules)\.yml\b/,
+    message: "es configuración de gobierno: solo entra sellada por la persona (kj harden --commit, firmado desde su móvil)",
+  },
 ];
 
 // Tools del harness: mapeo acción → capability del kernel. Registro cerrado

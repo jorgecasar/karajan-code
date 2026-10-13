@@ -29,7 +29,7 @@ async function withoutSetupInstalls(projectDir, setup, violations) {
   const installed = new Set(added.exitCode === 0 ? added.stdout.split("\n").map((s) => s.trim()).filter(Boolean) : []);
   const kept = [];
   for (const v of violations) {
-    if (v.rule_id === "defaults.supervisor.write" && installed.has(v.file)) {
+    if ((v.rule_id === "defaults.supervisor.write" || v.rule_id === "defaults.governance.write") && installed.has(v.file)) {
       const changed = await runCommand("git", ["-C", projectDir, "diff", "--quiet", setup, "HEAD", "--", v.file]);
       if (changed.exitCode === 0) continue;
     }
