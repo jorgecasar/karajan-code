@@ -1804,6 +1804,12 @@ Since KJC-TSK-0684 kj stepped aside when a project declared the Planning Game or
 
 Around it, a field-bug run: `kj review --staged` finally reads `--task-file`, so evidence such as an official doc reaches the reviewer; the Sonar pre-gate finds the token kj saved in its home; a RAG query that names an indexed file returns that file first; three dependency advisories are cleared; and a scenario battery runs the real gates together in a throwaway project, the way a session meets them.
 
+## Phase 143: v4.51.0, the policy changes only with your seal
+
+Preparing a demo, the owner asked the right question: not whether an agent can find a way to write the policy, since some way presumably always exists, but whether an unauthorized change can be used. It could. The Sentinel denied every write to `policy.yml` from the session, through Edit, Write and any Bash that writes a repo file, yet a change that landed anyway was committed, and `kj policy check` judged the PR against the very policy the PR brought. Authorization was checked only where the file was written.
+
+Now it is checked where it is used. A new engine rule, `defaults.governance.write`, makes any diff touching `policy.yml` or `rules.yml` a security deny in the commit gate, in CI and in the release check. The way out is the human act that already sealed the supervisor: `kj harden --commit` hashes those files into the signed provenance, and the verifier lifts the deny only while the file matches the sealed hash. A scenario runs the whole story with a real signature checked against the roster.
+
 ## Key Architectural Decisions
 
 ### CLI wrapping vs direct API calls
