@@ -44,7 +44,15 @@ function mergeFragment(doc, frag) {
       }
     }
   }
-  if (frag.invariants) out.invariants = [...(doc.invariants || []), ...frag.invariants];
+  // KJC-BUG-0355: a threshold on a metric already measured CHANGES that invariant
+  // (keeping its id): a second one beside it would leave the stricter ruling.
+  const invariants = [...(doc.invariants || [])];
+  for (const inv of frag.invariants || []) {
+    const same = invariants.findIndex((cur) => cur?.kind === inv?.kind && cur?.metric === inv?.metric);
+    if (same === -1) invariants.push(inv);
+    else invariants[same] = { ...invariants[same], ...inv, id: invariants[same].id };
+  }
+  if (frag.invariants) out.invariants = invariants;
   return out;
 }
 
