@@ -65,7 +65,11 @@ The caveat loop engineering insists on — *unattended loops make unattended mis
 
 The most recent releases, newest first. Older versions live in [Architecture › History](/docs/architecture/history/) and the [CHANGELOG](https://github.com/manufosela/karajan-code/blob/main/CHANGELOG.md).
 
-### v4.51.0: the policy changes only with your seal (current)
+### v4.51.1: a spoken threshold that really changes (current)
+
+`kj policy add "PRs can have up to 500 lines"` now changes the line limit the policy already has, instead of adding a second one beside it that the stricter limit kept overruling.
+
+### v4.51.0: the policy changes only with your seal
 
 An agent could not write your policy, but a change that landed anyway went through commit and CI, judged by the very policy it brought. Now a change to `policy.yml` or `rules.yml` is refused wherever it is used, commit, CI and release, until you seal it with `kj harden --commit`, signed from your phone.
 
