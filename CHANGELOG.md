@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.49.5] - 2026-10-13
+
+### Fixed
+
+- **A RAG query that names an indexed file returns that file first** (KJC-BUG-0348, #2115, #1995): ranking alone decided the hits, and in a large index a freshly indexed `.astro` page never made the top results, neither by its path nor by its text, so the rag-first gate kept blocking it. `kj rag query` and `kj_rag_query` now put the first chunk of a file the question names (full path or file name) ahead of the ranked hits, within `topK`.
+- **Three high or critical dependency advisories cleared** (KJC-BUG-0351, #994): `@modelcontextprotocol/sdk` 1.32.1, `proxy-addr` 2.0.8 and `source-map-js` 1.2.2, each inside the range its parent already allows.
+- **A plan HU whose acceptance test fails is never approved** (KJC-BUG-0331, #2091): fixed by KJC-BUG-0332 in 4.49.2 and now covered by the scenario battery.
+
 ## [4.49.4] - 2026-10-12
 
 ### Fixed

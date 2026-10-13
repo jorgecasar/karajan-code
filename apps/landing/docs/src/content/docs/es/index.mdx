@@ -65,7 +65,11 @@ El caveat que el loop engineering recalca — *los bucles desatendidos cometen e
 
 Las versiones más recientes, la última primero. Las anteriores están en [Arquitectura › Historia](/docs/es/architecture/history/) y en el [CHANGELOG](https://github.com/manufosela/karajan-code/blob/main/CHANGELOG.md).
 
-### v4.49.4: la evidencia que el reviewer lee (actual)
+### v4.49.5: el fichero que nombras vuelve (actual)
+
+Una consulta al RAG que nombra un fichero indexado devuelve ahora ese fichero primero, así que el gate rag-first se abre para una página recién indexada que el ranking dejaba fuera de los primeros resultados, como una página `.astro` en un índice grande. Se resuelven tres avisos altos o críticos de dependencias con versiones parcheadas dentro de los rangos existentes.
+
+### v4.49.4: la evidencia que el reviewer lee
 
 `kj review --staged --task-file` entrega ahora el fichero al reviewer: la evidencia que pasaba una sesión (una documentación oficial, una especificación) se perdía, y el reviewer seguía rechazando lo que nunca vio. El pre-gate de Sonar encuentra también el token que kj guardó en su home, así que un token válido ya no bloquea cada commit con código.
 
