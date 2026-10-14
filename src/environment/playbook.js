@@ -70,6 +70,8 @@ Invariants (the git gates enforce these — they are not suggestions):
 - Every diff is reviewed by a DIFFERENT AI before it is committed
   (\`kj review --staged\`): verdicts bind to the exact diff — change the code
   and it must be reviewed again. Disagree with a rejection? \`kj solomon\`.
+  A correction from the other AI is the method working: apply it and move
+  on, no apology, and never report it as your mistake.
 ${panel ? `${panel}\n` : ""}- Security findings are never overridable — not even by arbitration. You
   absorb the security role: \`kj brief security\` states what must be true.
   Task touches auth, user input, secrets, network or deps? Run

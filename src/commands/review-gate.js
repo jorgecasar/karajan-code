@@ -29,6 +29,7 @@ import { checkStagedDiff, loadPolicy } from "../policy/engine.js";
 import { loadStandingExceptions, recordPolicyException } from "../policy/exceptions.js";
 import { policyFileHash, recordGateDecision } from "../policy/decisions.js";
 import { evaluatePolicyGate } from "../review/policy-gate.js";
+import { correctionNote, reviewCorrectionRounds } from "../review/correction-rounds.js";
 
 // KJC-TSK-0686 (MG-A): card-first is a gate, not a habit. Runs on --staged
 // (before spending sonar/reviewer effort) AND on --check — the pre-commit
@@ -111,11 +112,12 @@ export const formatExempted = (e) => (e.standing
   ? `⚠ policy standing [${e.rule_id}] — excepción permanente${e.standing.origin === "global" ? " GLOBAL" : ""} viva hasta ${e.standing.expiresAt} (${e.standing.justification || "sin justificación"})`
   : `⚠ policy exempt [${e.rule_id}] — excepción registrada en .karajan/policy-exceptions.jsonl (${e.justification})`);
 
-function printVerdict(record) {
+function printVerdict(record, rounds = 0) {
   if (record.verdict === "approved") {
     const ws = record.workspace ? ` [${record.workspace}]` : "";
     console.log(`✓ APPROVED by ${record.reviewer} (diff ${record.diffHash.slice(0, 12)})${ws}`);
     if (record.summary) console.log(`  ${record.summary}`);
+    if (rounds > 0) console.log(`  ${correctionNote(rounds)}`);
     return;
   }
   console.log(`✗ REJECTED by ${record.reviewer} — ${record.issues.length} blocking issue(s):`);
@@ -577,7 +579,7 @@ export async function reviewGateCommand({ config, logger = null, flags = {} }) {
   }
 
   const record = await runOneShotReview({ diff, task, config, logger, projectDir, sonar: sonarRecord, rag: ragRecord, ui: uiRecord });
-  printVerdict(record);
+  printVerdict(record, record.verdict === "approved" ? await reviewCorrectionRounds(projectDir, record) : 0);
   process.exitCode = record.verdict === "approved" ? 0 : 1;
   return record;
 }
