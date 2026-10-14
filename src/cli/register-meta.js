@@ -306,6 +306,14 @@ export function registerMeta(program, { pkgVersion }) {
         await worktreeCommand({ config, action: "done", args: [slug], flags });
       });
     });
+  wt.command("prune")
+    .option("--dry-run", "List what would be retired and why, touching nothing")
+    .description("Retire kj lanes that are provably abandoned (clean, no own commits, no live process); the rest are listed with their reason")
+    .action(async (flags) => {
+      await withConfig(pkgVersion, "worktree", flags, async ({ config }) => {
+        await worktreeCommand({ config, action: "prune", flags });
+      });
+    });
 
   const hu = program.command("hu").description("Track work in the HU Board from any host agent (card first)");
   hu.command("add <title>")

@@ -11,13 +11,15 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { bootstrapWorktree } from "../hu/worktree-bootstrap.js";
+import { classifyLanes, liveProcesses } from "../hu/lane-prune.js";
+import { recordGateDecision } from "../policy/decisions.js";
 
 const execFileAsync = promisify(execFile);
 const WORKTREE_DIR = ".kj/worktrees"; // shared with the headless lanes
 
 const SLUG_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
-export async function worktreeCommand({ config = null, action, args = [], flags = {} }) {
+export async function worktreeCommand({ config = null, action, args = [], flags = {}, deps = {} }) {
   const projectDir = config?.projectDir || process.cwd();
   const git = (gitArgs, cwd = projectDir) => execFileAsync("git", gitArgs, { cwd });
   const lanePath = (slug) => path.join(projectDir, WORKTREE_DIR, slug);
@@ -72,5 +74,27 @@ export async function worktreeCommand({ config = null, action, args = [], flags 
     return { removed: true, slug };
   }
 
-  throw new Error(`unknown action "${action}" — use: start | list | done`);
+  if (action === "prune") {
+    const { processes = liveProcesses() } = deps;
+    const lanes = await classifyLanes({ git, laneRoot: path.join(projectDir, WORKTREE_DIR), base: config?.base_branch || "main", processes, now: deps.now });
+    const abandoned = lanes.filter((l) => l.reasons.length === 0);
+    const kept = lanes.filter((l) => l.reasons.length > 0);
+    for (const l of kept) console.log(`kept    ${l.slug.padEnd(24)} ${l.reasons.join("; ")}`);
+    if (lanes.length === 0) console.log("no kj lanes");
+    if (flags.dryRun) {
+      for (const l of abandoned) console.log(`would retire ${l.slug} (${l.branch ?? "detached"})`);
+      return { wouldRemove: abandoned, kept };
+    }
+    for (const l of abandoned) {
+      await git(["worktree", "remove", l.path]);
+      if (l.branch) await git(["branch", "-D", l.branch]);
+      console.log(`✓ retired ${l.slug} (${l.branch ?? "detached"})`);
+    }
+    if (abandoned.length > 0) {
+      recordGateDecision(projectDir, { decision: "allow", chokepoint: "tool", kind: "worktree-prune", lanes: abandoned.map((l) => l.slug) });
+    }
+    return { removed: abandoned, kept };
+  }
+
+  throw new Error(`unknown action "${action}" — use: start | list | done | prune`);
 }
