@@ -141,6 +141,12 @@ jobs:
       - name: Run tests
         run: npx vitest run --reporter=default --reporter=github-actions
 
+      # KJC-TSK-1028: the scenario battery (real git, the real harness, kj as
+      # a subprocess) runs apart from the unit suite; kj release check requires
+      # it green too.
+      - name: Run scenario battery
+        run: npm run test:scenarios
+
       # The hu-board package ships its own package.json + vitest config,
       # and the root vitest run excludes packages/** — so without these
       # two steps its test suite never runs in CI. Regression cover for

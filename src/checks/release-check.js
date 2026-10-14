@@ -227,11 +227,27 @@ export async function dualPublishCheck(projectDir, pkg, run = runCommand) {
   }
 }
 
+/**
+ * QS-A3 (KJC-TSK-1028): a project that carries a scenario battery
+ * (`test:scenarios`) ships only with it green. Gate clashes and holes in the
+ * plan path only show end to end, and the unit suite never runs them.
+ */
+export async function scenarioBatteryCheck(projectDir, pkg, run = runCommand) {
+  if (!pkg?.scripts?.["test:scenarios"]) return null;
+  try {
+    const res = await run("npm", ["run", "test:scenarios"], { cwd: projectDir });
+    return { name: "scenarios", ok: res.exitCode === 0, detail: res.exitCode === 0 ? "scenario battery green" : `npm run test:scenarios exited ${res.exitCode}` };
+  } catch (err) {
+    return { name: "scenarios", ok: false, detail: `npm run test:scenarios failed to run: ${err.message}` };
+  }
+}
+
 export async function runReleaseCheck({ projectDir = process.cwd(), config = {}, forCommand = null } = {}) {
   const { checks, version, pkg } = await genericChecks(projectDir);
   const pack = await packPrivacyCheck(projectDir, pkg);
   const dual = await dualPublishCheck(projectDir, pkg);
-  checks.push(...(pack ? [pack] : []), ...(dual ? [dual] : []), await policyRangeCheck(projectDir), ...await declaredItems(projectDir, config, version));
+  const scenarios = await scenarioBatteryCheck(projectDir, pkg);
+  checks.push(...[pack, dual, scenarios].filter(Boolean), await policyRangeCheck(projectDir), ...await declaredItems(projectDir, config, version));
   if (forCommand === null) return { ok: checks.every((c) => c.ok), version, checks };
   // A lifted check stays RED in the report: the fact is not falsified, it just
   // stops blocking the command that exists to repair it. The mark travels ON
