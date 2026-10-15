@@ -118,7 +118,7 @@ export function scanForInjection(text, opts = {}) {
   for (const re of COMMENT_BLOCK_RE) {
     let m;
     while ((m = re.exec(text)) !== null) {
-      if (m[0].length > maxBlock) {
+      if (proseLength(m[0]) > maxBlock) {
         findings.push({
           type: "comment_block",
           pattern: `block ${m[0].length} chars (max ${maxBlock})`,
@@ -174,6 +174,22 @@ export function scanDiff(diff, opts = {}) {
 }
 
 // --- Helpers ---
+
+/**
+ * KJC-TSK-0743: the size of a comment block that counts against the limit. In a
+ * JSDoc block (`/**`), tag lines (`* @typedef`, `* @property`...) are structure,
+ * not prose: they are left out unless a single one runs past 300 chars. Any
+ * instruction inside a tag line is still caught by the directive patterns.
+ */
+const JSDOC_TAG_LINE = /^\s*\*\s*@[A-Za-z]+/;
+const MAX_TAG_LINE = 300;
+function proseLength(block) {
+  if (!block.startsWith("/**")) return block.length;
+  return block
+    .split("\n")
+    .filter((line) => !(JSDOC_TAG_LINE.test(line) && line.length <= MAX_TAG_LINE))
+    .join("\n").length;
+}
 
 function excerpt(text, index) {
   const start = Math.max(0, index - 20);
