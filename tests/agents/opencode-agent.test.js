@@ -97,6 +97,16 @@ describe("OpenCodeAgent", () => {
       const result = await agent.runTask({ prompt: "t", role: "coder" });
       expect(result).toEqual(expected);
     });
+
+    // KJC-BUG-0358: with --format json opencode reports a failure as an error
+    // event on stdout and leaves stderr empty (recorded from opencode 1.1.48).
+    it("a failure reported as a JSON error event on stdout reaches kj with its message", async () => {
+      const event = { type: "error", sessionID: "ses_x", error: { name: "UnknownError", data: { message: "Error: Unable to connect. Is the computer able to access the url?" } } };
+      runCommand.mockResolvedValue({ exitCode: 1, stdout: `${JSON.stringify(event)}\n`, stderr: "" });
+      const result = await new OpenCodeAgent("opencode", baseConfig, logger).reviewTask({ prompt: "r", role: "reviewer" });
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatch(/Unable to connect/);
+    });
   });
 
   // merged-from: 2 stdin/env tests collapsed. OpenCode does not touch stdin

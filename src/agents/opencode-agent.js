@@ -33,6 +33,20 @@ function extractOpenCodeUsage(text) {
   return null;
 }
 
+/**
+ * KJC-BUG-0358: with --format json opencode reports a failure as an error event
+ * on stdout ({"type":"error","error":{"name","data":{"message"}}}) and leaves
+ * stderr empty. Returns that message, or "" when there is no error event.
+ */
+function openCodeErrorEvent(stdout) {
+  for (const line of String(stdout ?? "").split("\n")) {
+    let event;
+    try { event = JSON.parse(line); } catch { continue; }
+    if (event?.type === "error") return event.error?.data?.message ?? event.error?.name ?? "opencode reported an error";
+  }
+  return "";
+}
+
 export class OpenCodeAgent extends BaseAgent {
   async runTask(task) {
     const role = task.role || "coder";
@@ -57,6 +71,7 @@ export class OpenCodeAgent extends BaseAgent {
       timeout: task.timeoutMs
     });
     const usage = extractOpenCodeUsage(res.stdout) ?? extractOpenCodeUsage(res.stderr);
-    return { ok: res.exitCode === 0, output: res.stdout, error: res.stderr, exitCode: res.exitCode, ...usage };
+    const error = res.exitCode === 0 ? res.stderr : res.stderr || openCodeErrorEvent(res.stdout);
+    return { ok: res.exitCode === 0, output: res.stdout, error, exitCode: res.exitCode, ...usage };
   }
 }
