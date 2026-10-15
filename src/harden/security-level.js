@@ -22,6 +22,7 @@ export const SECURITY_LEVEL_FILE = ".karajan/security-level.json";
 export const DEFAULT_LEVEL = "max";
 
 const levelPath = (projectDir) => join(projectDir, SECURITY_LEVEL_FILE);
+const NO_PHONE = "no-phone-enrolled";
 const recordBytes = (record) => `${JSON.stringify(record, null, 2)}\n`;
 const unsigned = ({ level, since }) => ({ level, since });
 
@@ -43,6 +44,12 @@ export function readSecurityLevel({ projectDir, home } = {}) {
   if (record?.level === "max") return { level: "max", source: "file", since: record.since };
   if (record?.level !== "normal") return invalid("declara un nivel que no existe");
   const keys = readEnrolledKeys({ projectDir, home });
+  // KJC-TSK-1045 (ADR 0020): lowered at the terminal while no phone existed; it
+  // lasts only while none does, since every act at normal still asks for the human layers.
+  if (record.unsigned === NO_PHONE && !record.signature) {
+    if (keys.size === 0) return { level: "normal", source: "file", since: record.since, unsigned: true };
+    return invalid("el nivel normal se bajó sin móvil y ya hay uno enrolado; vale como máxima hasta bajarlo firmado");
+  }
   const check = verifySignedFiles({ sig: record.signature, files: signedFilesOf(record), keys });
   if (!check.ok) return invalid(`el nivel normal ${check.reason}; vale como máxima`);
   return { level: "normal", source: "file", since: record.since, signer: record.signature.signer };
@@ -74,6 +81,15 @@ export async function lowerSecurityLevel({ projectDir, home, kjVersion, env, tty
   act.refuse({ env, tty, ancestry: deps.ancestry ?? {} });
   const current = readSecurityLevel({ projectDir, home });
   if (current.level === "normal") return { changed: false, level: current };
+  // KJC-TSK-1045 (ADR 0020): with no phone anywhere, max only blocks; the human
+  // layers and the typed code are the proof, and the record says it is unsigned.
+  if (readEnrolledKeys({ projectDir, home }).size === 0) {
+    act.confirm(deps.confirm);
+    mkdirSync(dirname(levelPath(projectDir)), { recursive: true });
+    writeFileSync(levelPath(projectDir), recordBytes({ level: "normal", since: new Date().toISOString(), unsigned: NO_PHONE }), "utf8");
+    logger.info?.(`${act.label}: nivel normal sin firma (no hay ningún móvil enrolado); en cuanto enroles uno vuelve a valer la máxima. ${PHONE_ENROLL}`);
+    return { changed: true, level: readSecurityLevel({ projectDir, home }) };
+  }
   const phone = deps.phone ?? { enrolled: isPhoneEnrolled, request: requestPhoneSignature };
   if (!phone.enrolled({ home })) throw new Error(`${act.label}: bajar el nivel se firma con el móvil y no hay ninguno enrolado. ${PHONE_ENROLL}`);
   act.confirm(deps.confirm);

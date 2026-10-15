@@ -1,4 +1,5 @@
 // KJC-TSK-0995 (HUM-D, ADR 0018): kj security show|normal|max.
+import { generateKeyPairSync } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { securityCommand } from "../../src/commands/security.js";
 import { SECURITY_LEVEL_FILE } from "../../src/harden/security-level.js";
+import { addSigner } from "../../src/harden/phone-sign.js";
 import { setNormalLevel } from "../_fixtures/set-normal-level.js";
 
 let repo, home, lines;
@@ -41,13 +43,24 @@ describe("kj security", () => {
     expect(lines[1]).toMatch(/^origen {2}registrado en \.karajan\/security-level\.json desde 20/);
   });
 
-  it("normal: the catalog act; refused without a phone, with the way to enroll, and exit 1", async () => {
+  it("normal: with a phone in the roster but none on this machine it is refused, with the way to enroll, and exit 1", async () => {
     await run("max");
+    addSigner(generateKeyPairSync("ed25519").publicKey.export({ type: "spki", format: "der" }).subarray(-32).toString("base64"), { projectDir: repo });
     lines = [];
     const deps = { env: {}, ttyHuman: true, ancestry: { readProc: () => ({ ppid: 1, cmd: "bash" }) }, phone: { enrolled: () => false } };
     expect(await run("normal", deps)).toBe(1);
     expect(lines[0]).toMatch(/^kj security normal: kj security normal: bajar el nivel se firma con el móvil y no hay ninguno enrolado.*kj identity enroll-phone/);
     expect(await run("normal", { env: { CLAUDECODE: "1" } })).toBe(1);
     expect(lines[1]).toMatch(/es un acto humano/);
+  });
+
+  // KJC-TSK-1045 (ADR 0020): with no phone anywhere, a person at the terminal lowers it.
+  it("normal: with no phone anywhere, a person at the terminal lowers it with the typed code", async () => {
+    await run("max");
+    const deps = { env: {}, ttyHuman: true, ancestry: { readProc: () => ({ ppid: 1, cmd: "bash" }) }, confirm: (nonce) => nonce };
+    expect(await run("normal", deps)).toBe(0);
+    lines = [];
+    await run("show");
+    expect(lines[0]).toMatch(/nivel {3}normal/);
   });
 });
