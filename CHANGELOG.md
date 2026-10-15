@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.52.0] - 2026-10-15
+
+### Added
+
+- **`kj worktree prune` retires provably abandoned kj lanes** (KJC-TSK-1036): a lane counts as abandoned only when it has no uncommitted changes, no ignored files outside regenerable directories, no commits ahead of its base and no live process inside it (with processes it cannot see, it also waits 24 h of idleness). `--dry-run` lists what it would retire; every retirement is recorded as a gate decision.
+- **A release requires the scenario battery green** (KJC-TSK-1028): `kj release check` gains a `scenarios` item for any project with a `test:scenarios` script, red when the battery fails or cannot run, and CI runs the battery on every PR.
+
+### Changed
+
+- **A cross-AI correction is named as the method working** (KJC-TSK-1017): the method block tells the agent to apply a correction from the other AI and move on, with no apology; `kj review` names the rejected rounds on the branch before an approval as a review correction, and `kj run` does the same in its reviewer message.
+
+### Fixed
+
+- **The verdict of a claude reviewer is read from its stream-json answer** (KJC-BUG-0357, #2151): the answer opens with hook and init events, and kj took the first one as the verdict, reporting none. `kj review`, Solomon arbitration and the MCP review now read the final result event.
+
 ## [4.51.1] - 2026-10-13
 
 ### Fixed

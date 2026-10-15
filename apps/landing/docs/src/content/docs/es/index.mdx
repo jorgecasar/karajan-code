@@ -65,7 +65,11 @@ El caveat que el loop engineering recalca — *los bucles desatendidos cometen e
 
 Las versiones más recientes, la última primero. Las anteriores están en [Arquitectura › Historia](/docs/es/architecture/history/) y en el [CHANGELOG](https://github.com/manufosela/karajan-code/blob/main/CHANGELOG.md).
 
-### v4.51.1: un umbral dicho en palabras que cambia de verdad (actual)
+### v4.52.0: los escenarios custodian la release (actual)
+
+Ninguna versión se publica sin la batería de escenarios en verde, y la CI la ejecuta en cada PR. `kj worktree prune` retira los carriles de kj que están demostrablemente abandonados, una corrección del revisor se nombra como el método funcionando, y el veredicto de un revisor claude se lee aunque su respuesta empiece con eventos de hooks.
+
+### v4.51.1: un umbral dicho en palabras que cambia de verdad
 
 `kj policy add "las PRs pueden tener hasta 500 líneas"` cambia ahora el límite de líneas que la política ya tiene, en vez de añadir otro a su lado que el más estricto seguía anulando.
 
