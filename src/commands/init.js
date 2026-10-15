@@ -26,6 +26,7 @@ import { installQmd } from "../utils/qmd-install.js";
 import { registerQmdCollections } from "../utils/qmd-collection.js";
 import { isGitRepo } from "../harden/harden-engine.js";
 import { isPhoneEnrolled } from "../harden/phone-sign.js";
+import { identityCommand } from "./identity.js";
 import { hardenCommand } from "./harden.js";
 import { contractChanges } from "../environment/contract-commit.js";
 import { detectProjectStack } from "../utils/stack-detect.js";
@@ -300,7 +301,36 @@ export function tellPhoneStep(logger, { enrolled = isPhoneEnrolled() } = {}) {
   logger.info("  1. Open https://karajancode.com/sign on the phone: it creates a key pair and shows the PUBLIC key (the private one never leaves it).");
   logger.info("  2. From YOUR terminal, never from an agent session: kj identity enroll-phone <public key> --label <name>");
   logger.info("  3. Keep the recovery code it prints, off this machine: it replaces a lost phone (--recovery <code>).");
-  logger.info("  Prefer the four layers alone? kj security normal lowers the level, signed from the phone too (ADR 0018).");
+  logger.info("  Prefer the four layers alone? kj security normal lowers the level from your own terminal while no phone is enrolled (ADR 0020).");
+}
+
+/**
+ * KJC-TSK-1046 (ADR 0020): with a person at the terminal and no phone, init
+ * offers to enroll it now. The wizard only collects the public key: enrolling
+ * reads a typed code from /dev/tty, so it runs once the wizard is closed.
+ */
+export async function offerPhoneEnrollment(wizard, logger, { enrolled = isPhoneEnrolled() } = {}) {
+  if (enrolled) return null;
+  const now = await wizard.confirm("Enroll your phone now? (at the max level, seals and approvals are refused without it)", true);
+  const key = now ? String(await wizard.input("  Open https://karajancode.com/sign on the phone and paste the PUBLIC key it shows:", "")).trim() : "";
+  if (key) return key;
+  logger.info("  -> Phone: not now. Enroll it later from your own terminal: kj identity enroll-phone <public key> --label <name>");
+  return null;
+}
+
+const enrollThroughIdentity = (key) => identityCommand({ action: "enroll-phone", config: { projectDir: process.cwd() }, flags: { publicKeyBase64: key, label: os.hostname() } });
+
+/** Enrolls the key the wizard collected, with every check of the identity command; a failure is said and init goes on. */
+export async function enrollPendingPhone(key, { enroll = enrollThroughIdentity, logger }) {
+  if (!key) return false;
+  let reason = "see the message above";
+  try {
+    if ((await enroll(key)) === 0) return true;
+  } catch (err) {
+    reason = err.message;
+  }
+  logger.info(`  -> Phone not enrolled (${reason}). Try again from your own terminal: kj identity enroll-phone <public key>`);
+  return false;
 }
 
 /**
@@ -355,6 +385,7 @@ async function runWizard(config, logger) {
   logger.info("");
 
   const wizard = createWizard();
+  let pendingPhoneKey;
   try {
     const { coder, reviewer } = await askAgents(wizard, available, config, logger);
 
@@ -418,10 +449,12 @@ async function runWizard(config, logger) {
 
     logger.info("");
     tellPhoneStep(logger);
+    pendingPhoneKey = await offerPhoneEnrollment(wizard, logger);
     logger.info("");
   } finally {
     wizard.close();
   }
+  await enrollPendingPhone(pendingPhoneKey, { logger });
 
   return config;
 }
