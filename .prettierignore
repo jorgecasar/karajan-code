@@ -49,6 +49,9 @@ docs/
 **/_diet/
 **/fixtures/
 packages/radar/
-packages/watch/
 packages/rag/
+# packages/watch is covered (KJC-TSK-0744): its own .prettierrc.json (printWidth 110) applies.
+packages/watch/pnpm-lock.yaml
+packages/watch/.karajan/
+packages/watch/.claude/
 apps/landing/
