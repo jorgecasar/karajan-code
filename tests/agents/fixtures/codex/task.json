@@ -1,0 +1,7 @@
+{
+  "cli": "codex",
+  "version": "codex-cli 0.146.1",
+  "exitCode": 0,
+  "stdout": "kj-contract-ok",
+  "stderr": "OpenAI Codex v0.146.1\n--------\nworkdir: /tmp/kj-fixtures-hup7Xu\nmodel: gpt-5.6-terra\nprovider: openai\napproval: never\nsandbox: read-only\nreasoning effort: high\nreasoning summaries: none\nsession id: redacted-id\n--------\nuser\nReply with exactly this line and nothing else: kj-contract-ok\nwarning: Codex's Linux sandbox uses bubblewrap and needs access to create user namespaces.\ncodex\nkj-contract-ok\ntokens used\n1299"
+}
