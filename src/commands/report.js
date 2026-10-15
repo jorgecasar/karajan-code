@@ -4,6 +4,8 @@ import { exists } from "../utils/fs.js";
 import { getSessionRoot } from "../utils/paths.js";
 import { loadConfig } from "../config.js";
 import { DEFAULTS } from "../config/defaults.js";
+import { listPlans, loadPlan } from "../plan/plan-store.js";
+import { formatModelTally, modelTally } from "../report/model-tally.js";
 
 function parseBudgetFromActivityLog(logText) {
   if (!logText) {
@@ -269,6 +271,18 @@ async function printSentinelEscapes({ projectDir = process.cwd(), format } = {})
       console.log(tally);
     }
   } catch { /* no decision log — no panel to tally */ }
+  // KJC-TSK-1057 (MR-E2): what each coder model cost and how often it failed first time.
+  try {
+    const hus = [];
+    for (const meta of await listPlans(projectDir)) hus.push(...((await loadPlan(projectDir, meta.planId))?.hus ?? []));
+    const tally = formatModelTally(modelTally(hus));
+    if (tally) {
+      console.log("");
+      console.log(tally);
+    }
+  } catch (err) {
+    console.log(`\nCoder models: the plans could not be read (${err.message})`);
+  }
 }
 
 function formatDuration(ms) {
