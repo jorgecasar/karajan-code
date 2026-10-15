@@ -1,0 +1,7 @@
+{
+  "cli": "agy",
+  "version": "1.3.5",
+  "exitCode": 0,
+  "stdout": "{\"conversation_id\":\"redacted-id\",\"status\":\"SUCCESS\",\"response\":\"{\\n  \\\"approved\\\": true,\\n  \\\"blocking_issues\\\": [],\\n  \\\"non_blocking_suggestions\\\": [],\\n  \\\"summary\\\": \\\"Adds an exported sum function that returns the addition of two arguments.\\\",\\n  \\\"confidence\\\": 1.0\\n}\\n\",\"duration_seconds\":6.02307246,\"num_turns\":1,\"usage\":{\"input_tokens\":11910,\"output_tokens\":525,\"thinking_tokens\":469,\"cache_read_tokens\":0,\"total_tokens\":12435}}",
+  "stderr": ""
+}
