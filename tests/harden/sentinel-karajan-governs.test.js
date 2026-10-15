@@ -24,7 +24,8 @@ describe("Karajan governs", () => {
   it("the governance files are the human's: Edit/Write on them is denied, even with the Sentinel switched off", () => {
     // .karajan/rules.yml (KJC-TSK-0947, ADR 0016): the compiled rules are the user's to approve.
     // .karajan/rules.local.yml (KJC-TSK-0954, ADR 0017): the rules from the user's private sources.
-    for (const rel of [".karajan/policy.yml", ".karajan/kj.config.yml", ".karajan/rules.yml", ".karajan/rules.local.yml", ".ragignore", "sub/.ragignore"]) {
+    // .karajan/security-level.json (KJC-TSK-1054, ADR 0020): only kj security writes it, after the human layers.
+    for (const rel of [".karajan/policy.yml", ".karajan/kj.config.yml", ".karajan/rules.yml", ".karajan/rules.local.yml", ".karajan/security-level.json", ".ragignore", "sub/.ragignore"]) {
       for (const tool of ["Edit", "Write"]) {
         const r = hook(tool, { file_path: path.join(dir, rel) }, { KJ_SENTINEL_OFF: "1" });
         expect(r.status, `${tool} ${rel}`).toBe(2);
