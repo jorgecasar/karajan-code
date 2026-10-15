@@ -124,6 +124,13 @@ export async function getQualityGateStatus(config, projectKey = null) {
   }
 }
 
+/** KJC-TSK-1051 (TEAM-E): the names of the quality profiles the project runs on. */
+export async function getProjectQualityProfiles(config, projectKey = null) {
+  const effectiveProjectKey = await resolveSonarProjectKey(config, { projectKey, cwd: queryCwd(config) });
+  const body = await sonarFetch(config, `/api/qualityprofiles/search?project=${encodeURIComponent(effectiveProjectKey)}`);
+  return (JSON.parse(body).profiles ?? []).map((p) => p.name);
+}
+
 export async function getOpenIssues(config, projectKey = null) {
   const effectiveProjectKey = await resolveSonarProjectKey(config, { projectKey, cwd: queryCwd(config) });
   // KJC-BUG-0339 (#2099): current SonarQube ignores projectKeys and answered with

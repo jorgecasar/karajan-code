@@ -8,6 +8,7 @@
  */
 
 import { isSonarReachable } from "../sonar/manager.js";
+import { getProjectQualityProfiles } from "../sonar/api.js";
 import { STRATEGY } from "./types.js";
 import { withDocLink } from "../utils/doc-links.js";
 
@@ -20,6 +21,24 @@ function disabledSwitch(config) {
 
 function sonarHost(config) {
   return config.sonarqube?.host || "http://localhost:9000";
+}
+
+/** KJC-TSK-1051 (TEAM-E): the project runs on the team's quality profile, or the check says why not. */
+async function teamProfileResult(config, { host, profile }) {
+  let profiles;
+  try {
+    profiles = await getProjectQualityProfiles(config);
+  } catch (err) {
+    return { ok: false, severity: "warn", detail: `Reachable at ${host}, but the quality profile could not be read (${err.message})`, extra: { host } };
+  }
+  if (profiles.includes(profile)) return { ok: true, severity: "fail", detail: `Reachable at ${host}, on the team profile ${profile}`, extra: { host } };
+  return {
+    ok: false,
+    severity: "warn",
+    detail: `Reachable at ${host}, but the project runs on ${profiles.join(", ") || "no profile"}, not the team profile ${profile}`,
+    fix: `An admin assigns ${profile} to the project in SonarQube (Project Settings > Quality Profiles).`,
+    extra: { host },
+  };
 }
 
 /**
@@ -51,18 +70,17 @@ function createSonarStatusCheck() {
       } catch {
         reachable = false;
       }
-      return {
-        ok: reachable,
-        severity: "fail",
-        detail: reachable ? `Reachable at ${host}` : `Not reachable at ${host}`,
-        fix: reachable
-          ? undefined
-          : withDocLink(
-              "Run 'kj sonar start' or 'docker start karajan-sonarqube'. Use --no-sonar to skip.",
-              "sonar_docker"
-            ),
-        extra: { host, reachable },
-      };
+      // KJC-TSK-1051 (TEAM-E): an external SonarQube is the team's server, never started here.
+      const external = config.sonarqube?.external === true;
+      if (!reachable) {
+        const fix = external
+          ? `The team's SonarQube at ${host} is not answering (sonarqube.external: kj does not start a local one): check the network or VPN, or ask whoever runs it.`
+          : withDocLink("Run 'kj sonar start' or 'docker start karajan-sonarqube'. Use --no-sonar to skip.", "sonar_docker");
+        return { ok: false, severity: "fail", detail: `Not reachable at ${host}`, fix, extra: { host, reachable } };
+      }
+      const profile = config.sonarqube?.quality_profile;
+      if (!profile) return { ok: true, severity: "fail", detail: `Reachable at ${host}`, extra: { host, reachable } };
+      return teamProfileResult(config, { host, profile });
     },
   };
 }
