@@ -1,0 +1,7 @@
+{
+  "cli": "opencode",
+  "version": "1.1.48",
+  "exitCode": 1,
+  "stdout": "{\"type\":\"error\",\"timestamp\":1792088314959,\"sessionID\":\"ses_ebf367b90ffea13OgaUxN7lbF0\",\"error\":{\"name\":\"UnknownError\",\"data\":{\"message\":\"Error: Unable to connect. Is the computer able to access the url?\"}}}",
+  "stderr": ""
+}
