@@ -1809,6 +1809,12 @@ Preparando una demo, el owner hizo la pregunta buena: no si un agente puede enco
 
 Ahora se comprueba donde se usa. Una regla nueva del motor, `defaults.governance.write`, convierte cualquier diff que toque `policy.yml` o `rules.yml` en un deny de seguridad en el gate del commit, en la CI y en el release check. La salida es el acto humano que ya sellaba el supervisor: `kj harden --commit` guarda el hash de esos ficheros en la procedencia firmada, y el verificador levanta el deny solo mientras el fichero coincide con el hash sellado. Un escenario recorre la historia completa con una firma real verificada contra el padrón.
 
+## Phase 144: v4.52.0, los escenarios custodian la release
+
+Los bugs de campo repetían el mismo patrón: cada gate pasaba sus propios tests, y el choque solo aparecía cuando una sesión se encontraba con varios a la vez. La batería de escenarios que ejecuta los gates reales juntos en un proyecto desechable pasa a ser obligatoria: `kj release check` rechaza una release con ella en rojo, y la CI la ejecuta en cada PR.
+
+Alrededor, `kj worktree prune` deja que una sesión retire los carriles de kj demostrablemente abandonados (sin cambios, sin commits propios, sin procesos vivos dentro), el método enseña que una corrección de la otra IA es el método funcionando y no un error del que disculparse, y un revisor claude cuya respuesta empieza con eventos de hooks ya no pierde su veredicto.
+
 ## Decisiones Arquitectonicas Clave
 
 ### CLI wrapping vs llamadas directas a API

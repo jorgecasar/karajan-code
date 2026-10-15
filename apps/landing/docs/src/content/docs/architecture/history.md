@@ -1810,6 +1810,12 @@ Preparing a demo, the owner asked the right question: not whether an agent can f
 
 Now it is checked where it is used. A new engine rule, `defaults.governance.write`, makes any diff touching `policy.yml` or `rules.yml` a security deny in the commit gate, in CI and in the release check. The way out is the human act that already sealed the supervisor: `kj harden --commit` hashes those files into the signed provenance, and the verifier lifts the deny only while the file matches the sealed hash. A scenario runs the whole story with a real signature checked against the roster.
 
+## Phase 144: v4.52.0, the scenarios guard the release
+
+Field bugs kept showing the same pattern: each gate passed its own tests, and the clash only appeared when a session met several of them at once. The scenario battery that runs the real gates together in a throwaway project became a requirement: `kj release check` refuses a release with it red, and CI runs it on every PR.
+
+Around it, `kj worktree prune` lets a session retire the kj lanes that are provably abandoned (no changes, no unique commits, no live process inside), the method teaches that a correction from the other AI is the method working, not a mistake to apologise for, and a claude reviewer whose answer opens with hook events no longer loses its verdict.
+
 ## Key Architectural Decisions
 
 ### CLI wrapping vs direct API calls
