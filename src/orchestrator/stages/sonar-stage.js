@@ -378,6 +378,9 @@ export async function runSonarStage({ config, logger, emitter, eventBase, sessio
   const issuesFinal = sonarState.issuesFinal ?? sonarResult.openIssuesTotal ?? 0;
   const stageResult = {
     gateStatus: sonarResult.gateStatus,
+    // KJC-TSK-0839: the key and the files the scan indexed, for the verdict's per-source proof.
+    projectKey: sonarResult.projectKey,
+    indexedFiles: sonarResult.indexedFiles ?? [],
     openIssues: sonarResult.openIssuesTotal,
     issuesInitial,
     issuesFinal,

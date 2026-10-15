@@ -14,6 +14,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { runCommand } from "../utils/process.js";
 import { kjStamp, stampDiffers, stampLabel } from "./kj-provenance.js";
+import { sourceFilesOf } from "./tests-with-code.js";
 
 const STORE_DIR = path.join(".karajan", "reviews");
 
@@ -107,13 +108,15 @@ export async function stampStagedVerdict({ projectDir, reviewer, summary = "", s
   }
   // KJC-BUG-0294: the pipeline commits by path (`--only`); the verdict must bind
   // to that diff, not to other files the person had staged.
-  const res = await runCommand("git", ["diff", "--cached", ...(paths?.length ? ["--", ...paths] : [])], { cwd: dir });
+  const pathArgs = paths?.length ? ["--", ...paths] : [];
+  const res = await runCommand("git", ["diff", "--cached", ...pathArgs], { cwd: dir });
   if (res.exitCode !== 0 || !res.stdout?.trim()) return { stamped: false };
+  // A deleted file cannot be indexed, so it never counts as a source to prove.
+  const names = sonar?.indexed ? (await runCommand("git", ["diff", "--cached", "--name-only", "--diff-filter=ACMR", ...pathArgs], { cwd: dir })).stdout.split("\n").filter(Boolean) : [];
   await saveVerdict(dir, res.stdout, {
     verdict: "approved", reviewer, host: "kj-pipeline", issues: [], summary,
-    // KJC-TSK-0838: what the pipeline's sonar stage saw, so --check can tell
-    // a run whose gate ran from one that skipped it.
-    ...(sonar ? { sonar } : {}),
+    // KJC-TSK-0838/0839: what the pipeline's sonar stage saw, proved per staged source.
+    ...(sonar ? { sonar: coverageFor(sonar, names) } : {}),
   });
   return { stamped: true };
 }
@@ -122,8 +125,8 @@ export async function stampStagedVerdict({ projectDir, reviewer, summary = "", s
  * KJC-TSK-0838: the pipeline sonar stage result as a verdict sonar block.
  * SKIPPED (no remote, no key) or absent is `ran:false` WITH the reason — the
  * pre-commit check then refuses code, as it would for any other diff.
- * Coverage lists stay empty: the pipeline scans the whole project, and the
- * per-file proof (verbose index) is not wired into SonarRole yet.
+ * KJC-TSK-0839: a stage that ran carries the files its verbose scan indexed;
+ * stampStagedVerdict turns them into covered/uncovered for the staged sources.
  */
 export function pipelineSonarBlock(stageResult) {
   if (!stageResult) return { ran: false, source: "pipeline", reason: "the pipeline recorded no sonar stage" };
@@ -131,8 +134,17 @@ export function pipelineSonarBlock(stageResult) {
     return { ran: false, source: "pipeline", reason: stageResult.reason || stageResult.error || "the sonar stage did not run" };
   }
   return {
-    ran: true, source: "pipeline", projectKey: stageResult.projectKey || null, gateStatus: stageResult.gateStatus, covered: [], uncovered: [],
+    ran: true, source: "pipeline", projectKey: stageResult.projectKey || null, gateStatus: stageResult.gateStatus, indexed: stageResult.indexedFiles ?? [],
   };
+}
+
+/** KJC-TSK-0839: the per-source proof of a pipeline block, against the files this commit stages. */
+function coverageFor(sonar, stagedNames) {
+  if (!sonar?.ran || !Array.isArray(sonar.indexed)) return sonar;
+  const { indexed, ...block } = sonar;
+  const seen = new Set(indexed);
+  const { sources } = sourceFilesOf({}, stagedNames);
+  return { ...block, covered: sources.filter((f) => seen.has(f)), uncovered: sources.filter((f) => !seen.has(f)) };
 }
 
 /**

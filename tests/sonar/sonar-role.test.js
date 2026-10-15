@@ -3,7 +3,8 @@ import { EventEmitter } from "node:events";
 import { ROLE_EVENTS } from "../../src/roles/base-role.js";
 
 vi.mock("../../src/sonar/scanner.js", () => ({
-  runSonarScan: vi.fn()
+  runSonarScan: vi.fn(),
+  indexedFilesFrom: vi.fn(() => new Set(["src/a.js"]))
 }));
 
 vi.mock("../../src/sonar/api.js", () => ({
@@ -80,10 +81,12 @@ describe("[opt-in: sonar] SonarRole", () => {
     await role.init({});
     const output = await role.run();
 
-    expect(runSonarScan).toHaveBeenCalledWith(config);
+    // KJC-TSK-0839: verbose, and the indexed files travel in the result.
+    expect(runSonarScan).toHaveBeenCalledWith(config, null, { verbose: true });
     expect(getQualityGateStatus).toHaveBeenCalledWith(config, "kj-test-project");
     expect(getOpenIssues).toHaveBeenCalledWith(config, "kj-test-project");
     expect(output.ok).toBe(true);
+    expect(output.result.indexedFiles).toEqual(["src/a.js"]);
   });
 
   it("returns ok=true when quality gate passes", async () => {
