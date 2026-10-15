@@ -33,6 +33,7 @@ import {
 } from "#session/mutators.js";
 import { emitProgress, makeEvent } from "#utils/events.js";
 import { listActiveRuns } from "../../../utils/run-registry.js";
+import { keepRoutingMetrics } from "../../../hu/routing-metrics.js";
 
 /**
  * @param {object} args
@@ -313,6 +314,7 @@ function wirePlanCallbacks({ session, loadedPlan, projectDir, syncResultsToPlan,
   setLiveOutcomeUpdater(session, async (huId, outcome) => {
     try {
       if (!setHuOutcomeFn(loadedPlan, huId, outcome)) return;
+      keepRoutingMetrics(loadedPlan, huId, outcome); // KJC-TSK-0702: the measured fields core does not keep
       await savePlanToDisk(projectDir, loadedPlan);
       if (outcome && Number.isFinite(outcome.cost_usd)) {
         try {

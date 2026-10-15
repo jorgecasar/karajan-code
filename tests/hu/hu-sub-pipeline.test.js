@@ -689,6 +689,27 @@ describe("hu-sub-pipeline", () => {
       expect(outcomes[1].outcome.cost_usd).toBeCloseTo(0.50, 6);
     });
 
+    // KJC-TSK-0702 (MR-E step 1): the baseline for model routing, per HU.
+    it("records the coder's provider and model, tokens out and the reviewer's rejections", async () => {
+      const stories = [{ id: "HU-001", status: "certified", certified: { text: "x" }, original: { text: "x" }, blocked_by: [] }];
+      loadHuBatchMock.mockResolvedValue({ session_id: "hu-s_mre", stories: [...stories] });
+      const budgetTracker = { entries: [] };
+      const runIterationFn = vi.fn(async () => {
+        budgetTracker.entries.push({ role: "coder", provider: "claude", model: "claude-opus-5-5", tokens_in: 1000, tokens_out: 400 });
+        budgetTracker.entries.push({ role: "reviewer", provider: "codex", model: "gpt-5.6-terra", tokens_in: 900, tokens_out: 50 });
+        budgetTracker.entries.push({ role: "coder", provider: "claude", model: "claude-opus-5-5", tokens_in: 1200, tokens_out: 300 });
+        budgetTracker.entries.push({ role: "reviewer", provider: "codex", model: "gpt-5.6-terra", tokens_in: 950, tokens_out: 40 });
+        return { approved: true };
+      });
+      const outcomes = [];
+      await runHuSubPipeline({
+        huReviewerResult: { ok: true, certified: 1, total: 1, stories, batchSessionId: "hu-s_mre" },
+        runIterationFn, emitter, eventBase, logger,
+        onOutcome: vi.fn(async (huId, outcome) => { outcomes.push(outcome); }), budgetTracker
+      });
+      expect(outcomes[0]).toMatchObject({ coder: { provider: "claude", model: "claude-opus-5-5" }, tokens_out: 790, reviewer_rejections: 1 });
+    });
+
     it("stamps outcome.cost_usd = null when no tracker entries were produced for the HU", async () => {
       const stories = [
         { id: "HU-001", status: "certified", certified: { text: "x" }, original: { text: "x" }, blocked_by: [] }
