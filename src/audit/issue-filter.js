@@ -11,6 +11,8 @@
 //   2. Inline ignore: `// karajan-audit-ignore: <tool>:<ruleId>` on the issue
 //      line or the previous one. Legacy `// karajan-sonar-ignore: <ruleId>`
 //      keeps working when the issue's tool is "sonar".
+//   3. Sonar only: S1135 on the Spanish word «todo» (not an uppercase TODO
+//      tag) is suppressed by reading the issue's line (KJC-TSK-1042).
 //
 // Issues filtered out are kept in the `suppressed` list with `_suppressedBy`
 // metadata for auditability — no silent dropping.
@@ -52,6 +54,19 @@ export const DEFAULT_FALSE_POSITIVES = [
     reason: "Cycles inside node_modules are upstream's problem, not ours — defensive default since madge excludes node_modules by config",
   },
 ];
+
+/**
+ * KJC-TSK-1042: Sonar's TODO-tag rule (S1135, every language) matches the word
+ * regardless of case, so a Spanish comment like «todo el fichero» is reported
+ * as a pending task. Only the uppercase TODO tag counts. Returns the reason to
+ * suppress, or null; a line that cannot be read keeps the finding.
+ */
+export function spanishTodoWord(issue, absPath) {
+  if (!/:S1135$/.test(issue.rule ?? "") || !issue.line || !fs.existsSync(absPath)) return null;
+  const text = fs.readFileSync(absPath, "utf8").split("\n")[issue.line - 1] ?? "";
+  if (!/\btodo\b/i.test(text) || /\bTODO\b/.test(text)) return null;
+  return "the Spanish word «todo», not an uppercase TODO tag";
+}
 
 export function hasInlineIgnore(filePath, line, ruleId, tool = "sonar") {
   if (!filePath || !line || !ruleId) return false;
@@ -109,11 +124,14 @@ export function filterFalsePositives(issues, opts = {}) {
       }
     }
 
-    // 2. Inline ignore (only checked if no static rule matched).
+    // 2. Inline ignore, then the Spanish word «todo» (only if no static rule matched).
     if (!matched && issue.rule && issue.line && path) {
       const absPath = path.startsWith("/") ? path : `${projectRoot}/${path}`;
       if (hasInlineIgnore(absPath, issue.line, issue.rule, tool)) {
         matched = { tool, rule: issue.rule, path, reason: "inline `// karajan-audit-ignore`" };
+      } else if (tool === "sonar") {
+        const reason = spanishTodoWord(issue, absPath);
+        if (reason) matched = { tool, rule: issue.rule, path, reason };
       }
     }
 
