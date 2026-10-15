@@ -26,6 +26,11 @@ export function agentAnswerText(raw) {
   return raw;
 }
 
+/** The review verdict in an agent's answer, or null: the one path kj review reads it by. */
+export function parseReviewVerdict(output) {
+  return normalizeReviewPayload(parseMaybeJsonString(agentAnswerText(output)));
+}
+
 function isReviewPayload(obj) {
   return obj?.approved !== undefined && obj?.blocking_issues !== undefined;
 }
