@@ -102,7 +102,8 @@ vi.mock("../src/sonar/api.js", () => ({
 }));
 
 vi.mock("../src/sonar/scanner.js", () => ({
-  runSonarScan: vi.fn().mockResolvedValue({ ok: true })
+  runSonarScan: vi.fn().mockResolvedValue({ ok: true }),
+  indexedFilesFrom: vi.fn(() => new Set())
 }));
 
 vi.mock("../src/sonar/enforcer.js", () => ({

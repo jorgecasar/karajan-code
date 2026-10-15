@@ -69,7 +69,8 @@ vi.mock("../src/sonar/api.js", () => ({
 }));
 
 vi.mock("../src/sonar/scanner.js", () => ({
-  runSonarScan: vi.fn().mockResolvedValue({ ok: true, projectKey: "test-key" })
+  runSonarScan: vi.fn().mockResolvedValue({ ok: true, projectKey: "test-key" }),
+  indexedFilesFrom: vi.fn(() => new Set())
 }));
 
 vi.mock("../src/sonar/manager.js", () => ({

@@ -1,5 +1,5 @@
 import { BaseRole } from "./base-role.js";
-import { runSonarScan } from "../sonar/scanner.js";
+import { indexedFilesFrom, runSonarScan } from "../sonar/scanner.js";
 import { getQualityGateStatus, getOpenIssues } from "../sonar/api.js";
 import { shouldBlockByProfile, summarizeIssues } from "../sonar/enforcer.js";
 
@@ -20,7 +20,8 @@ export class SonarRole extends BaseRole {
   }
 
   async execute(_input) {
-    const scan = await runSonarScan(this.config);
+    // KJC-TSK-0839: verbose, so the scanner names every file it indexed.
+    const scan = await runSonarScan(this.config, null, { verbose: true });
 
     if (!scan.ok) {
       return {
@@ -53,6 +54,7 @@ export class SonarRole extends BaseRole {
       ok: !blocking,
       result: {
         projectKey: scan.projectKey,
+        indexedFiles: [...indexedFilesFrom(scan.stdout)],
         gateStatus: gate.status,
         conditions: gate.conditions || [],
         issues,

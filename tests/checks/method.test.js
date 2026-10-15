@@ -48,18 +48,21 @@ describe("collectMethodStats", () => {
     write("docs.json", { sonar: { ran: false, mode: "docs-only", reason: "server down" } });
     write("granted.json", { sonar: { ran: false, mode: "granted", reason: "server down" } });
     write("pipeline-skipped.json", { host: "kj-pipeline", sonar: { ran: false, source: "pipeline", reason: "no git remote" } });
+    // KJC-TSK-0839: a pipeline stamp is judged by its coverage too, not only by having run.
+    write("pipeline-proved.json", { host: "kj-pipeline", sonar: { ran: true, source: "pipeline", covered: ["src/a.js"], uncovered: [] } });
+    write("pipeline-blind.json", { host: "kj-pipeline", sonar: { ran: true, source: "pipeline", covered: [], uncovered: ["src/b.js"] } });
     write("blind.json", { sonar: { ran: true, mode: "pass", covered: [], uncovered: ["packages/x/b.py"] } });
     write("legacy.json", {}); // pre-ADR verdict: no block, not counted
     write("legacy-block.json", { sonar: { ran: false, reason: "HTTP 403" } }); // block but no mode: before fail-closed, not counted
 
     const s = await collectMethodStats({ projectDir: dir, run: gitRuns({ subjects: [], blocks: "" }) });
-    expect(s.sonar).toEqual({ proved: 1, docsOnly: 1, granted: 1, unproved: 2 });
+    expect(s.sonar).toEqual({ proved: 2, docsOnly: 1, granted: 1, unproved: 3 });
 
     const [check] = getMethodChecks();
     const r = await check.detect({ config: {}, projectDir: dir, run: gitRuns({ subjects: [], blocks: "" }) });
     expect(r.ok).toBe(false);
     expect(r.severity).toBe("fail");
-    expect(r.detail).toMatch(/2 approved verdict\(s\) without sonar proof/);
+    expect(r.detail).toMatch(/3 approved verdict\(s\) without sonar proof/);
   });
 
   // KJC-TSK-0849 (ADR 0010, RAG-C): the rag block is the twin evidence — the

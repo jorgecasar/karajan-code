@@ -11,8 +11,9 @@ import { stampStagedVerdict, checkVerdict, pipelineSonarBlock } from "../../src/
 // KJC-TSK-0838: the pipeline's sonar stage result travels with the stamp, so
 // the pre-commit check can tell a run whose gate ran from one that skipped it.
 describe("pipelineSonarBlock", () => {
-  it("a stage that ran is recorded with its key and gate; skipped or absent is ran:false with the reason", () => {
-    expect(pipelineSonarBlock({ gateStatus: "OK", projectKey: "k" })).toEqual({ ran: true, source: "pipeline", projectKey: "k", gateStatus: "OK", covered: [], uncovered: [] });
+  it("a stage that ran is recorded with its key, gate and indexed files; skipped or absent is ran:false with the reason", () => {
+    expect(pipelineSonarBlock({ gateStatus: "OK", projectKey: "k", indexedFiles: ["a.js"] })).toEqual({ ran: true, source: "pipeline", projectKey: "k", gateStatus: "OK", indexed: ["a.js"] });
+    expect(pipelineSonarBlock({ gateStatus: "OK", projectKey: "k" })).toEqual({ ran: true, source: "pipeline", projectKey: "k", gateStatus: "OK", indexed: [] });
     expect(pipelineSonarBlock({ gateStatus: "SKIPPED", reason: "no git remote" })).toEqual({ ran: false, source: "pipeline", reason: "no git remote" });
     expect(pipelineSonarBlock(null)).toEqual({ ran: false, source: "pipeline", reason: "the pipeline recorded no sonar stage" });
   });
@@ -46,10 +47,33 @@ describe("stampStagedVerdict", () => {
     expect(check.verdict.host).toBe("kj-pipeline");
   });
 
-  it("persists the sonar block it is handed (KJC-TSK-0838)", async () => {
+  // KJC-TSK-0839: the stamp proves coverage per staged source, as kj review --staged does.
+  it("turns the indexed files into covered and uncovered for the staged sources", async () => {
     fs.mkdirSync(path.join(dir, ".karajan"), { recursive: true });
     fs.writeFileSync(path.join(dir, ".karajan", "review-gate"), "");
-    const sonar = pipelineSonarBlock({ gateStatus: "OK", projectKey: "k" });
+    fs.writeFileSync(path.join(dir, "c.js"), "const y = 2;\n");
+    execFileSync("git", ["add", "c.js"], { cwd: dir });
+    const sonar = pipelineSonarBlock({ gateStatus: "OK", projectKey: "k", indexedFiles: ["a.js", "other.js"] });
+    await stampStagedVerdict({ projectDir: dir, reviewer: "codex", sonar });
+    const staged = execFileSync("git", ["diff", "--cached"], { cwd: dir, encoding: "utf8" });
+    expect((await checkVerdict(dir, staged)).verdict.sonar).toEqual({ ran: true, source: "pipeline", projectKey: "k", gateStatus: "OK", covered: ["a.js"], uncovered: ["c.js"] });
+  });
+
+  it("a deleted source is not a source to prove", async () => {
+    fs.mkdirSync(path.join(dir, ".karajan"), { recursive: true });
+    fs.writeFileSync(path.join(dir, ".karajan", "review-gate"), "");
+    execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "base"], { cwd: dir });
+    execFileSync("git", ["rm", "-q", "a.js"], { cwd: dir });
+    const sonar = pipelineSonarBlock({ gateStatus: "OK", projectKey: "k", indexedFiles: [] });
+    await stampStagedVerdict({ projectDir: dir, reviewer: "codex", sonar });
+    const staged = execFileSync("git", ["diff", "--cached"], { cwd: dir, encoding: "utf8" });
+    expect((await checkVerdict(dir, staged)).verdict.sonar).toMatchObject({ covered: [], uncovered: [] });
+  });
+
+  it("a stage that did not run is persisted as handed", async () => {
+    fs.mkdirSync(path.join(dir, ".karajan"), { recursive: true });
+    fs.writeFileSync(path.join(dir, ".karajan", "review-gate"), "");
+    const sonar = pipelineSonarBlock({ gateStatus: "SKIPPED", reason: "no git remote" });
     await stampStagedVerdict({ projectDir: dir, reviewer: "codex", sonar });
     const staged = execFileSync("git", ["diff", "--cached"], { cwd: dir, encoding: "utf8" });
     expect((await checkVerdict(dir, staged)).verdict.sonar).toEqual(sonar);

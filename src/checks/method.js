@@ -68,8 +68,9 @@ export async function collectMethodStats({ projectDir, run = runCommand, sample 
 export function sonarProof(v) {
   const s = v?.sonar;
   if (!s || v.verdict !== "approved") return null;
-  // A pipeline stamp has no mode: the stage ran, or it did not.
-  if (s.source === "pipeline") return s.ran ? "proved" : "unproved";
+  // A pipeline stamp has no mode: it ran and covered every staged source, or
+  // not (KJC-TSK-0839; a stamp from before it carries no lists and counts as run).
+  if (s.source === "pipeline") return s.ran && (s.uncovered || []).length === 0 ? "proved" : "unproved";
   // A block without a mode was written before the requirement existed
   // (the block landed one PR before fail-closed): not retroactive either.
   if (!s.mode) return null;
