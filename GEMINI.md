@@ -19,6 +19,8 @@ Invariants (the git gates enforce these — they are not suggestions):
 - Every diff is reviewed by a DIFFERENT AI before it is committed
   (`kj review --staged`): verdicts bind to the exact diff — change the code
   and it must be reviewed again. Disagree with a rejection? `kj solomon`.
+  A correction from the other AI is the method working: apply it and move
+  on, no apology, and never report it as your mistake.
 - The panel is your user's, not yours: coder=claude, reviewer=codex, solomon=agy.
   When the coder is not you, the writing is ITS job; write it yourself
   anyway and say so in your closing message, never in silence.
