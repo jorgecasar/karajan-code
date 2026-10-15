@@ -90,4 +90,28 @@ describe("kj worktree prune", () => {
     expect(r.wouldRemove.map((l) => l.slug)).toEqual(["old"]);
     expect(fs.existsSync(p)).toBe(true);
   });
+
+  // KJC-TSK-1037: loose kj-hu-* branches (no worktree) from old runs.
+  it("deletes a loose kj-hu-* branch with no commits of its own, keeps one with work and says how much", async () => {
+    git("branch", "kj-hu-HU-001");
+    git("checkout", "-q", "-b", "kj-hu-HU-002");
+    fs.writeFileSync(path.join(dir, "b.js"), "y\n");
+    git("add", "b.js"); git("commit", "-qm", "work");
+    git("checkout", "-q", "main");
+    const r = await prune();
+    expect(r.branchesRemoved).toEqual(["kj-hu-HU-001"]);
+    expect(r.branchesKept).toEqual([{ branch: "kj-hu-HU-002", reason: "1 commit(s) not in main" }]);
+    expect(git("branch", "--list", "kj-hu-*").trim()).toBe("kj-hu-HU-002");
+  });
+
+  it("measures against origin/<base> when it exists, not a lagging local base", async () => {
+    git("checkout", "-q", "-b", "kj-hu-HU-003");
+    fs.writeFileSync(path.join(dir, "c.js"), "z\n");
+    git("add", "c.js"); git("commit", "-qm", "merged upstream");
+    git("update-ref", "refs/remotes/origin/main", "HEAD");
+    git("checkout", "-q", "main");
+    const r = await prune({ dryRun: true });
+    expect(r.wouldRemoveBranches).toEqual(["kj-hu-HU-003"]);
+    expect(git("branch", "--list", "kj-hu-*").trim()).toBe("kj-hu-HU-003");
+  });
 });
