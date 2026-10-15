@@ -47,6 +47,12 @@ describe("kj hu move reserves the card", () => {
     expect(await card()).toMatchObject({ status: "running", claimed_by: "luis" });
   });
 
+  it("a running card started without an identity is reserved once kj knows who moves it again", async () => {
+    await hu("move", ["T-1", "running"], { who: null });
+    await hu("move", ["T-1", "running"], { who: "ana" });
+    expect(await card()).toMatchObject({ status: "running", claimed_by: "ana" });
+  });
+
   it("releasing it to another status leaves on record who released it", async () => {
     await hu("move", ["T-1", "running"], { who: "ana" });
     await hu("move", ["T-1", "done"], { who: "luis", flags: { release: true } });

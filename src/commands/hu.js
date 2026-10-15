@@ -230,10 +230,13 @@ export async function huCommand({ config = null, action, args = [], flags = {}, 
     if (takenOver && !flags.release) {
       throw new Error(`${label} is reserved by ${hu.claimed_by} since ${hu.claimed_at} — releasing it is explicit: kj hu move ${ref} ${status} --release`);
     }
+    const starting = status === "running" && hu.status !== "running";
+    // A running card nobody reserved is reserved by who moves it there again, once kj knows who.
+    const unclaimedRunning = status === "running" && !hu.claimed_by && who;
     updateHuStatus(plan, hu.id, status);
     // Starting it, or releasing it to any status, rewrites the reservation: who did it, or nobody.
-    if (status === "running" || takenOver) Object.assign(hu, { claimed_by: who ?? null, claimed_at: who ? new Date().toISOString() : null });
-    if (status === "running" && !who) console.warn(`⚠ ${label} is not reserved: kj cannot tell who works this clone — declare it with kj identity set`);
+    if (starting || takenOver || unclaimedRunning) Object.assign(hu, { claimed_by: who ?? null, claimed_at: who ? new Date().toISOString() : null });
+    if (starting && !who) console.warn(`⚠ ${label} is not reserved: kj cannot tell who works this clone — declare it with kj identity set`);
     await savePlan(projectDir, plan);
     return emit({ id: hu.id, status, claimed_by: hu.claimed_by ?? null }, `✓ ${label} → ${status}`);
   }
