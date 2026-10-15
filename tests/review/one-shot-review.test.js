@@ -76,6 +76,23 @@ describe("runOneShotReview", () => {
     expect(record.issues).toHaveLength(1);
   });
 
+  // KJC-BUG-0357 (#2151): claude answers with its whole stream-json event stream;
+  // the first JSON is a hook event, the verdict lives in the assistant and result events.
+  it("reads the verdict from a stream-json event stream that starts with hook events", async () => {
+    const verdict = reviewOutput(true);
+    const stream = [
+      { type: "system", subtype: "hook_started", hook_name: "SessionStart" },
+      { type: "system", subtype: "init", session_id: "s" },
+      { type: "assistant", message: { content: [{ type: "text", text: verdict }] } },
+      { type: "result", subtype: "success", result: verdict },
+    ].map((e) => JSON.stringify(e)).join("\n");
+    const record = await runOneShotReview({
+      diff: DIFF, config: { roles: { reviewer: { provider: "claude" } } }, projectDir: dir, hostAgent: null,
+      createAgentFn: () => fakeAgent(stream), detectAgents: agentsUp("claude"),
+    });
+    expect(record).toMatchObject({ verdict: "approved", reviewer: "claude", summary: "s" });
+  });
+
   it("throws (never silently falls back) when no cross-AI reviewer exists", async () => {
     await expect(runOneShotReview({
       diff: DIFF, config: { roles: {} }, projectDir: dir, hostAgent: "claude",

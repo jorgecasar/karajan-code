@@ -40,7 +40,8 @@ vi.mock("../../src/prompts/reviewer.js", () => ({
 }));
 
 vi.mock("../../src/review/parser.js", () => ({
-  parseMaybeJsonString: vi.fn((s) => null)
+  parseMaybeJsonString: vi.fn((s) => null),
+  agentAnswerText: vi.fn((s) => s)
 }));
 
 vi.mock("../../src/review/diff-generator.js", () => ({

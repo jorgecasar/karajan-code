@@ -85,7 +85,8 @@ vi.mock("../../src/prompts/reviewer.js", () => ({
 vi.mock("../../src/review/parser.js", () => ({
   parseMaybeJsonString: vi.fn((s) => {
     try { return JSON.parse(s); } catch { return null; }
-  })
+  }),
+  agentAnswerText: vi.fn((s) => s)
 }));
 
 vi.mock("../../src/review/diff-generator.js", () => ({

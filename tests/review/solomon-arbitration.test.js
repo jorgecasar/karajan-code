@@ -54,6 +54,16 @@ describe("runSolomonArbitration", () => {
     expect(check.verdict.arbitration.position).toMatch(/style-only/);
   });
 
+  // KJC-BUG-0357 (#2151): an arbiter that answers with a stream-json event stream.
+  it("reads the ruling from a stream-json event stream that starts with hook events", async () => {
+    await seedRejected([{ id: "I1", severity: "medium", description: "naming" }]);
+    const answer = JSON.stringify({ ruling: "approve", reasoning: "because" });
+    const output = [{ type: "system", subtype: "hook_started" }, { type: "result", result: answer }].map((e) => JSON.stringify(e)).join("\n");
+    const agent = { reviewTask: vi.fn().mockResolvedValue({ ok: true, output }) };
+    const res = await runSolomonArbitration({ ...base, projectDir: dir, diff: DIFF, position: "style-only", createAgentFn: () => agent });
+    expect(res.ruling).toBe("approve");
+  });
+
   // KJC-BUG-0183: the overriding verdict keeps the evidence bound to the diff
   // (sonar, rag) — otherwise --check refuses every arbitrated diff.
   it("approve ruling carries the sonar and rag blocks of the rejected verdict it overrides", async () => {

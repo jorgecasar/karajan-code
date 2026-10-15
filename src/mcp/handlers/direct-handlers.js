@@ -11,7 +11,7 @@ import { createAgent } from "../../agents/index.js";
 import { buildPlannerPrompt } from "../../prompts/planner.js";
 import { buildCoderPrompt } from "../../prompts/coder.js";
 import { buildReviewerPrompt } from "../../prompts/reviewer.js";
-import { parseMaybeJsonString } from "../../review/parser.js";
+import { parseMaybeJsonString, agentAnswerText } from "../../review/parser.js";
 import { computeBaseRef, generateDiff } from "../../review/diff-generator.js";
 import { resolveReviewProfile } from "../../review/profiles.js";
 import { createRunLog } from "../../utils/run-log.js";
@@ -322,7 +322,7 @@ export async function handleReviewDirect(a, server, extra) {
   }
 
   sendTrackerLog(server, "reviewer", "done");
-  const parsed = parseMaybeJsonString(result.output);
+  const parsed = parseMaybeJsonString(agentAnswerText(result.output));
   return { ok: true, review: parsed || result.output, raw: result.output };
 }
 
