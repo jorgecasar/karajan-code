@@ -15,6 +15,7 @@ import { invokeSolomon } from "../solomon-escalation.js";
 import { detectRateLimit } from "../../utils/rate-limit-detector.js";
 import { createStallDetector } from "../../utils/stall-detector.js";
 import { applyQuotaSimulation } from "../../utils/quota-simulator.js";
+import { correctionNote } from "../../review/correction-rounds.js";
 
 function categorizeIssues(issues) {
   const categories = { security: 0, correctness: 0, tests: 0, style: 0, other: 0 };
@@ -31,6 +32,12 @@ function categorizeIssues(issues) {
     else categories.correctness++;
   }
   return categories;
+}
+
+// KJC-TSK-1017: the rejections before an approval are review corrections.
+export function approvedMessage(session) {
+  const rejections = (session.checkpoints || []).filter((cp) => cp.stage === "reviewer" && cp.approved === false).length;
+  return ["Review approved", correctionNote(rejections)].filter(Boolean).join(" — ");
 }
 
 function buildReviewHistory(session) {
@@ -402,7 +409,7 @@ export async function runReviewerStage({ reviewerRole, config, logger, emitter, 
     emitter,
     makeEvent("reviewer:end", { ...eventBase, stage: "reviewer" }, {
       status: review.approved ? "ok" : "fail",
-      message: review.approved ? "Review approved" : `Review rejected (${review.blocking_issues.length} blocking)`,
+      message: review.approved ? approvedMessage(session) : `Review rejected (${review.blocking_issues.length} blocking)`,
       detail: {
         approved: review.approved,
         blockingCount: review.blocking_issues.length,

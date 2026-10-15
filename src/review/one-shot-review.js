@@ -18,6 +18,7 @@ import { saveVerdict, diffHash } from "./verdict-store.js";
 import { summarizeGeneratedFiles } from "./prompt-diff.js";
 import { reportUnparseableVerdict } from "./unparseable-verdict.js";
 import { detectWorkspace } from "./workspace.js";
+import { branchOf } from "./correction-rounds.js";
 import { isQuotaExhausted, candidateStatus, pickQuotaFallback, formatCandidateMenu } from "./reviewer-fallback.js";
 
 // Cross-AI preference when the configured reviewer IS the host.
@@ -128,6 +129,8 @@ export async function runOneShotReview({
     host: hostAgent || null,
     // KJC-TSK-0680: where the review ran — makes any isolation claim auditable.
     workspace: await detectWorkspace(projectDir),
+    // KJC-TSK-1017: the branch lets an approval count the corrections before it.
+    branch: await branchOf(projectDir),
     issues: parsed.blocking_issues || [],
     suggestions: parsed.non_blocking_suggestions || [],
     summary: parsed.summary || parsed.raw_summary || "",
