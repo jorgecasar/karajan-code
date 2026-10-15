@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.53.0] - 2026-10-15
+
+### Added
+
+- **`kj init` offers to enroll the phone** (KJC-TSK-1046, ADR 0020): with a person at the terminal and no phone enrolled, the wizard offers to enroll it and collects the public key from karajancode.com/sign; once the wizard is closed, the identity command enrolls it with all its checks, roster and recovery code. Without a terminal init only informs.
+
+### Changed
+
+- **With no phone anywhere, a person lowers the level at the terminal** (KJC-TSK-1045, ADR 0020): at the default max level and with no phone enrolled, lowering to normal demanded the very phone that was missing. Now the human layers and the typed code lower it; the record says it is unsigned and reads as max again once a phone is enrolled. An agent session is still refused.
+
+### Fixed
+
+- **`kj doctor` no longer calls the phone optional at the max level** (KJC-BUG-0360): without a phone the seal, rule approvals and enrolling another phone are refused at max, the default; doctor listed the phone as optional and its text spoke of a typed code, true only at the normal level. The check now fails at max and names what is refused.
+- **A blocking Sonar gate hands the coder each issue** (KJC-BUG-0359, #2158): the coder got only severity counts and guessed until `sonar_repeat`; the feedback now lists severity, rule, file, line and message, capped at 25.
+- **An opencode failure reaches kj with its message** (KJC-BUG-0358): with `--format json` opencode reports the failure as an error event on stdout, and kj showed it without a reason.
+- **The Spanish word «todo» is not a TODO tag** (KJC-TSK-1042): Sonar's S1135 matches the word regardless of case; kj suppresses it, with its reason, when the line holds no uppercase TODO.
+
+### Infrastructure
+
+- **Contract tests replay real CLI answers** (KJC-TSK-1039, KJC-TSK-1043): `scripts/record-agent-fixtures.mjs` records what claude (with and without hooks), codex, copilot, agy, gemini and opencode really emit; the contract test replays each through the path kj reads verdicts by, and demands a failure's own reason.
+
 ## [4.52.0] - 2026-10-15
 
 ### Added

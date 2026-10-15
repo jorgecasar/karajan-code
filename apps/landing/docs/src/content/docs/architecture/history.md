@@ -1816,6 +1816,12 @@ Field bugs kept showing the same pattern: each gate passed its own tests, and th
 
 Around it, `kj worktree prune` lets a session retire the kj lanes that are provably abandoned (no changes, no unique commits, no live process inside), the method teaches that a correction from the other AI is the method working, not a mistake to apologise for, and a claude reviewer whose answer opens with hook events no longer loses its verdict.
 
+## Phase 145: v4.53.0, the phone stops getting in the way
+
+A user updated kj and met the default max level asking for a phone signature. `kj init` had only explained the phone in a block of text, `kj doctor` listed it as optional, and lowering the level to escape demanded the very phone that was missing. The guarantee was sound; the way into it was not.
+
+ADR 0020 settles both ends. `kj init`, with a person at the terminal, offers to enroll the phone and reuses the identity command with all its checks. With no phone anywhere, the human layers and a typed code lower the level, the record says it is unsigned, and it reads as max again once a phone exists. `kj doctor` now fails at max without a phone and says what is refused. Around it, the coder receives each Sonar issue instead of severity counts, and contract tests replay what each agent CLI really emits, which already caught an opencode failure that reached kj without its reason.
+
 ## Key Architectural Decisions
 
 ### CLI wrapping vs direct API calls

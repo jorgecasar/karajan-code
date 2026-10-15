@@ -1815,6 +1815,12 @@ Los bugs de campo repetían el mismo patrón: cada gate pasaba sus propios tests
 
 Alrededor, `kj worktree prune` deja que una sesión retire los carriles de kj demostrablemente abandonados (sin cambios, sin commits propios, sin procesos vivos dentro), el método enseña que una corrección de la otra IA es el método funcionando y no un error del que disculparse, y un revisor claude cuya respuesta empieza con eventos de hooks ya no pierde su veredicto.
 
+## Phase 145: v4.53.0, el móvil deja de estorbar
+
+Un usuario actualizó kj y se encontró con el nivel máximo por defecto pidiéndole la firma del móvil. `kj init` solo había explicado el móvil en un bloque de texto, `kj doctor` lo listaba como opcional, y bajar el nivel para salir exigía justo el móvil que le faltaba. La garantía era buena; el camino para entrar en ella, no.
+
+El ADR 0020 resuelve los dos extremos. `kj init`, con una persona en la terminal, ofrece enrolar el móvil y reutiliza el comando de identidad con todas sus comprobaciones. Sin ningún móvil, las capas humanas y un código tecleado bajan el nivel, el registro dice que va sin firma y vuelve a leerse como máxima en cuanto existe un móvil. `kj doctor` falla ahora con nivel máximo y sin móvil, y dice qué se rechaza. Alrededor, el coder recibe cada issue de Sonar en vez de los recuentos por severidad, y unos tests de contrato reproducen lo que emite de verdad cada CLI de agentes, que ya cazaron un fallo de opencode que llegaba a kj sin su motivo.
+
 ## Decisiones Arquitectonicas Clave
 
 ### CLI wrapping vs llamadas directas a API
