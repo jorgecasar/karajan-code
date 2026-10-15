@@ -30,6 +30,7 @@ import { loadStandingExceptions, recordPolicyException } from "../policy/excepti
 import { policyFileHash, recordGateDecision } from "../policy/decisions.js";
 import { evaluatePolicyGate } from "../review/policy-gate.js";
 import { correctionNote, reviewCorrectionRounds } from "../review/correction-rounds.js";
+import { cooldownAdvisories, DEFAULT_COOLDOWN_HOURS, formatCooldown } from "../review/dep-cooldown.js";
 
 // KJC-TSK-0686 (MG-A): card-first is a gate, not a habit. Runs on --staged
 // (before spending sonar/reviewer effort) AND on --check — the pre-commit
@@ -577,6 +578,12 @@ export async function reviewGateCommand({ config, logger = null, flags = {} }) {
         + mut.survived.map((m) => `- ${formatSurvivor(m)}`).join("\n");
     }
   }
+
+  // KJC-TSK-0722: a dependency published under the cooldown is said, and weighed by the reviewer.
+  const cooldownHours = config?.supply_chain?.cooldown_hours ?? DEFAULT_COOLDOWN_HOURS;
+  const cooldown = formatCooldown(await cooldownAdvisories(diff, { thresholdHours: cooldownHours }), cooldownHours);
+  for (const line of cooldown.lines) console.log(line);
+  if (cooldown.note) task = `${task || "Review the following diff for correctness, security and maintainability."}\n\n${cooldown.note}`;
 
   const record = await runOneShotReview({ diff, task, config, logger, projectDir, sonar: sonarRecord, rag: ragRecord, ui: uiRecord });
   printVerdict(record, record.verdict === "approved" ? await reviewCorrectionRounds(projectDir, record) : 0);
