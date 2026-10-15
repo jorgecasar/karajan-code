@@ -195,7 +195,26 @@ function buildHuOutcome({ story: _story, iterResult, status, startedAt, huBudget
     // can hide the chip on cold runs or providers without cache.
     cached_tokens: sumTokenField(huBudgetEntries, 'cached_tokens'),
     tokens_in: sumTokenField(huBudgetEntries, 'tokens_in'),
+    // KJC-TSK-0702 (MR-E): the baseline model routing is measured against.
+    tokens_out: sumTokenField(huBudgetEntries, 'tokens_out'),
+    ...routingBaseline(huBudgetEntries, status),
     finishedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * KJC-TSK-0702 (MR-E): which model the coder used and how many times the
+ * reviewer sent the HU back: its rounds, minus the approval that closed a done HU.
+ * Null when nothing was recorded, as "unmeasured".
+ */
+function routingBaseline(entries, status) {
+  const list = Array.isArray(entries) ? entries : [];
+  const coder = list.findLast((e) => e?.role === "coder");
+  const reviewerRounds = list.filter((e) => e?.role === "reviewer").length;
+  const approvalRound = status === "done" ? 1 : 0;
+  return {
+    coder: coder ? { provider: coder.provider ?? null, model: coder.model ?? null } : null,
+    reviewer_rejections: reviewerRounds === 0 ? null : reviewerRounds - approvalRound,
   };
 }
 
