@@ -36,8 +36,6 @@ jobs:
             ':!packages/rag/docs/security/**' \
             ':!apps/landing/docs/**' \
             ':!apps/landing/public/docs/**' \
-            ':!packages/rag/src/easy/sdk.js' \
-            ':!packages/rag/src/easy/rag-service.js' \
             ':!.github/workflows/*.yml' \
             ':!CHANGELOG.md' \
             ':!src/mcp/handlers/*' \
