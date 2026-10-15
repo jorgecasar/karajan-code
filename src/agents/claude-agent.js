@@ -342,7 +342,15 @@ function buildPromptArgs(task) {
   return { args: ["-p", "--allowedTools", ...ALLOWED_TOOLS], input: String(task.prompt ?? "") };
 }
 
+// KJC-TSK-0914: the model claude runs on when nobody declares one; whatever the
+// user declares (roles.<role>.model, coder/reviewer options, --coder-model) wins.
+export const CLAUDE_DEFAULT_MODEL = "claude-opus-5-5";
+
 export class ClaudeAgent extends BaseAgent {
+  getRoleModel(role) {
+    return super.getRoleModel(role) ?? CLAUDE_DEFAULT_MODEL;
+  }
+
   async runTask(task) {
     const role = task.role || "coder";
     const model = this.getRoleModel(role);
