@@ -14,6 +14,7 @@ import { signAct } from "../harden/act-sign.js";
 import { enrollPhone, isPhoneEnrolled, readEnrolledKey, readEnrolledKeys, validatePhonePublicKey } from "../harden/phone-sign.js";
 import { admitSigner, redeemRecoveryCode } from "../harden/roster.js";
 import { phoneInvite } from "../harden/phone-invite.js";
+import { readSecurityLevel } from "../harden/security-level.js";
 import { humanAct } from "../harden/human-act.js";
 import { readIdentity, writeIdentity } from "../identity/store.js";
 import { activeGhUser, effectiveGitEmail } from "../identity/detect.js";
@@ -75,7 +76,9 @@ export async function identityCommand({ action = "show", config, kjVersion = "un
   // KJC-TSK-0986 (HUM-F): the once-per-version invitation to enroll the phone,
   // printed for the SessionStart hook (which cannot import kj) and for scripts.
   if (action === "phone-invite") {
-    const text = phoneInvite({ home: deps.home, version: flags.version });
+    // KJC-BUG-0360: the text depends on the level; at max (the default) the acts are refused.
+    const { level } = readSecurityLevel({ projectDir: deps.projectDir ?? process.cwd(), home: deps.home });
+    const text = phoneInvite({ home: deps.home, version: flags.version, level });
     if (text) log(text);
     return 0;
   }
