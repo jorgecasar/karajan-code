@@ -334,6 +334,7 @@ export function registerMeta(program, { pkgVersion }) {
     // KJC-BUG-0257: the valid states, said before the call fails.
     .description(`Move a card; <status> is one of: ${HU_STATUSES.join(", ")}`)
     .option("--json", "Machine-readable output")
+    .option("--release", "Take over a running card reserved by someone else (the explicit act)")
     .action(async (id, status, flags) => {
       await withConfig(pkgVersion, "hu", flags, async ({ config }) => {
         await huCommand({ config, action: "move", args: [id, status], flags });
