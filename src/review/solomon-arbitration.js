@@ -13,7 +13,7 @@
  *    reject keeps it closed. Both record the full conflict for audit.
  */
 import { createAgent } from "../agents/index.js";
-import { parseMaybeJsonString } from "./parser.js";
+import { parseMaybeJsonString, agentAnswerText } from "./parser.js";
 import { detectAvailableAgents, detectHostAgent } from "../utils/agent-detect.js";
 import { diffHash, loadVerdict, saveVerdict } from "./verdict-store.js";
 import { summarizeGeneratedFiles } from "./prompt-diff.js";
@@ -95,7 +95,7 @@ export async function runSolomonArbitration({
       : `No other agent CLI on this machine can arbitrate (needs one distinct from brain "${hostAgent}" and reviewer "${verdict.reviewer}") — install a third agent CLI or fix ${solomon}.`;
     throw new Error(`solomon ${solomon} failed: ${String(result?.error || "no output").slice(0, 400)}\n${hint}`);
   }
-  const parsed = parseMaybeJsonString(result.output);
+  const parsed = parseMaybeJsonString(agentAnswerText(result.output));
   if (!parsed || !["approve", "reject"].includes(parsed.ruling)) {
     throw new Error(`solomon ${solomon} returned no parseable ruling`);
   }

@@ -10,6 +10,22 @@ export function parseMaybeJsonString(value) {
   return extractFirstJson(value);
 }
 
+/**
+ * KJC-BUG-0357 (#2151): claude's reviewTask answers with its whole stream-json
+ * event stream, which opens with hook and init events, so its first JSON is no
+ * answer. The answer is the text of the final `result` event; any other output
+ * is returned as it came.
+ */
+export function agentAnswerText(raw) {
+  if (typeof raw !== "string") return raw;
+  const lines = raw.trim().split("\n");
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const event = extractFirstJson(lines[i]);
+    if (event?.type === "result" && typeof event.result === "string") return event.result;
+  }
+  return raw;
+}
+
 function isReviewPayload(obj) {
   return obj?.approved !== undefined && obj?.blocking_issues !== undefined;
 }
