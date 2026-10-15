@@ -1,0 +1,7 @@
+{
+  "cli": "codex",
+  "version": "codex-cli 0.146.1",
+  "exitCode": 0,
+  "stdout": "{\"approved\":true,\"blocking_issues\":[],\"non_blocking_suggestions\":[],\"summary\":\"Adds a straightforward exported sum function with correct implementation.\",\"confidence\":0.99}",
+  "stderr": "OpenAI Codex v0.146.1\n--------\nworkdir: /tmp/kj-fixtures-gWzhXs\nmodel: gpt-5.6-terra\nprovider: openai\napproval: never\nsandbox: read-only\nreasoning effort: high\nreasoning summaries: none\nsession id: redacted-id\n--------\nuser\nYou are reviewing this diff. Answer ONLY with one JSON object:\n{\"approved\": boolean, \"blocking_issues\": [], \"non_blocking_suggestions\": [], \"summary\": string, \"confidence\": number}\ndiff --git a/sum.js b/sum.js\n+export const sum = (a, b) => a + b;\nwarning: Codex's Linux sandbox uses bubblewrap and needs access to create user namespaces.\ncodex\n{\"approved\":true,\"blocking_issues\":[],\"non_blocking_suggestions\":[],\"summary\":\"Adds a straightforward exported sum function with correct implementation.\",\"confidence\":0.99}\ntokens used\n3979"
+}
