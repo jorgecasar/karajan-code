@@ -81,6 +81,13 @@ vi.mock("../src/skills/openskills-client.js", () => ({
   isOpenSkillsAvailable: vi.fn().mockResolvedValue(true)
 }));
 
+// KJC-BUG-0360: at the max level a missing phone is a failure, so the
+// "everything OK" machine has one enrolled, whatever the CI home holds.
+vi.mock("../src/harden/phone-sign.js", async (importOriginal) => ({
+  ...(await importOriginal()),
+  isPhoneEnrolled: vi.fn(() => true)
+}));
+
 const baseConfig = {
   review_mode: "standard",
   sonarqube: { enabled: true, host: "http://localhost:9000", enforcement_profile: "pragmatic" }

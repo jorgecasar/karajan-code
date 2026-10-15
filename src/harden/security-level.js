@@ -12,7 +12,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
 import { humanActOf } from "./human-act.js";
-import { PHONE_INVITE } from "./phone-invite.js";
+import { PHONE_ENROLL } from "./phone-texts.js";
 import { isPhoneEnrolled, readEnrolledKeys, requestPhoneSignature, verifySignedFiles } from "./phone-sign.js";
 
 export const SECURITY_LEVEL_FILE = ".karajan/security-level.json";
@@ -75,7 +75,7 @@ export async function lowerSecurityLevel({ projectDir, home, kjVersion, env, tty
   const current = readSecurityLevel({ projectDir, home });
   if (current.level === "normal") return { changed: false, level: current };
   const phone = deps.phone ?? { enrolled: isPhoneEnrolled, request: requestPhoneSignature };
-  if (!phone.enrolled({ home })) throw new Error(`${act.label}: bajar el nivel se firma con el móvil y no hay ninguno enrolado. ${PHONE_INVITE}`);
+  if (!phone.enrolled({ home })) throw new Error(`${act.label}: bajar el nivel se firma con el móvil y no hay ninguno enrolado. ${PHONE_ENROLL}`);
   act.confirm(deps.confirm);
   const record = { level: "normal", since: new Date().toISOString() };
   let branch = null;

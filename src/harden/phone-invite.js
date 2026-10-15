@@ -10,10 +10,11 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { isPhoneEnrolled } from "./phone-sign.js";
+import { phoneTextFor } from "./phone-texts.js";
+import { readSecurityLevel } from "./security-level.js";
 import { STRATEGY } from "../checks/types.js";
 
-export const PHONE_INVITE =
-  "El móvil no está enrolado: los sellos (kj harden --commit), las aprobaciones y los comandos del catálogo se firman hoy con un código tecleado, con menos garantía. Enrólalo con kj identity enroll-phone <clave pública de la app>: cada acto queda atado a tu clave privada, que nunca sale del móvil (ADR 0018).";
+export { PHONE_ENROLL, PHONE_INVITE, PHONE_REFUSED_AT_MAX } from "./phone-texts.js";
 
 const markerPath = (home) => join(home ?? homedir(), ".karajan", "phone-invite.json");
 
@@ -21,10 +22,10 @@ const markerPath = (home) => join(home ?? homedir(), ".karajan", "phone-invite.j
  * The invitation, once per kj version, or null (phone enrolled, or already said
  * for this version). Saying it records it; a marker that cannot be written
  * never silences the invitation.
- * @param {{home?: string, version?: string}} [opts]
+ * @param {{home?: string, version?: string, level?: "max"|"normal"}} [opts]
  * @returns {string|null}
  */
-export function phoneInvite({ home, version = "unknown" } = {}) {
+export function phoneInvite({ home, version = "unknown", level = "max" } = {}) {
   if (isPhoneEnrolled({ home })) return null;
   let seen = null;
   try { seen = JSON.parse(readFileSync(markerPath(home), "utf8")).version; } catch { /* never invited */ }
@@ -33,11 +34,16 @@ export function phoneInvite({ home, version = "unknown" } = {}) {
     mkdirSync(dirname(markerPath(home)), { recursive: true });
     writeFileSync(markerPath(home), `${JSON.stringify({ version, at: new Date().toISOString() })}\n`, "utf8");
   } catch { /* the invitation still goes out */ }
-  return PHONE_INVITE;
+  return phoneTextFor(level);
 }
 
-/** `kj doctor`: WARN while the phone is not enrolled, with the same text. */
-export function createPhoneCheck({ home } = {}) {
+const projectLevel = (projectDir, home) => readSecurityLevel({ projectDir, home }).level;
+
+/**
+ * `kj doctor`: without a phone, a FAILURE at the max level (the default, where
+ * the acts are refused) and a warning at the normal level (KJC-BUG-0360).
+ */
+export function createPhoneCheck({ home, projectDir = process.cwd(), readLevel = () => projectLevel(projectDir, home) } = {}) {
   return {
     name: "phone-enrolled",
     label: "móvil enrolado (firma de sellos y aprobaciones)",
@@ -45,7 +51,8 @@ export function createPhoneCheck({ home } = {}) {
     describe: "Whether a phone's public key is enrolled for the supervisor seal and approvals (ADR 0018)",
     async detect() {
       if (isPhoneEnrolled({ home })) return { ok: true, severity: "info", detail: "clave pública en ~/.karajan/supervisor-phone.json" };
-      return { ok: false, severity: "warn", detail: PHONE_INVITE, fix: "kj identity enroll-phone <clave pública de la app>" };
+      const level = await readLevel();
+      return { ok: false, severity: level === "normal" ? "warn" : "fail", detail: phoneTextFor(level), fix: "kj identity enroll-phone <clave pública de la app>" };
     },
   };
 }
