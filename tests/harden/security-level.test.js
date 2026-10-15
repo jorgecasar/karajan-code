@@ -89,6 +89,32 @@ describe("lowerSecurityLevel (the catalog act security-level-down), from max", (
     expect(confirmed).toBe(false);
   });
 
+  // KJC-TSK-1045 (ADR 0020): with no phone anywhere, max only blocks; a person at
+  // the terminal may lower it, and the unsigned record lasts while no phone exists.
+  describe("with no phone enrolled anywhere", () => {
+    let bare;
+    beforeEach(() => { bare = mkdtempSync(join(tmpdir(), "kj-seclevel-bare-")); });
+    afterEach(() => rmSync(bare, { recursive: true, force: true }));
+    const lowerBare = (over = {}) => lower({ home: bare, ...over, deps: { phone: never, ...over.deps } });
+
+    it("a person at the terminal lowers it to normal with the typed code, unsigned and said so", async () => {
+      expect((await lowerBare()).changed).toBe(true);
+      expect(JSON.parse(readFileSync(join(repo, SECURITY_LEVEL_FILE), "utf8"))).toMatchObject({ level: "normal", unsigned: "no-phone-enrolled" });
+      expect(readSecurityLevel({ projectDir: repo, home: bare })).toMatchObject({ level: "normal", source: "file", unsigned: true });
+    });
+
+    it("an agent session cannot: the human layers still hold", async () => {
+      await expect(lowerBare({ env: { CLAUDECODE: "1" } })).rejects.toThrow(/acto humano/);
+      expect(readSecurityLevel({ projectDir: repo, home: bare })).toMatchObject({ level: "max" });
+    });
+
+    it("once a phone is enrolled, the unsigned record reads as max again", async () => {
+      await lowerBare();
+      enrollPhone(mine.pub, { home: bare });
+      expect(readSecurityLevel({ projectDir: repo, home: bare })).toMatchObject({ level: "max", source: "invalid" });
+    });
+  });
+
   it("raiseSecurityLevel: up is free and idempotent; it also replaces a record that cannot be trusted", async () => {
     const raise = () => raiseSecurityLevel({ projectDir: repo, home });
     await lower();
