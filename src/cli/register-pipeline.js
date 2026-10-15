@@ -14,6 +14,7 @@ import { runCommandHandler } from "../commands/run.js";
 import { statusCommand } from "../commands/status.js";
 import { loadPlan } from "../plan/plan-store.js";
 import { withConfig } from "./_shared.js";
+import { publishPrReview } from "../review/publish-pr.js";
 
 /**
  * Register the "core pipeline" commands: everything the user runs day-to-day
@@ -254,8 +255,15 @@ export function registerPipeline(program, { pkgVersion }) {
     // this the rule could only complain, which is the gate with no exit.
     .option("--walked <route>", "Recorrido comprobado como lo haría una persona (repetible) — queda en el veredicto", (v, prev) => [...(prev || []), v], [])
     .option("--walked-with <tool>", "Con qué se comprobó el recorrido (por ejemplo chrome-devtools)")
+    .option("--publish-pr <n>", "Publish the cross-AI verdicts of a PR's commits on it as one GitHub review")
     .action(async (task, flags) => {
       await withConfig(pkgVersion, "review", flags, async ({ config, logger }) => {
+        // KJC-TSK-0913: the verdicts kj already holds, published on the PR as one review.
+        if (flags.publishPr) {
+          const r = await publishPrReview({ projectDir: config.projectDir || process.cwd(), pr: flags.publishPr });
+          logger.info(r.published ? `✓ PR #${flags.publishPr}: review published (${r.commits} commit(s))` : `PR #${flags.publishPr}: ${r.reason}`);
+          return;
+        }
         // ENV-B1 (KJC-TSK-0637): the gate mode records a verdict tied to
         // the exact diff so the pre-commit hook can enforce cross-AI review.
         if (flags.staged || flags.check || flags.range || flags.installGate || flags.prune) {
