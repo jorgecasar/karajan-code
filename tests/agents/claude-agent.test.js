@@ -254,9 +254,17 @@ describe("ClaudeAgent", () => {
       expect(args).toContain(model);
     });
 
-    it("omits --model when no model is configured", async () => {
-      await new ClaudeAgent("claude", baseConfig, logger).runTask({ prompt: "t", role: "coder" });
-      expect(runCommand.mock.calls[0][1]).not.toContain("--model");
+    // KJC-TSK-0914: with no model declared, claude runs on claude-opus-5-5; what the user declares wins.
+    it.each([["coder", "runTask"], ["reviewer", "reviewTask"]])("%s without a declared model runs on claude-opus-5-5", async (role, method) => {
+      await new ClaudeAgent("claude", baseConfig, logger)[method]({ prompt: "t", role });
+      const args = runCommand.mock.calls[0][1];
+      expect(args[args.indexOf("--model") + 1]).toBe("claude-opus-5-5");
+    });
+
+    it("a model of another family declared for the role is dropped, and the default applies", async () => {
+      await new ClaudeAgent("claude", cfg("coder", "gpt-5.6-terra"), logger).runTask({ prompt: "t", role: "coder" });
+      const args = runCommand.mock.calls[0][1];
+      expect(args[args.indexOf("--model") + 1]).toBe("claude-opus-5-5");
     });
   });
 
