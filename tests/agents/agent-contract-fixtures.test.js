@@ -16,10 +16,37 @@ const FAILURE_REASONS = {
   "opencode/review.json": /Unable to connect/,
 };
 
-// Every recording: tests/agents/fixtures/<cli>/review*.json → "<cli>/<file>".
-const recorded = existsSync(FIXTURES)
-  ? readdirSync(FIXTURES).flatMap((cli) => readdirSync(new URL(`${cli}/`, FIXTURES)).filter((f) => /^review.*\.json$/.test(f)).map((f) => `${cli}/${f}`))
-  : [];
+// Every recording: tests/agents/fixtures/<cli>/<kind>*.json → "<cli>/<file>".
+const recordingsOf = (kind) => (existsSync(FIXTURES)
+  ? readdirSync(FIXTURES).flatMap((cli) => readdirSync(new URL(`${cli}/`, FIXTURES)).filter((f) => new RegExp(`^${kind}.*\\.json$`).test(f)).map((f) => `${cli}/${f}`))
+  : []);
+const recorded = recordingsOf("review");
+
+// KJC-TSK-1044: what each coder (runTask) really answers to "reply with exactly kj-contract-ok".
+describe("coder contract fixtures", () => {
+  const tasks = recordingsOf("task");
+
+  it("the recordings cover the coder of claude and codex", () => {
+    expect(tasks).toEqual(expect.arrayContaining(["claude/task.json", "codex/task.json"]));
+  });
+
+  describe.each(tasks.map((p) => [p]))("%s", (p) => {
+    const fixture = JSON.parse(readFileSync(new URL(p, FIXTURES), "utf8"));
+    const runner = { run: async () => ({ exitCode: fixture.exitCode, stdout: fixture.stdout, stderr: fixture.stderr }) };
+    const run = () => createAgent(p.split("/")[0], {}, logger, buildEnvironment({ runner })).runTask({ prompt: "recorded", role: "coder" });
+
+    it(`kj gets the coder's final text from the real answer (${fixture.version})`, async () => {
+      const result = await run();
+      if (fixture.exitCode === 0) {
+        expect(result.ok).toBe(true);
+        expect(String(result.output).trim()).toMatch(/^kj-contract-ok$/m);
+      } else {
+        expect(result.ok).toBe(false);
+        expect(result.error).toMatch(FAILURE_REASONS[p]);
+      }
+    });
+  });
+});
 
 describe("agent contract fixtures", () => {
   it("the recordings cover claude with and without hooks, codex, copilot, agy, gemini and opencode", () => {
