@@ -10,20 +10,11 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { isPhoneEnrolled } from "./phone-sign.js";
+import { phoneTextFor } from "./phone-texts.js";
+import { readSecurityLevel } from "./security-level.js";
 import { STRATEGY } from "../checks/types.js";
 
-export const PHONE_ENROLL =
-  "Enrólalo con kj identity enroll-phone <clave pública de la app>: cada acto queda atado a tu clave privada, que nunca sale del móvil (ADR 0018).";
-
-/** Normal level: without a phone the acts are signed with a typed code. */
-export const PHONE_INVITE =
-  `El móvil no está enrolado: los sellos (kj harden --commit), las aprobaciones y los comandos del catálogo se firman hoy con un código tecleado, con menos garantía. ${PHONE_ENROLL}`;
-
-/** KJC-BUG-0360: max level, the default: without a phone the acts are REFUSED, not signed with a code. */
-export const PHONE_REFUSED_AT_MAX =
-  `El móvil no está enrolado y la seguridad es máxima (la de por defecto): kj harden --commit, kj rules approve y enrolar otro móvil se rechazan hasta enrolarlo. ${PHONE_ENROLL}`;
-
-const phoneTextFor = (level) => (level === "normal" ? PHONE_INVITE : PHONE_REFUSED_AT_MAX);
+export { PHONE_ENROLL, PHONE_INVITE, PHONE_REFUSED_AT_MAX } from "./phone-texts.js";
 
 const markerPath = (home) => join(home ?? homedir(), ".karajan", "phone-invite.json");
 
@@ -46,8 +37,7 @@ export function phoneInvite({ home, version = "unknown", level = "max" } = {}) {
   return phoneTextFor(level);
 }
 
-// Dynamic import: security-level.js imports this module's texts.
-const projectLevel = async (projectDir, home) => (await import("./security-level.js")).readSecurityLevel({ projectDir, home }).level;
+const projectLevel = (projectDir, home) => readSecurityLevel({ projectDir, home }).level;
 
 /**
  * `kj doctor`: without a phone, a FAILURE at the max level (the default, where

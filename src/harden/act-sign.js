@@ -10,7 +10,7 @@
 import { basename } from "node:path";
 
 import { humanActOf } from "./human-act.js";
-import { PHONE_ENROLL, PHONE_INVITE } from "./phone-invite.js";
+import { PHONE_ENROLL, PHONE_INVITE } from "./phone-texts.js";
 import { isPhoneEnrolled, requestPhoneSignature } from "./phone-sign.js";
 import { readSecurityLevel } from "./security-level.js";
 

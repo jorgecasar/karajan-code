@@ -12,7 +12,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
 import { humanActOf } from "./human-act.js";
-import { PHONE_ENROLL } from "./phone-invite.js";
+import { PHONE_ENROLL } from "./phone-texts.js";
 import { isPhoneEnrolled, readEnrolledKeys, requestPhoneSignature, verifySignedFiles } from "./phone-sign.js";
 
 export const SECURITY_LEVEL_FILE = ".karajan/security-level.json";
