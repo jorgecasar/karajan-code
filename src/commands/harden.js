@@ -24,6 +24,7 @@ import { installHarnessHooks } from "../harden/harness-hooks.js";
 import { installSentinelHooks } from "../harden/sentinel-hooks.js";
 import { detectStackRoots } from "../harden/stack-roots.js";
 import { installWorkflows } from "../harden/workflow-engine.js";
+import { adviseBranchProtection } from "../harden/branch-protection.js";
 import { detectTestFramework } from "../utils/project-detect.js";
 import { ensureIdentity } from "../identity/bootstrap.js";
 import { commitContract, contractChanges } from "../environment/contract-commit.js";
@@ -250,6 +251,8 @@ export async function hardenCommand({
       out.identityCommand = id.command;
     }
   }
+  // KJC-TSK-0928: the method's checks only stop a merge with branch protection; kj says the exact command.
+  if (!dryRun) out.branchProtection = await adviseBranchProtection({ projectDir, branch: await resolveBaseBranch(projectDir), logger });
   // KJC-BUG-0161 / ADR 0009 (opción A): --commit versiona la regeneración
   // del supervisor con procedencia sellada. Acto humano — el guard vive en
   // commitSupervisorRegeneration y rechaza sesiones de agente.
