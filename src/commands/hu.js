@@ -9,6 +9,8 @@ import { addHu, updateHuStatus } from "../plan/plan-hu-ops.js";
 import { generatePlanId } from "../plan/plan-id.js";
 import { savePlan, listPlans, loadPlan } from "../plan/plan-store.js";
 import { detectHostAgent } from "../utils/agent-detect.js";
+import { readIdentity } from "../identity/store.js";
+import { effectiveGitEmail } from "../identity/detect.js";
 
 // KJC-TSK-0661 (Jorge's friction): every HU records WHO created it — the
 // board must never show work nobody can trace. Host agent env → that agent;
@@ -58,7 +60,10 @@ export async function backlogPlan(projectDir) {
   return loadPlan(projectDir, planId);
 }
 
-export async function huCommand({ config = null, action, args = [], flags = {} }) {
+// KJC-TSK-1047 (TEAM-A): who works this clone, the one a started card is reserved to.
+const workerOf = (projectDir) => readIdentity(projectDir)?.gh_user || effectiveGitEmail(projectDir) || null;
+
+export async function huCommand({ config = null, action, args = [], flags = {}, deps = {} }) {
   const projectDir = config?.projectDir || process.cwd();
   const emit = (obj, human) => { console.log(flags.json ? JSON.stringify(obj) : human); return obj; };
 
@@ -79,12 +84,14 @@ export async function huCommand({ config = null, action, args = [], flags = {} }
           // the card. Older HUs predate the stamp: shown as "?".
           created_by: h.created_by || null, created_at: h.createdAt || null,
           external_ref: h.external_ref || null,
+          claimed_by: h.claimed_by || null, claimed_at: h.claimed_at || null,
         });
       }
     }
     if (flags.json) { console.log(JSON.stringify(rows)); return rows; }
     for (const r of rows) {
-      const suffixes = [r.created_at?.slice(0, 10), r.external_ref].filter(Boolean).map((s) => ` · ${s}`).join("");
+      const reserved = r.status === "running" && r.claimed_by ? `reserved by ${r.claimed_by}` : null;
+      const suffixes = [r.created_at?.slice(0, 10), r.external_ref, reserved].filter(Boolean).map((s) => ` · ${s}`).join("");
       const origin = `${r.plan} · by ${r.created_by || "?"}${suffixes}`;
       console.log(`${(r.short_id || r.id).padEnd(28)} ${r.status.padEnd(8)} ${r.title}  [${origin}]`);
     }
@@ -215,9 +222,23 @@ export async function huCommand({ config = null, action, args = [], flags = {} }
         + `a second concurrent task should live in its own lane: kj worktree start ${slug}`
       );
     }
+    // KJC-TSK-1047 (TEAM-A): a running card reserved by someone else moves only with --release.
+    const who = deps.who === undefined ? workerOf(projectDir) : deps.who;
+    const label = hu.short_id || hu.id;
+    // An unidentified caller is not the one who reserved it.
+    const takenOver = hu.status === "running" && hu.claimed_by && hu.claimed_by !== who;
+    if (takenOver && !flags.release) {
+      throw new Error(`${label} is reserved by ${hu.claimed_by} since ${hu.claimed_at} — releasing it is explicit: kj hu move ${ref} ${status} --release`);
+    }
+    const starting = status === "running" && hu.status !== "running";
+    // A running card nobody reserved is reserved by who moves it there again, once kj knows who.
+    const unclaimedRunning = status === "running" && !hu.claimed_by && who;
     updateHuStatus(plan, hu.id, status);
+    // Starting it, or releasing it to any status, rewrites the reservation: who did it, or nobody.
+    if (starting || takenOver || unclaimedRunning) Object.assign(hu, { claimed_by: who ?? null, claimed_at: who ? new Date().toISOString() : null });
+    if (starting && !who) console.warn(`⚠ ${label} is not reserved: kj cannot tell who works this clone — declare it with kj identity set`);
     await savePlan(projectDir, plan);
-    return emit({ id: hu.id, status }, `✓ ${hu.short_id || hu.id} → ${status}`);
+    return emit({ id: hu.id, status, claimed_by: hu.claimed_by ?? null }, `✓ ${label} → ${status}`);
   }
 
   throw new Error(`unknown action "${action}" — use: add | move | list`);
