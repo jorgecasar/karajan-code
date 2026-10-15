@@ -384,6 +384,25 @@ describe("iteration-stages: runSonarStage", () => {
     expect(result.stageResult.gateStatus).toBe("OK");
   });
 
+  // KJC-BUG-0359 (#2158): the coder got only severity counts and guessed until sonar_repeat.
+  it("a blocking gate hands the coder each issue: severity, rule, file, line and message", async () => {
+    sonarRunFn = vi.fn(async () => ({
+      ok: true,
+      summary: "Quality gate: ERROR; Issues: 1 (CRITICAL: 1)",
+      result: {
+        gateStatus: "ERROR", blocking: true, openIssuesTotal: 1, projectKey: "test-project",
+        issues: [{ severity: "CRITICAL", type: "CODE_SMELL", file: "test-project:src/a.js", line: 12, rule: "javascript:S3776", message: "Refactor this function to reduce its Cognitive Complexity" }],
+      },
+    }));
+    const session = makeSession();
+    await runSonarStage({
+      config: makeConfig(), logger, emitter, eventBase, session, trackBudget, iteration: 1,
+      repeatDetector, budgetSummary, sonarState: { issuesInitial: null, issuesFinal: null }, askQuestion: null, task: "do X"
+    });
+    expect(session.last_reviewer_feedback).toMatch(/CRITICAL.*javascript:S3776.*src\/a\.js:12.*Cognitive Complexity/);
+    expect(session.last_reviewer_feedback).not.toMatch(/test-project:/);
+  });
+
   it("skips when sonar is not reachable and docker start fails", async () => {
     const { isSonarReachable, sonarUp } = await import("../src/sonar/manager.js");
     isSonarReachable.mockResolvedValueOnce(false);

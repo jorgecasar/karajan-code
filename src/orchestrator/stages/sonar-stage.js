@@ -124,6 +124,21 @@ async function handleSonarRetryLimit({ config, logger, emitter, eventBase, sessi
   return null;
 }
 
+// KJC-BUG-0359 (#2158): with only the severity counts the coder guessed and
+// tripped sonar_repeat. Each issue travels in the feedback, its path without
+// the project key; past the cap, the rest is counted, never silently dropped.
+const MAX_ISSUES_FOR_CODER = 25;
+export function formatIssuesForCoder(issues) {
+  if (!Array.isArray(issues) || issues.length === 0) return "";
+  const lines = issues.slice(0, MAX_ISSUES_FOR_CODER).map((i) => {
+    const file = String(i.file ?? "").replace(/^[^:]*:/, "");
+    return `- [${i.severity}] ${i.rule} ${file}:${i.line} ${i.message}`;
+  });
+  const rest = issues.length - lines.length;
+  if (rest > 0) lines.push(`…and ${rest} more`);
+  return `\nIssues to fix:\n${lines.join("\n")}`;
+}
+
 async function handleSonarBlocking({ sonarResult, config, logger, emitter, eventBase, session, iteration, repeatDetector, budgetSummary, askQuestion, task, brainCtx }) {
   // If the ONLY quality gate failure is coverage, treat as non-blocking warning
   if (sonarResult.conditions) {
@@ -148,7 +163,7 @@ async function handleSonarBlocking({ sonarResult, config, logger, emitter, event
     return handleSonarStalled({ repeatDetector, logger, emitter, eventBase, session, budgetSummary });
   }
 
-  const summary = `Sonar gate blocking (${sonarResult.gateStatus}). Resolve critical findings first.`;
+  const summary = `Sonar gate blocking (${sonarResult.gateStatus}). Resolve critical findings first.${formatIssuesForCoder(sonarResult.issues)}`;
   setReviewerFeedback(session, summary);
   // Brain: push sonar feedback into queue when enabled
   if (brainCtx?.enabled) {
