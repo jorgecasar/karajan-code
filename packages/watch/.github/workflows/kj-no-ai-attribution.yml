@@ -23,4 +23,5 @@ jobs:
             echo "::error::AI attribution detected in commit messages"; exit 1
           fi
           echo "AI attribution scan: clean"
+
 # <<< kj:managed:wf-no-ai <<<

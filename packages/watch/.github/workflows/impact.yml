@@ -28,7 +28,7 @@ on:
       pr-number:
         description: Nº de PR donde comentar (target pr-comment)
         type: string
-        default: ''
+        default: ""
       config-path:
         description: Ruta del karajan-watch.config.json en el repo que llama
         type: string

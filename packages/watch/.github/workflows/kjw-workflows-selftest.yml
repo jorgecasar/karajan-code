@@ -16,8 +16,8 @@ name: Workflows selftest
 on:
   pull_request:
     paths:
-      - '.github/workflows/**'
-      - '.github/selftest/**'
+      - ".github/workflows/**"
+      - ".github/selftest/**"
   workflow_dispatch:
 
 permissions:

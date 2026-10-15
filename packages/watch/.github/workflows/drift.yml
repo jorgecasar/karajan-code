@@ -26,7 +26,7 @@ on:
       pr-number:
         description: Nº de PR donde comentar (target pr-comment)
         type: string
-        default: ''
+        default: ""
       judge:
         description: Activar el juicio LLM de filtrado de ruido
         type: boolean
