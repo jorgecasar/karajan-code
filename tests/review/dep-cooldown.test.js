@@ -64,6 +64,15 @@ describe("cooldownAdvisories", () => {
     expect(r.unverified[0]).toMatchObject({ name: "old-pkg", reason: expect.stringMatching(/ENOTFOUND/) });
   });
 
+  it("a regenerated lockfile (over 40 packages) is said in one line and queries nothing", async () => {
+    const many = ["diff --git a/package-lock.json b/package-lock.json", ...Array.from({ length: 41 }, (_, i) => `+    "node_modules/p${i}": {\n+      "version": "1.0.0",`)].join("\n");
+    const quiet = vi.fn();
+    const r = await cooldownAdvisories(many, { run: quiet, now });
+    expect(r).toEqual({ young: [], unverified: [], skipped: 41 });
+    expect(quiet).not.toHaveBeenCalled();
+    expect(formatCooldown(r).lines).toEqual([expect.stringMatching(/41 packages changed .*none was checked/)]);
+  });
+
   it("no lockfile change, nothing to ask", async () => {
     const quiet = vi.fn();
     expect(await cooldownAdvisories("diff --git a/x.js b/x.js\n+const a = 1;\n", { run: quiet, now })).toEqual({ young: [], unverified: [] });

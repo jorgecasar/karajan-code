@@ -39,24 +39,27 @@ async function publishedAt({ name, version }, run) {
 }
 
 /** What kj review prints, and the note the reviewer gets; empty when there is nothing to say. */
-export function formatCooldown({ young, unverified }, thresholdHours = DEFAULT_COOLDOWN_HOURS) {
+export function formatCooldown({ young, unverified, skipped = 0 }, thresholdHours = DEFAULT_COOLDOWN_HOURS) {
   const lines = [
     ...young.map((p) => `⚠ supply-chain cooldown: ${p.name}@${p.version} was published ${p.hours} h ago (under ${thresholdHours} h): campaigns are caught in their first hours`),
     ...unverified.map((p) => `⚠ supply-chain cooldown: ${p.name}@${p.version} unverified (${p.reason})`),
+    ...(skipped > 0 ? [`⚠ supply-chain cooldown: ${skipped} packages changed (a regenerated lockfile?), too many to check one by one: none was checked`] : []),
   ];
   const note = young.length === 0 ? "" : `Dependencies published under ${thresholdHours} h ago (weigh them as a supply-chain risk): ${young.map((p) => `${p.name}@${p.version} (${p.hours} h)`).join(", ")}`;
   return { lines, note };
 }
 
 /**
- * @returns {Promise<{young: {name, version, hours}[], unverified: {name, version, reason}[]}>}
+ * Over MAX_QUERIES changed packages (a regenerated lockfile) none is queried:
+ * one line says so, instead of a line per package and a call per package.
+ * @returns {Promise<{young: {name, version, hours}[], unverified: {name, version, reason}[], skipped?: number}>}
  */
 export async function cooldownAdvisories(diff, { thresholdHours = DEFAULT_COOLDOWN_HOURS, run = runCommand, now = Date.now() } = {}) {
   const changes = lockfileChanges(diff);
+  if (changes.length > MAX_QUERIES) return { young: [], unverified: [], skipped: changes.length };
   const young = [];
   const unverified = [];
-  for (const [i, pkg] of changes.entries()) {
-    if (i >= MAX_QUERIES) { unverified.push({ ...pkg, reason: `not checked: over ${MAX_QUERIES} packages changed` }); continue; }
+  for (const pkg of changes) {
     try {
       const hours = Math.floor((now - await publishedAt(pkg, run)) / 3_600_000);
       if (hours < thresholdHours) young.push({ ...pkg, hours });
