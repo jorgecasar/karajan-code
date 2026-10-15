@@ -72,3 +72,27 @@ export async function classifyLanes({ git, laneRoot, base, processes, now = Date
     return { slug: path.basename(lane.path), path: lane.path, branch: lane.branch, reasons };
   }));
 }
+
+/** KJC-TSK-1037: the base a lane is measured against: origin/<base> when it exists (a local base can lag far behind). */
+export async function resolveBase({ git, base }) {
+  try {
+    await git(["rev-parse", "--verify", "--quiet", `refs/remotes/origin/${base}`]);
+    return `origin/${base}`;
+  } catch {
+    return base;
+  }
+}
+
+/** KJC-TSK-1037: loose kj-hu-* branches (no worktree): the empty ones, and the ones with work and how much. */
+export async function looseLaneBranches({ git, base }) {
+  const { stdout: listed } = await git(["for-each-ref", "--format=%(refname:short) %(worktreepath)", "refs/heads/kj-hu-*"]);
+  const loose = listed.split("\n").map((l) => l.trim()).filter((l) => l && !l.includes(" "));
+  const empty = [];
+  const withWork = [];
+  for (const branch of loose) {
+    const { stdout: ahead } = await git(["rev-list", "--count", `${base}..${branch}`]);
+    if (Number(ahead) === 0) empty.push(branch);
+    else withWork.push({ branch, reason: `${Number(ahead)} commit(s) not in ${base}` });
+  }
+  return { empty, withWork };
+}

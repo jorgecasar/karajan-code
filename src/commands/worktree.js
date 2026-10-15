@@ -11,7 +11,7 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { bootstrapWorktree } from "../hu/worktree-bootstrap.js";
-import { classifyLanes, liveProcesses } from "../hu/lane-prune.js";
+import { classifyLanes, liveProcesses, looseLaneBranches, resolveBase } from "../hu/lane-prune.js";
 import { recordGateDecision } from "../policy/decisions.js";
 
 const execFileAsync = promisify(execFile);
@@ -76,24 +76,33 @@ export async function worktreeCommand({ config = null, action, args = [], flags 
 
   if (action === "prune") {
     const { processes = liveProcesses() } = deps;
-    const lanes = await classifyLanes({ git, laneRoot: path.join(projectDir, WORKTREE_DIR), base: config?.base_branch || "main", processes, now: deps.now });
+    const base = await resolveBase({ git, base: config?.base_branch || "main" });
+    const lanes = await classifyLanes({ git, laneRoot: path.join(projectDir, WORKTREE_DIR), base, processes, now: deps.now });
     const abandoned = lanes.filter((l) => l.reasons.length === 0);
     const kept = lanes.filter((l) => l.reasons.length > 0);
     for (const l of kept) console.log(`kept    ${l.slug.padEnd(24)} ${l.reasons.join("; ")}`);
     if (lanes.length === 0) console.log("no kj lanes");
+    // KJC-TSK-1037: loose kj-hu-* branches of old runs, measured against the same base.
+    const { empty: branches, withWork } = await looseLaneBranches({ git, base });
+    for (const b of withWork) console.log(`kept    branch ${b.branch.padEnd(17)} ${b.reason}`);
     if (flags.dryRun) {
       for (const l of abandoned) console.log(`would retire ${l.slug} (${l.branch ?? "detached"})`);
-      return { wouldRemove: abandoned, kept };
+      for (const b of branches) console.log(`would delete branch ${b}`);
+      return { wouldRemove: abandoned, kept, wouldRemoveBranches: branches, branchesKept: withWork };
+    }
+    for (const b of branches) {
+      await git(["branch", "-D", b]);
+      console.log(`✓ deleted branch ${b}`);
     }
     for (const l of abandoned) {
       await git(["worktree", "remove", l.path]);
       if (l.branch) await git(["branch", "-D", l.branch]);
       console.log(`✓ retired ${l.slug} (${l.branch ?? "detached"})`);
     }
-    if (abandoned.length > 0) {
-      recordGateDecision(projectDir, { decision: "allow", chokepoint: "tool", kind: "worktree-prune", lanes: abandoned.map((l) => l.slug) });
+    if (abandoned.length > 0 || branches.length > 0) {
+      recordGateDecision(projectDir, { decision: "allow", chokepoint: "tool", kind: "worktree-prune", lanes: abandoned.map((l) => l.slug), branches });
     }
-    return { removed: abandoned, kept };
+    return { removed: abandoned, kept, branchesRemoved: branches, branchesKept: withWork };
   }
 
   throw new Error(`unknown action "${action}" — use: start | list | done | prune`);
