@@ -65,7 +65,11 @@ The caveat loop engineering insists on — *unattended loops make unattended mis
 
 The most recent releases, newest first. Older versions live in [Architecture › History](/docs/architecture/history/) and the [CHANGELOG](https://github.com/manufosela/karajan-code/blob/main/CHANGELOG.md).
 
-### v4.53.0: the phone stops getting in the way (current)
+### v4.53.1: stacked PRs pass board-sync (current)
+
+The next PR of a card split into stacked PRs can be pushed and opened before the first one's card is moved, a block kj could not verify says why (usually another gh account active), and a card title or commit message that only mentions sealing the harness or enrolling the phone is read as text.
+
+### v4.53.0: the phone stops getting in the way
 
 `kj init` offers to enroll your phone, `kj doctor` says plainly what is refused without it, and with no phone at all a person at the terminal can lower the level. `kj review --publish-pr` puts the cross-AI verdicts on the PR as a GitHub review, `kj review` warns of dependencies published hours ago, `kj harden` says how to make the method's checks required, and starting a card reserves it for a team. Each HU now records its coder model and cost, and `kj report` adds them up per model; it also leaves the decomposition with its tier, and `kj run --profile frugal|standard|deep` picks the models. A plan says whether each change extends, reworks or rebuilds existing code, and a rework needs a licence from the module's mutation score. The supply-chain cooldown can block, `kj check` says when the audit is due, and the prompt-injection patterns become a catalog the whole family reads.
 
