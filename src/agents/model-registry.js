@@ -86,6 +86,11 @@ registerModel("gpt-5.4-mini", { provider: "openai", pricing: { input_per_million
 
 // Default models & General aliases
 registerModel("codex", { provider: "openai", pricing: { input_per_million: 1.5, output_per_million: 4 } });
+// KJC-TSK-0699: the models the codex CLI lists (0.146.1). List prices after the
+// 2026-07-30 cut; Sol at its base rate, not the temporary promotion.
+registerModel("gpt-5.6-sol", { provider: "openai", pricing: { input_per_million: 5.0, output_per_million: 30.0 } });
+registerModel("gpt-5.6-terra", { provider: "openai", pricing: { input_per_million: 2.0, output_per_million: 12.0 } });
+registerModel("gpt-5.6-luna", { provider: "openai", pricing: { input_per_million: 0.2, output_per_million: 1.2 } });
 registerModel("o4-mini", { provider: "openai", pricing: { input_per_million: 1.5, output_per_million: 4 } });
 registerModel("o3", { provider: "openai", pricing: { input_per_million: 10, output_per_million: 40 } });
 

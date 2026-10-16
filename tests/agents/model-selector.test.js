@@ -16,9 +16,19 @@ describe("getDefaultModelTiers", () => {
     expect(getDefaultModelTiers().claude.trivial).toBe("haiku");
   });
 
-  it("includes all four providers", () => {
+  it("includes every agent provider kj ships", () => {
     const tiers = getDefaultModelTiers();
-    expect(Object.keys(tiers).sort()).toEqual(["aider", "claude", "codex", "gemini"]);
+    expect(Object.keys(tiers).sort()).toEqual(["aider", "claude", "codex", "copilot", "gemini", "opencode", "qwen"]);
+  });
+
+  // KJC-TSK-0699: ids verified 2026-10-16. Where the CLI has no models of its own
+  // (aider, opencode: per-user providers) or no longer serves individuals
+  // (gemini, qwen), or publishes no list (copilot), null leaves the CLI default.
+  it("null wherever no id could be verified", () => {
+    const tiers = getDefaultModelTiers();
+    for (const provider of ["aider", "opencode", "gemini", "qwen", "copilot"]) {
+      for (const level of ["trivial", "simple", "medium", "complex"]) expect(tiers[provider][level]).toBeNull();
+    }
   });
 
   it("each provider has all four levels", () => {
@@ -66,20 +76,17 @@ describe("resolveModelForRole", () => {
     expect(resolveModelForRole({ role: "coder", provider: "claude", level: "complex" })).toBe("opus");
   });
 
-  it("maps codex/trivial → o4-mini", () => {
-    expect(resolveModelForRole({ role: "coder", provider: "codex", level: "trivial" })).toBe("o4-mini");
+  it("maps codex/trivial → gpt-5.6-luna (fast)", () => {
+    expect(resolveModelForRole({ role: "coder", provider: "codex", level: "trivial" })).toBe("gpt-5.6-luna");
   });
 
-  it("maps codex/complex → o3", () => {
-    expect(resolveModelForRole({ role: "coder", provider: "codex", level: "complex" })).toBe("o3");
+  it("maps codex/medium → gpt-5.6-terra and codex/complex → gpt-5.6-sol", () => {
+    expect(resolveModelForRole({ role: "coder", provider: "codex", level: "medium" })).toBe("gpt-5.6-terra");
+    expect(resolveModelForRole({ role: "coder", provider: "codex", level: "complex" })).toBe("gpt-5.6-sol");
   });
 
-  it("maps gemini/trivial → gemini-2.0-flash", () => {
-    expect(resolveModelForRole({ role: "coder", provider: "gemini", level: "trivial" })).toBe("gemini-2.0-flash");
-  });
-
-  it("maps gemini/complex → gemini-2.5-pro", () => {
-    expect(resolveModelForRole({ role: "coder", provider: "gemini", level: "complex" })).toBe("gemini-2.5-pro");
+  it("gemini has no default model any more", () => {
+    expect(resolveModelForRole({ role: "coder", provider: "gemini", level: "complex" })).toBeNull();
   });
 
   it("returns null for aider (no sub-models)", () => {
@@ -109,7 +116,7 @@ describe("resolveModelForRole", () => {
 
   it("applies reviewer role override: simple → medium tier", () => {
     const result = resolveModelForRole({ role: "reviewer", provider: "codex", level: "simple" });
-    expect(result).toBe("o4-mini");
+    expect(result).toBe("gpt-5.6-terra");
   });
 
   it("applies triage role override: complex → simple tier", () => {
@@ -118,8 +125,8 @@ describe("resolveModelForRole", () => {
   });
 
   it("applies triage role override: medium → simple tier", () => {
-    const result = resolveModelForRole({ role: "triage", provider: "gemini", level: "medium" });
-    expect(result).toBe("gemini-2.0-flash");
+    const result = resolveModelForRole({ role: "triage", provider: "codex", level: "medium" });
+    expect(result).toBe("gpt-5.6-luna");
   });
 
   it("uses custom tierMap when provided", () => {
@@ -147,14 +154,14 @@ describe("selectModelsForRoles", () => {
   it("selects models for all roles based on level", () => {
     const { modelOverrides } = selectModelsForRoles({ level: "simple", config: baseConfig });
     expect(modelOverrides.coder).toBe("haiku");
-    expect(modelOverrides.reviewer).toBe("o4-mini");
+    expect(modelOverrides.reviewer).toBe("gpt-5.6-terra");
     expect(modelOverrides.triage).toBe("haiku");
   });
 
   it("selects complex models for complex level", () => {
     const { modelOverrides } = selectModelsForRoles({ level: "complex", config: baseConfig });
     expect(modelOverrides.coder).toBe("opus");
-    expect(modelOverrides.reviewer).toBe("o3");
+    expect(modelOverrides.reviewer).toBe("gpt-5.6-sol");
     expect(modelOverrides.triage).toBe("haiku");
   });
 

@@ -124,11 +124,20 @@ describe("complexityFromTaskType", () => {
 
 // KJC-TSK-0410: opencode + aider como first-class providers en el router.
 describe("recommendModelsForHu — opencode / aider", () => {
-  it("opencode coder usa alias 'coder' por defecto en cualquier complexity", () => {
+  // KJC-TSK-0699: opencode ids are provider/model and depend on each user's
+  // opencode.json; a bare "coder" is not one. null leaves opencode's own default.
+  it("opencode coder deja el modelo al default de opencode en cualquier complexity", () => {
     const cfg = { roles: { coder: { provider: "opencode" } } };
     for (const level of ["trivial", "simple", "medium", "complex"]) {
       const r = recommendModelsForHu({ complexity: level, coderProvider: "opencode", config: cfg });
-      expect(r.coder_model).toBe("coder");
+      expect(r.coder_model).toBeNull();
+    }
+  });
+
+  it("the router and the selector share ONE table of default models", async () => {
+    const { getDefaultModelTiers } = await import("../../src/utils/model-selector.js");
+    for (const [provider, tiers] of Object.entries(getDefaultModelTiers())) {
+      expect(recommendModelsForHu({ complexity: "complex", coderProvider: provider, config: {} }).coder_model).toBe(tiers.complex);
     }
   });
 
