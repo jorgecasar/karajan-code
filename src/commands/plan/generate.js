@@ -232,6 +232,11 @@ async function planGenerateImpl({ task, config, logger, json, context, runLog, f
     // KJC-TSK-0661: provenance stamp (addHu builds its object explicitly,
     // so this goes on the returned reference, not in huData).
     hu.created_by = "planner";
+    // KJC-TSK-1061: the classification travels to the HU; validatePlan judges it (KJC-TSK-0717).
+    for (const key of ["change_class", "change_criterion", "hardens"]) {
+      const value = typeof step === "object" ? step[key] : null;
+      if (typeof value === "string" && value.trim()) hu[key] = value.trim();
+    }
     if (symbolicId) symbolicToHuId.set(symbolicId, hu.id);
     const deps = typeof step === "object" && Array.isArray(step.dependencies) ? step.dependencies : [];
     stepDeps.push(deps);
