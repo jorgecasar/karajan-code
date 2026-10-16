@@ -12,6 +12,7 @@ import {
   planShareCommand,
   planUnshareCommand,
 } from "../commands/plan.js";
+import { planLicenseCommand } from "../commands/plan/license.js";
 import { parseCanvasMarkdown } from "../canvas/parse-md.js";
 import { validateCanvas } from "../canvas/validate.js";
 import { canvasToTask } from "../canvas/to-flat.js";
@@ -200,7 +201,6 @@ export function registerPlan(program, { pkgVersion }) {
     .argument("<planId>").argument("<huId>").requiredOption("--module <path>", "The module the REWORK regenerates")
     .action(async (planId, huId, flags) => {
       await withConfig(pkgVersion, "plan", flags, async ({ config }) => {
-        const { planLicenseCommand } = await import("../commands/plan/license.js");
         process.exitCode = await planLicenseCommand({ config, planId, huId, module: flags.module });
       });
     });
