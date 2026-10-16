@@ -8,52 +8,49 @@
  * @module utils/injection-guard
  */
 
-/** Phrases that attempt to override system/reviewer instructions. */
-const DIRECTIVE_PATTERNS = [
-  /ignore\s+(all\s+)?(previous|prior|above|earlier)\s+(instructions?|rules?|prompts?|guidelines?)/i,
-  /disregard\s+(all\s+)?(previous|prior|above|earlier)\s+(instructions?|rules?|prompts?)/i,
-  /forget\s+(all\s+)?(previous|prior|your)\s+(instructions?|rules?|context)/i,
-  /override\s+(the\s+)?(system|reviewer|review)\s+(prompt|instructions?|rules?)/i,
-  /do\s+not\s+follow\s+(the\s+)?(above|previous|system)\s+(instructions?|rules?)/i,
-  /new\s+instructions?\s*:/i,
-  /system\s*:\s*you\s+are/i,
-  /\bact\s+as\s+(a\s+)?(different|new|my|an?\s+)/i,
-  /you\s+are\s+now\s+(a\s+)?/i,
-  /from\s+now\s+on\s*(,|\s)?\s*you\s+(will|should|must|are)/i,
-  /pretend\s+(you\s+are|to\s+be)/i,
-  /respond\s+(only\s+)?with\s+["']?approved["']?/i,
-  /always\s+(return|respond|output)\s+.*approved/i,
-  /set\s+approved\s*[=:]\s*true/i,
-  /\bapproved["']?\s*:\s*true\b.*ignore/i,
-  /output\s+the\s+following\s+json/i,
-  /return\s+this\s+exact\s+(json|response|output)/i,
-];
-
-/** Unicode categories that can hide or disguise content. */
-const UNICODE_PATTERNS = [
-  /[\u200B-\u200F]/,   // zero-width spaces, LTR/RTL marks
-  /[\u202A-\u202E]/,   // bidi embedding/override
-  /[\u2066-\u2069]/,   // bidi isolate
-  /[\uFEFF]/,          // BOM mid-text
-  /[\u00AD]{3,}/,      // repeated soft hyphens
-  /[\u2060-\u2064]/,   // invisible operators
-  /[\u{E0000}-\u{E007F}]/u, // tag characters
-];
-
-/** Maximum comment block size (chars) before flagging. */
-const MAX_COMMENT_BLOCK = 2000;
+import { readFileSync } from "node:fs";
 
 /**
- * Comment block patterns for common languages.
- * Each regex captures the full block content.
+ * KJC-TSK-0703: the patterns live in injection-patterns.json, the family's
+ * versioned catalog (karajan-radar reads it from Python). Only constructs both
+ * JavaScript RegExp and Python re understand are accepted.
  */
-const COMMENT_BLOCK_RE = [
-  /\/\*[\s\S]{0,20000}?\*\//g,        // C-style /* ... */
-  /<!--[\s\S]{0,20000}?-->/g,         // HTML <!-- ... -->
-  /"""\s*[\s\S]{0,20000}?\s*"""/g,    // Python docstrings
-  /'''\s*[\s\S]{0,20000}?\s*'''/g,    // Python docstrings (single)
-  /=begin[\s\S]{0,20000}?=end/g,      // Ruby block comments
+const NON_PORTABLE = [
+  [/\\u\{/, "\\u{...} escapes (put the literal character in the JSON instead)"],
+  [/\\[pP]\{/, "\\p{...} property escapes"],
+  [/\(\?<(?![=!])/, "a named group (Python spells it (?P<name>)"],
+  [/\\k</, "a named backreference"],
 ];
+const PORTABLE_FLAGS = new Set(["i", "m", "s", "u"]);
+
+/** Throws, naming the pattern, when an entry would not work outside JavaScript. */
+export function assertPortable({ id, expression, flags = "" }) {
+  for (const flag of flags) {
+    if (!PORTABLE_FLAGS.has(flag)) throw new Error(`${id}: flag "${flag}" is not portable (only i, m, s, u)`);
+  }
+  for (const [construct, what] of NON_PORTABLE) {
+    if (construct.test(expression)) throw new Error(`${id}: ${what} is not portable: ${expression}`);
+  }
+  return new RegExp(expression, flags);
+}
+
+/** The catalog compiled per type; a missing or broken catalog fails loudly, never scans empty. */
+export function loadInjectionCatalog(url = new URL("./injection-patterns.json", import.meta.url)) {
+  const catalog = JSON.parse(readFileSync(url, "utf8"));
+  const compiled = { directive: [], unicode: [], comment_block: [], maxCommentBlock: catalog.max_comment_block, version: catalog.version };
+  for (const entry of catalog.patterns) {
+    const re = assertPortable(entry);
+    // Comment blocks are walked match by match: the global flag is the engine's, not the catalog's.
+    compiled[entry.type].push(entry.type === "comment_block" ? new RegExp(re.source, `${re.flags}g`) : re);
+  }
+  return compiled;
+}
+
+const CATALOG = loadInjectionCatalog();
+const DIRECTIVE_PATTERNS = CATALOG.directive;
+const UNICODE_PATTERNS = CATALOG.unicode;
+const MAX_COMMENT_BLOCK = CATALOG.maxCommentBlock;
+const COMMENT_BLOCK_RE = CATALOG.comment_block;
 
 /**
  * @typedef {Object} InjectionFinding
