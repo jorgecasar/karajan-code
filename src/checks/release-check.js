@@ -11,6 +11,7 @@ import { runCommand } from "../utils/process.js";
 import { loadPrivacyList, scanPaths } from "../privacy/scan.js";
 import { checkStagedDiff, loadPolicy } from "../policy/engine.js";
 import { liftSealedSupervisorViolations } from "../policy/supervisor-verify.js";
+import { npmTokenAgeCheck } from "./supply-chain-check.js";
 
 // KJC-TSK-0769 — the effect boundary: what ships is re-evaluated against the
 // policy IN FORCE now, not the one each PR was merged under. Artifact rules
@@ -247,7 +248,9 @@ export async function runReleaseCheck({ projectDir = process.cwd(), config = {},
   const pack = await packPrivacyCheck(projectDir, pkg);
   const dual = await dualPublishCheck(projectDir, pkg);
   const scenarios = await scenarioBatteryCheck(projectDir, pkg);
-  checks.push(...[pack, dual, scenarios].filter(Boolean), await policyRangeCheck(projectDir), ...await declaredItems(projectDir, config, version));
+  // KJC-TSK-1059: what publishes to npm also says how old its long-lived tokens are (a warning).
+  const tokens = pkg?.name && !pkg.private ? await npmTokenAgeCheck({ maxDays: config?.supply_chain?.npm_token_max_days }) : null;
+  checks.push(...[pack, dual, scenarios, tokens].filter(Boolean), await policyRangeCheck(projectDir), ...await declaredItems(projectDir, config, version));
   if (forCommand === null) return { ok: checks.every((c) => c.ok), version, checks };
   // A lifted check stays RED in the report: the fact is not falsified, it just
   // stops blocking the command that exists to repair it. The mark travels ON
