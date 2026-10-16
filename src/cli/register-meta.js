@@ -516,7 +516,11 @@ export function registerMeta(program, { pkgVersion }) {
         const res = await runReleaseCheck({ projectDir: config?.projectDir || process.cwd(), config, forCommand: flags.forCommand ?? null });
         if (flags.json) process.stdout.write(`${JSON.stringify(res)}\n`);
         else {
-          for (const c of res.checks) console.log(`  ${c.ok ? "✓" : "✗"} ${c.name}: ${c.detail}`);
+          const mark = (c) => {
+            if (!c.ok) return "✗";
+            return c.warn ? "⚠" : "✓";
+          };
+          for (const c of res.checks) console.log(`  ${mark(c)} ${c.name}: ${c.detail}`);
           if (res.lifted?.length) console.log(`  ℓ no bloquean este comando porque es su remedio: ${res.lifted.join(", ")}`);
           console.log(res.ok ? `release check: ready to release ${res.version ?? ""}`.trim() : "release check: NOT ready — fix the red items first");
         }

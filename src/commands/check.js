@@ -11,6 +11,7 @@ import { checkAiSurface, formatAiSurface } from "../checks/ai-surface.js";
 import { detectObservedAgents } from "../utils/agent-detect.js";
 import { panelSummary } from "../environment/panel.js";
 import { loadConfig } from "../config.js";
+import { branchCooldownLines } from "../checks/supply-chain-check.js";
 
 export async function checkCommand({ projectDir = process.cwd(), profile = "standard", json = false, logger = console } = {}) {
   const result = await checkHarden({ projectDir, profile });
@@ -34,9 +35,13 @@ export async function checkCommand({ projectDir = process.cwd(), profile = "stan
     aiSurface = checkAiSurface({ projectDir, extraSurface: clis });
   } catch { /* inventory is best-effort */ }
 
+  // KJC-TSK-1059: young dependencies the branch brings in, a warning outside the review.
+  const depCooldown = await branchCooldownLines({ projectDir, base: config?.base_branch ?? "main", thresholdHours: config?.supply_chain?.cooldown_hours })
+    .catch((err) => [`⚠ supply-chain cooldown not checked: ${err.message}`]);
+
   const ok = result.ok && ragCoverage.ok;
   if (json) {
-    logger.info?.(JSON.stringify({ ...result, ok, method, ragCoverage, aiSurface }));
+    logger.info?.(JSON.stringify({ ...result, ok, method, ragCoverage, aiSurface, depCooldown }));
     return ok ? 0 : 1;
   }
 
@@ -45,6 +50,7 @@ export async function checkCommand({ projectDir = process.cwd(), profile = "stan
   if (method) logger.info?.(`  method: ${formatMethodStats(method)}`);
   logger.info?.(`  ${ragCoverage.ok ? "✓" : "✗"} rag-coverage: ${ragCoverage.detail}`);
   if (aiSurface) logger.info?.(`  ${formatAiSurface(aiSurface)}`);
+  for (const line of depCooldown) logger.info?.(`  ${line}`);
   // KJC-TSK-0865: who writes and who reviews is the user's choice, so it is
   // said out loud next to everything else that describes the project. Never
   // a check: it has no ok/fail, it informs.
