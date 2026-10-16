@@ -76,6 +76,7 @@
     "setup": "node scripts/install.js",
     "test": "vitest run",
     "test:scenarios": "vitest run --config tests/scenarios/vitest.config.js --root .",
+    "contract:claude": "node scripts/contract-claude.mjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "lint": "eslint src/ packages/",
