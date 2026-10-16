@@ -65,7 +65,11 @@ El caveat que el loop engineering recalca — *los bucles desatendidos cometen e
 
 Las versiones más recientes, la última primero. Las anteriores están en [Arquitectura › Historia](/docs/es/architecture/history/) y en el [CHANGELOG](https://github.com/manufosela/karajan-code/blob/main/CHANGELOG.md).
 
-### v4.53.0: el móvil deja de estorbar (actual)
+### v4.53.1: las PRs apiladas pasan board-sync (actual)
+
+La siguiente PR de una card partida en PRs apiladas se puede subir y abrir antes de mover la card de la primera, un bloqueo que kj no pudo comprobar dice por qué (casi siempre otra cuenta de gh activa), y un título de card o un mensaje de commit que solo menciona sellar el harness o enrolar el móvil se lee como texto.
+
+### v4.53.0: el móvil deja de estorbar
 
 `kj init` ofrece enrolar tu móvil, `kj doctor` dice claro qué se rechaza sin él, y sin ningún móvil una persona en la terminal puede bajar el nivel. `kj review --publish-pr` deja en la PR los veredictos de la otra IA como una review de GitHub, `kj review` avisa de dependencias publicadas hace horas, `kj harden` dice cómo hacer obligatorios los checks del método, y arrancar una card la reserva para un equipo. Cada HU registra ahora el modelo y el coste de su coder, y `kj report` los suma por modelo; además sale de la descomposición con su tramo, y `kj run --profile frugal|standard|deep` elige los modelos. Un plan dice si cada cambio amplía, regenera o reconstruye código existente, y regenerar exige una licencia según el mutation score del módulo. La cuarentena de dependencias puede bloquear, `kj check` avisa de cuándo toca auditar, y los patrones de prompt-injection pasan a un catálogo que lee toda la familia.
 
