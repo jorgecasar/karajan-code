@@ -1,8 +1,19 @@
+// KJC-TSK-0699: the ONE table of default models per provider and level (the HU
+// router reads it too). Ids verified 2026-10-16: claude takes its CLI aliases,
+// which follow the current version; codex takes the models its CLI lists
+// (models_cache.json: luna fast, terra balanced, sol the most capable). null
+// leaves the CLI's own default where no id could be verified: aider and
+// opencode run on each user's providers, gemini and qwen no longer serve
+// individuals, copilot publishes no list.
+const NO_MODEL = { trivial: null, simple: null, medium: null, complex: null };
 const DEFAULT_MODEL_TIERS = {
   claude: { trivial: "haiku", simple: "haiku", medium: "sonnet", complex: "opus" },
-  codex: { trivial: "o4-mini", simple: "o4-mini", medium: "o4-mini", complex: "o3" },
-  gemini: { trivial: "gemini-2.0-flash", simple: "gemini-2.0-flash", medium: "gemini-2.5-pro", complex: "gemini-2.5-pro" },
-  aider: { trivial: null, simple: null, medium: null, complex: null }
+  codex: { trivial: "gpt-5.6-luna", simple: "gpt-5.6-luna", medium: "gpt-5.6-terra", complex: "gpt-5.6-sol" },
+  gemini: NO_MODEL,
+  qwen: NO_MODEL,
+  copilot: NO_MODEL,
+  opencode: NO_MODEL,
+  aider: NO_MODEL
 };
 
 const DEFAULT_ROLE_OVERRIDES = {

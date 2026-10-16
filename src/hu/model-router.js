@@ -1,3 +1,5 @@
+import { getDefaultModelTiers } from "../utils/model-selector.js";
+
 // KJC-TSK-0405: dado un HU con complexity score, recomienda coder_model y
 // reviewer_model. El reviewer por defecto usa el provider alternativo al
 // coder (cross-provider review) para que dos cabezas distintas miren el
@@ -15,22 +17,11 @@ const SCORE_TO_LEVEL = {
   5: "complex",
 };
 
-// Defaults por provider — alineados con utils/model-selector.js DEFAULTS.
-// opencode: usa "coder" como alias razonable; el usuario suele definir
-// gemma-local/coder, ollama/coder o similar en opencode.json. Override
-// per-tier vía config.model_routing.by_provider.opencode si quieres
-// rutear distinto por complexity (ej. fast para trivial, coder para
-// complex). aider: null porque aider envuelve a otros providers — no
-// tiene "modelos propios". Si el usuario lo elige, debe configurarlo
-// explícito en config.model_routing.by_provider.aider o vía override
-// del modal por HU.
-const DEFAULT_TIERS = {
-  claude: { trivial: "haiku", simple: "haiku", medium: "sonnet", complex: "opus" },
-  codex: { trivial: "o4-mini", simple: "o4-mini", medium: "o4-mini", complex: "o3" },
-  gemini: { trivial: "gemini-2.0-flash", simple: "gemini-2.0-flash", medium: "gemini-2.5-pro", complex: "gemini-2.5-pro" },
-  opencode: { trivial: "coder", simple: "coder", medium: "coder", complex: "coder" },
-  aider: { trivial: null, simple: null, medium: null, complex: null },
-};
+// KJC-TSK-0699: los defaults por provider viven en UNA tabla, la de
+// utils/model-selector.js. Quien quiera otros modelos (opencode con sus
+// proveedores, aider) los pone en config.model_routing.by_provider o en el
+// override del modal por HU.
+const DEFAULT_TIERS = getDefaultModelTiers();
 
 // Cross-provider reviewer default: para cada coder provider, qué provider
 // usa el reviewer por defecto. Dos cabezas distintas miran el código.
