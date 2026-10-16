@@ -15,6 +15,7 @@ Patch. **board-sync stops blocking a card split into stacked PRs, and a title th
 
 - **The next PR of a split card can be pushed and opened** (KJC-BUG-0362, #2199): with PR 1 merged and PR 2 not pushed yet, no open PR carried the card. The branch the session stands on now carries it when it names the card, holds unmerged commits and is not the merged PR's head.
 - **A board-sync block that kj could not verify says why** (KJC-BUG-0363, #2201): the guard runs before the command, so a `gh auth switch` inside it has not happened yet; with another account active, gh could not list the open PRs and the gate blocked in silence. The block now names that and the way out: switch the account in a separate command.
+- **A push keeps the board-sync answer its own command already got** (KJC-BUG-0364, #2205): a `git push` asked board-gate twice, and a second slow or failed gh call blocked the card the first answer had carried. The push now reuses that decision and says why when it blocks; gh gets 15 seconds.
 - **A title or commit message that mentions a human act is text** (KJC-BUG-0354): a single `kj hu add`, `kj adr add` or `git commit` whose quoted text names sealing the harness or enrolling the phone no longer reads as running them. Chains, functions, redirections and expansions keep every check.
 
 ## [4.53.0] - 2026-10-16
