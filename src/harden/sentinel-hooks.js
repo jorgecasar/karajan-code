@@ -1174,10 +1174,14 @@ process.stdin.on("end", () => {
       const ADVANCE = /\\bgit\\s+commit\\b|\\bgit\\s+push\\b|\\bgh\\s+pr\\s+create\\b/; // push also falls under violations() — explicit here too (review catch)
       const mergeM = cmd.match(MERGE);
       const pend = pendingMoves(load().sessions?.[sid]);
+      // KJC-BUG-0364: one board-gate decision per command; the push gate below
+      // reuses it, so a second slow gh cannot contradict the first answer.
+      let boardDecision = null;
       if (pend.length > 0 && (mergeM || ADVANCE.test(cmd))) {
         // KJC-BUG-0198: una card partida en varias PRs no puede quedar bloqueada
         // por su primera mitad (boardGate, en la lib).
-        const { blocking, carried, reason } = boardGate(sid, pend);
+        boardDecision = boardGate(sid, pend);
+        const { blocking, carried, reason } = boardDecision;
         for (const c of carried) console.error("karajan sentinel: board-sync arrastra " + c.card + " — " + c.why + ", se movera al cerrarla");
         // ADR 0015 (KJC-TSK-0925): no escape; an epic and a card split across PRs
         // are already decided above (KJC-BUG-0230, 0198).
@@ -1229,9 +1233,10 @@ process.stdin.on("end", () => {
         // ADR 0015 (KJC-TSK-0925): with no escape.
         // KJC-BUG-0262: a carried card does not block the push the commit let through.
         const sess = load().sessions?.[sid];
-        const v = violations(sess, branchOf(), boardGate(sid, pendingMoves(sess)).blocking);
+        const decision = boardDecision || boardGate(sid, pendingMoves(sess));
+        const v = violations(sess, branchOf(), decision.blocking);
         if (v.length) {
-          console.error("karajan sentinel: git push con el metodo en rojo:\\n" + v.map((x) => "- " + x).join("\\n") + "\\nResuelve antes de empujar. Estado: kj sentinel status" + doc("push-gate"));
+          console.error("karajan sentinel: git push con el metodo en rojo:\\n" + v.map((x) => "- " + x).join("\\n") + (decision.reason ? "\\n(" + decision.reason + ")" : "") + "\\nResuelve antes de empujar. Estado: kj sentinel status" + doc("push-gate"));
           process.exit(2);
         }
       }
