@@ -67,6 +67,7 @@ export function registerPipeline(program, { pkgVersion }) {
     .option("--coder-model <name>")
     .option("--reviewer-model <name>")
     .option("--refactorer-model <name>")
+    .option("--profile <name>", "Model profile for every role without an explicit model: frugal | standard | deep (the reviewer never goes below standard)")
     .option("--enable-planner")
     .option("--enable-reviewer")
     .option("--enable-refactorer")

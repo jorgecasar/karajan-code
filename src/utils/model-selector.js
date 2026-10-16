@@ -12,6 +12,39 @@ const DEFAULT_ROLE_OVERRIDES = {
 
 const VALID_LEVELS = new Set(["trivial", "simple", "medium", "complex"]);
 
+/**
+ * KJC-TSK-0699 (MR-B): named profiles over the levels, so the user talks of
+ * profiles, not model ids. Resolution: flag > roles.<role>.model > profile >
+ * the CLI's own default. The reviewer keeps its floor (never below medium).
+ */
+export const MODEL_PROFILES = { frugal: "trivial", standard: "medium", deep: "complex" };
+const CODER_PROVIDER_ROLES = new Set(["planner", "refactorer", "solomon", "researcher", "tester", "security", "impeccable", "triage", "discover", "architect", "audit"]);
+
+/** Fills the model of every role that has none yet; returns what it set. */
+export function applyModelProfile(config, profile) {
+  const level = MODEL_PROFILES[profile];
+  if (!level) throw new Error(`model profile "${profile}" does not exist: use one of ${Object.keys(MODEL_PROFILES).join(", ")}`);
+  const coderProvider = config.roles?.coder?.provider || config.coder || null;
+  const set = {};
+  for (const [role, entry] of Object.entries(config.roles ?? {})) {
+    if (entry?.model) continue;
+    const provider = entry?.provider || (role === "reviewer" ? config.reviewer : null) || (CODER_PROVIDER_ROLES.has(role) || role === "coder" ? coderProvider : null);
+    const model = resolveModelForRole({ role, provider, level });
+    // A new object: the entry may be shared with the shipped defaults.
+    if (!model) continue;
+    set[role] = model;
+    config.roles[role] = { ...entry, model };
+  }
+  return set;
+}
+
+/** The line kj config prints about the effective profile. */
+export function formatModelProfile(config) {
+  const profile = config?.model_profile;
+  if (!profile) return "Model profile: none (each CLI uses its own default model)";
+  return `Model profile: ${profile} (${MODEL_PROFILES[profile]} models; reviewer never below standard)`;
+}
+
 export function getDefaultModelTiers() {
   return structuredClone(DEFAULT_MODEL_TIERS);
 }

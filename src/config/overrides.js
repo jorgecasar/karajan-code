@@ -17,6 +17,7 @@
 import { mergeDeep } from "./loader.js";
 import { DEFAULTS } from "./defaults.js";
 import { safeParseConfig, formatConfigIssues } from "./schema.js";
+import { applyModelProfile } from "../utils/model-selector.js";
 
 const ROLE_PROVIDER_FLAGS = [
   ["planner", "planner"], ["coder", "coder"], ["reviewer", "reviewer"],
@@ -99,6 +100,13 @@ function applyRoleOverrides(out, flags) {
   }
   // reviewerModel also updates reviewer_options
   if (flags.reviewerModel) out.reviewer_options.model = String(flags.reviewerModel);
+
+  // KJC-TSK-0699: a profile fills only the models nothing above has set.
+  const profile = flags.profile ?? out.model_profile;
+  if (profile) {
+    applyModelProfile(out, String(profile));
+    out.model_profile = String(profile);
+  }
 }
 
 function applyPipelineOverrides(out, flags) {

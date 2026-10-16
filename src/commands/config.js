@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import yaml from "js-yaml";
 import { loadConfig, validateConfig, getConfigPath, writeConfig } from "../config.js";
 import { ensureDir } from "../utils/fs.js";
+import { formatModelProfile } from "../utils/model-selector.js";
 import path from "node:path";
 
 function resolveEditor() {
@@ -70,5 +71,6 @@ export async function configCommand({ json = false, edit = false }) {
 
   console.log(`Config path: ${cfgPath}`);
   console.log(`Exists: ${exists}`);
+  console.log(formatModelProfile(config));
   console.log(JSON.stringify(config, null, 2));
 }
