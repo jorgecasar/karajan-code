@@ -1,0 +1,54 @@
+// KJC-TSK-0699 (MR-B): named model profiles (frugal, standard, deep) so the user
+// talks of profiles, not model ids. Resolution: flag > roles.<role>.model >
+// profile > the CLI's own default. The reviewer never goes below standard.
+import { describe, it, expect } from "vitest";
+import { applyRunOverrides } from "../../src/config/overrides.js";
+import { MODEL_PROFILES, formatModelProfile } from "../../src/utils/model-selector.js";
+
+const base = { coder: "claude", reviewer: "claude", roles: { coder: { provider: "claude" }, reviewer: { provider: "claude" } } };
+
+describe("model profiles", () => {
+  it("three named profiles over the router's levels", () => {
+    expect(MODEL_PROFILES).toEqual({ frugal: "trivial", standard: "medium", deep: "complex" });
+  });
+
+  it("--profile frugal gives each role the profile's model for its provider; the reviewer stays at standard", () => {
+    const out = applyRunOverrides(base, { profile: "frugal" });
+    expect(out.roles.coder.model).toBe("haiku");
+    expect(out.roles.reviewer.model).toBe("sonnet");
+    expect(out.model_profile).toBe("frugal");
+  });
+
+  it("an inherited role takes the coder's provider", () => {
+    expect(applyRunOverrides(base, { profile: "deep" }).roles.planner.model).toBe("opus");
+  });
+
+  it("a model flag and roles.<role>.model win over the profile", () => {
+    const cfg = { ...base, roles: { ...base.roles, reviewer: { provider: "claude", model: "claude-opus-5-5" } } };
+    const out = applyRunOverrides(cfg, { profile: "frugal", coderModel: "claude-sonnet-5-5" });
+    expect(out.roles.coder.model).toBe("claude-sonnet-5-5");
+    expect(out.roles.reviewer.model).toBe("claude-opus-5-5");
+  });
+
+  it("model_profile in the config applies too, and the flag overrides it", () => {
+    expect(applyRunOverrides({ ...base, model_profile: "deep" }, {}).roles.coder.model).toBe("opus");
+    expect(applyRunOverrides({ ...base, model_profile: "deep" }, { profile: "frugal" }).roles.coder.model).toBe("haiku");
+  });
+
+  it("no profile leaves every model to the CLI, and an unknown one fails loudly", () => {
+    expect(applyRunOverrides(base, {}).roles.coder.model ?? null).toBeNull();
+    expect(() => applyRunOverrides(base, { profile: "cheap" })).toThrow(/profile "cheap".*frugal, standard, deep/);
+  });
+
+  it("a profile never leaks into the shipped defaults (the next run starts clean)", async () => {
+    const { DEFAULTS } = await import("../../src/config/defaults.js");
+    applyRunOverrides(base, { profile: "deep" });
+    expect(DEFAULTS.roles.planner.model).toBeNull();
+    expect(applyRunOverrides(base, {}).roles.planner.model ?? null).toBeNull();
+  });
+
+  it("kj config names the effective profile", () => {
+    expect(formatModelProfile({ model_profile: "deep" })).toBe("Model profile: deep (complex models; reviewer never below standard)");
+    expect(formatModelProfile({})).toBe("Model profile: none (each CLI uses its own default model)");
+  });
+});

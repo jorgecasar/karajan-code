@@ -242,6 +242,8 @@ export const ConfigSchema = v.looseObject({
   ))),
   // ENV-D1 (KJC-TSK-0642): where work items live — the integrated HU Board
   // or the user's Planning Game. The v4 playbook renders per backend.
+  // KJC-TSK-0699 (MR-B): the default model profile; kj run --profile overrides it.
+  model_profile: v.optional(v.picklist(["frugal", "standard", "deep"], "model_profile must be frugal, standard or deep")),
   state_backend: v.optional(v.picklist(
     // KJC-TSK-0709 caught the drift: "external" shipped in v4.5.0 (any
     // board via the agent's own MCP/tools) but this picklist never learned it.
