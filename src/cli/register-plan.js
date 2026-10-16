@@ -195,6 +195,16 @@ export function registerPlan(program, { pkgVersion }) {
     });
   });
 
+  // KJC-TSK-0717 (SPD-A): the REWORK licence, from the module's mutation score.
+  plan.command("license").description("Score a module with kj mutate and record the REWORK licence on an HU")
+    .argument("<planId>").argument("<huId>").requiredOption("--module <path>", "The module the REWORK regenerates")
+    .action(async (planId, huId, flags) => {
+      await withConfig(pkgVersion, "plan", flags, async ({ config }) => {
+        const { planLicenseCommand } = await import("../commands/plan/license.js");
+        process.exitCode = await planLicenseCommand({ config, planId, huId, module: flags.module });
+      });
+    });
+
   // KJC-TSK-0402: re-ejecuta reviewer + self-fix + structural pass sobre
   // un plan existente. Acepta --prompt opcional con feedback humano que
   // el reviewer inyecta como contexto extra antes de revisar.

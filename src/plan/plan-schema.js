@@ -6,6 +6,7 @@
 
 import { generatePlanId } from "./plan-id.js";
 import { findCycle } from "../hu/graph.js";
+import { changeClassErrors } from "./rework-license.js";
 
 const VALID_PLAN_STATUSES = new Set(["draft", "ready", "running", "done", "failed"]);
 // KJC-TSK-0394 step 5: el modelo CANONICAL del lifecycle es
@@ -255,7 +256,7 @@ export function migratePlanV1toV2(v1plan) {
 /**
  * Validate a v2 plan. Returns { valid: true } or { valid: false, errors: string[] }.
  */
-export function validatePlan(plan) {
+export function validatePlan(plan, { reworkMin } = {}) {
   const errors = [];
 
   if (!plan.planId) errors.push("Missing planId");
@@ -297,6 +298,8 @@ export function validatePlan(plan) {
         });
       }
     }
+    // KJC-TSK-0717 (SPD-A): EXTEND/REWORK/REBUILD with its criterion, and REWORK only with a licence.
+    errors.push(...changeClassErrors(hu, plan.hus || [], { reworkMin }));
     // Check blocked_by references exist
     for (const dep of hu.blocked_by || []) {
       if (!huIds.has(dep) && !(plan.hus || []).some(h => h.id === dep)) {
