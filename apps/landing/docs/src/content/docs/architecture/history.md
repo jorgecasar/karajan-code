@@ -1822,6 +1822,8 @@ A user updated kj and met the default max level asking for a phone signature. `k
 
 ADR 0020 settles both ends. `kj init`, with a person at the terminal, offers to enroll the phone and reuses the identity command with all its checks. With no phone anywhere, the human layers and a typed code lower the level, the record says it is unsigned, and it reads as max again once a phone exists. `kj doctor` now fails at max without a phone and says what is refused. Around it, the coder receives each Sonar issue instead of severity counts, and contract tests replay what each agent CLI really emits, which already caught an opencode failure that reached kj without its reason.
 
+The same release opened the way to a team on one repo and to measured model choice. Starting a card now reserves it, `kj doctor` checks a shared SonarQube, `kj harden` says how to make the method's checks required on the base branch, and `kj review --publish-pr` makes the cross-AI review visible where the team measures it. Each HU records which model coded it, its tokens and how many times the reviewer sent it back, and `kj report` adds that up per model: the baseline any routing decision will be judged against.
+
 ## Key Architectural Decisions
 
 ### CLI wrapping vs direct API calls
