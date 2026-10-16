@@ -192,6 +192,25 @@ describe("board-sync gate", () => {
     expect(endTurn().status).toBe(0);
   });
 
+  // KJC-BUG-0364 (#2205): a git push asked board-gate twice; the first answer
+  // carried the card, a second slow or failed gh blocked it. One decision per command.
+  it("a push asks board-gate once and keeps its answer", () => {
+    merged(12);
+    const bin = path.join(dir, "fakekj2");
+    fs.mkdirSync(bin);
+    const calls = path.join(dir, "kj-calls");
+    const carried = JSON.stringify({ blocking: [], carried: [{ card: "KJC-TSK-0042", why: "sigue entregándose en una PR abierta" }] });
+    const blocked = JSON.stringify({ blocking: [{ card: "KJC-TSK-0042", pr: 12 }], carried: [], reason: "gh no respondió" });
+    fs.writeFileSync(path.join(bin, "kj"), `#!/bin/sh\necho x >> ${calls}\nif [ "$(wc -l < ${calls})" -eq 1 ]; then echo '${carried}'; exit 0; fi\necho '${blocked}'\nexit 2\n`, { mode: 0o755 });
+    const res = spawnSync("node", [gate], {
+      input: JSON.stringify({ session_id: "s1", tool_name: "Bash", tool_input: { command: "git push origin feat/KJC-TSK-0042-demo" } }),
+      encoding: "utf8", cwd: dir, env: { ...process.env, ...env, PATH: `${bin}:${process.env.PATH}` },
+    });
+    expect(res.stderr).toMatch(/arrastra KJC-TSK-0042/);
+    expect(res.stderr).not.toMatch(/en rojo/);
+    expect(fs.readFileSync(calls, "utf8").trim().split("\n")).toHaveLength(1);
+  });
+
   // KJC-BUG-0363 (#2201): when kj could not check (gh as another account), the
   // block said nothing of why; the reason kj gives now travels with it.
   it("a block kj could not verify carries kj's reason", () => {

@@ -79,7 +79,8 @@ export function boardGate({ projectDir = process.cwd(), sessionId = "default", d
   const state = deps.readState?.() ?? readJson(join(projectDir, ".karajan", "harness", "sentinel-state.json"));
   const pendings = state?.sessions?.[sessionId]?.pending_moves;
   if (!Array.isArray(pendings) || pendings.length === 0) return { blocking: [], carried: [] };
-  const run = deps.run ?? ((cmd, args) => execFileSync(cmd, args, { cwd: projectDir, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 5000 }));
+  // KJC-BUG-0364: gh can take several seconds; a timeout reads as "could not check" and blocks.
+  const run = deps.run ?? ((cmd, args) => execFileSync(cmd, args, { cwd: projectDir, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 15000 }));
   let open = null;
   try { open = JSON.parse(run("gh", ["pr", "list", "--state", "open", "--limit", "100", "--json", "number,headRefName"])); } catch { /* fail closed */ }
   const listed = Array.isArray(open) ? open : null;
