@@ -18,10 +18,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Starting a card reserves it** (KJC-TSK-1047, team Karajan): `kj hu move <id> running` reserves the card to who works the clone; a running card reserved by someone else moves only with `--release`; `kj hu list` shows it.
 - **Per-HU measurement for model routing** (KJC-TSK-0702, KJC-TSK-1057): each HU records the coder's provider and model, tokens out and the reviewer's rejections, and `kj report` adds up cost and first-time failures per coder model, with earlier HUs as the baseline.
 - **`kj worktree prune` also deletes loose `kj-hu-*` branches** with no commits of their own, and measures against `origin/<base>` (KJC-TSK-1037, ADR 0019).
+- **`kj review` warns when another branch in progress touches the same files** (KJC-TSK-1052, team Karajan): remote branches with commits outside the base, active in the last 14 days, that share files with the commit, with their author.
+- **The supply-chain cooldown can block** (KJC-TSK-1056): with `method_gates.dep_cooldown: block`, a dependency published under the threshold stops `kj review` before any reviewer token; only a human grant on `method.dep_cooldown` lifts it, and what cannot be verified never blocks.
+- **`kj check` warns of young dependencies and `kj release check` of old npm tokens** (KJC-TSK-1059): the branch's lockfile against the merge base, and each long-lived npm token older than `supply_chain.npm_token_max_days` (90), named only by an id prefix.
+- **`kj check` says when the audit is due by work cycles** (KJC-TSK-0719): distinct cards and work commits since the last scored audit, against `audit_cycle.every_cards` (10) and `every_commits` (60), with the counter in view.
+- **Each HU leaves the decomposition with its tier and why** (KJC-TSK-0698): trivial, standard or deep, judged in the same answer and checked against a deterministic signal; the higher wins, and a sensitive zone is always deep.
+- **Named model profiles** (KJC-TSK-0699): `kj run --profile frugal|standard|deep` (or `model_profile` in the config) fills the model of every role nothing else sets; the reviewer never goes below standard, and `kj config` names the profile.
+- **EXTEND, REWORK or REBUILD per HU, and REWORK only with a licence** (KJC-TSK-0717, KJC-TSK-1061): the planner classifies each change to existing code with its criterion; `kj plan license <plan> <hu> --module <path>` scores the module with `kj mutate`, and under `method_gates.rework_mutation_min` (0.8) the plan needs an HU that hardens the module first.
+- **The prompt-injection patterns are a versioned, portable catalog** (KJC-TSK-0703): `src/utils/injection-patterns.json`, which Python's `re` reads too, so karajan-radar can share it.
 
 ### Changed
 
 - **claude runs on `claude-opus-5-5`** unless the user declares a model (KJC-TSK-0914).
+- **One table of default models, with ids verified on 2026-10-16** (KJC-TSK-0699): codex takes gpt-5.6-luna, terra and sol; gemini, qwen, copilot, opencode and aider leave the model to their CLI, since none of their ids could be verified.
 - **The pipeline stamp proves Sonar coverage per staged source** (KJC-TSK-0839), as `kj review --staged` does, and the method report judges it by that coverage.
 - **`kj doctor` checks the team's SonarQube** (KJC-TSK-1051): with `sonarqube.external` it no longer advises a local Docker, and with `sonarqube.quality_profile` it checks the project runs on that profile.
 - **The Sentinel treats `.karajan/security-level.json` as a governance file** (KJC-TSK-1054): only `kj security` writes it.
@@ -39,6 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Infrastructure
 
 - **Contract tests replay real CLI answers** (KJC-TSK-1039, KJC-TSK-1043, KJC-TSK-1044): `scripts/record-agent-fixtures.mjs` records what claude (with and without hooks), codex, copilot, agy, gemini and opencode really emit, as reviewer and as coder; the contract test replays each through the path kj reads them by, and demands a failure's own reason.
+- **The contract with claude is checked on the maintainer's machine** (KJC-TSK-1063): `npm run contract:claude` records again with the installed claude when its version differs from the recordings, and `kj release check` is red until it matches.
+- **The audit command tests no longer write to the repo's audit history** (KJC-BUG-0361).
 - **The root prettier covers `packages/watch`** with its own config (KJC-TSK-0744), and `docs/family-contracts.md` lists the family's published contracts (KJC-TSK-0782).
 
 ## [4.52.0] - 2026-10-15
