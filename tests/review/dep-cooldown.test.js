@@ -1,7 +1,7 @@
 // KJC-TSK-0722 (step 1): supply-chain campaigns are caught in their first hours;
 // a dependency published minutes ago is the riskiest one to take. kj review says so.
 import { describe, it, expect, vi } from "vitest";
-import { lockfileChanges, cooldownAdvisories, formatCooldown } from "../../src/review/dep-cooldown.js";
+import { lockfileChanges, cooldownAdvisories, cooldownGate, formatCooldown } from "../../src/review/dep-cooldown.js";
 
 const LOCK_DIFF = [
   "diff --git a/package-lock.json b/package-lock.json",
@@ -28,6 +28,34 @@ describe("lockfileChanges", () => {
       { name: "fresh-pkg", version: "2.3.4" },
       { name: "inner", version: "0.1.0" },
     ]);
+  });
+});
+
+// KJC-TSK-1056 (step a): method_gates.dep_cooldown: block, lifted only by a human grant.
+describe("cooldownGate", () => {
+  const young = { young: [{ name: "fresh-pkg", version: "2.3.4", hours: 9 }], unverified: [] };
+  const now = new Date("2026-10-16T12:00:00Z");
+
+  it("warn (the default) never blocks", () => {
+    expect(cooldownGate({ result: young, mode: undefined, standingExceptions: [], now })).toEqual({ block: false });
+  });
+
+  it("block with a young dependency blocks, naming it and the human way out", () => {
+    const g = cooldownGate({ result: young, mode: "block", standingExceptions: [], now });
+    expect(g.block).toBe(true);
+    expect(g.reason).toMatch(/fresh-pkg@2\.3\.4.*kj policy grant --rule method\.dep_cooldown/);
+  });
+
+  it("a live human grant on method.dep_cooldown lifts it; an expired one does not", () => {
+    const live = [{ rule_id: "method.dep_cooldown", expiresAt: "2026-10-20T00:00:00Z" }];
+    const dead = [{ rule_id: "method.dep_cooldown", expiresAt: "2026-10-01T00:00:00Z" }];
+    expect(cooldownGate({ result: young, mode: "block", standingExceptions: live, now })).toMatchObject({ block: false, grant: live[0] });
+    expect(cooldownGate({ result: young, mode: "block", standingExceptions: dead, now }).block).toBe(true);
+  });
+
+  it("what could not be verified (no registry) never blocks", () => {
+    const offline = { young: [], unverified: [{ name: "x", version: "1.0.0", reason: "ENOTFOUND" }] };
+    expect(cooldownGate({ result: offline, mode: "block", standingExceptions: [], now })).toEqual({ block: false });
   });
 });
 

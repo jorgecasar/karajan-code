@@ -30,7 +30,7 @@ import { loadStandingExceptions, recordPolicyException } from "../policy/excepti
 import { policyFileHash, recordGateDecision } from "../policy/decisions.js";
 import { evaluatePolicyGate } from "../review/policy-gate.js";
 import { correctionNote, reviewCorrectionRounds } from "../review/correction-rounds.js";
-import { cooldownAdvisories, DEFAULT_COOLDOWN_HOURS, formatCooldown } from "../review/dep-cooldown.js";
+import { cooldownAdvisories, cooldownGate, DEFAULT_COOLDOWN_HOURS, formatCooldown } from "../review/dep-cooldown.js";
 import { branchOverlaps, formatOverlaps } from "../review/branch-overlap.js";
 
 // KJC-TSK-0686 (MG-A): card-first is a gate, not a habit. Runs on --staged
@@ -587,8 +587,17 @@ export async function reviewGateCommand({ config, logger = null, flags = {} }) {
 
   // KJC-TSK-0722: a dependency published under the cooldown is said, and weighed by the reviewer.
   const cooldownHours = config?.supply_chain?.cooldown_hours ?? DEFAULT_COOLDOWN_HOURS;
-  const cooldown = formatCooldown(await cooldownAdvisories(diff, { thresholdHours: cooldownHours }), cooldownHours);
+  const cooldownResult = await cooldownAdvisories(diff, { thresholdHours: cooldownHours });
+  const cooldown = formatCooldown(cooldownResult, cooldownHours);
   for (const line of cooldown.lines) console.log(line);
+  // KJC-TSK-1056: method_gates.dep_cooldown: block stops it here, before any reviewer token.
+  const cooldownStop = cooldownGate({ result: cooldownResult, mode: config?.method_gates?.dep_cooldown, standingExceptions: std.standing });
+  if (cooldownStop.grant) console.log(`⚠ dep_cooldown lifted by a HUMAN grant [method.dep_cooldown] until ${cooldownStop.grant.expiresAt}`);
+  if (cooldownStop.block) {
+    console.log(`✗ ${cooldownStop.reason}`);
+    process.exitCode = 1;
+    return { verdict: "rejected", reviewer: "dep-cooldown", issues: cooldownResult.young.map((p) => ({ severity: "high", description: `${p.name}@${p.version} published ${p.hours} h ago` })) };
+  }
   if (cooldown.note) task = `${task || "Review the following diff for correctness, security and maintainability."}\n\n${cooldown.note}`;
 
   const record = await runOneShotReview({ diff, task, config, logger, projectDir, sonar: sonarRecord, rag: ragRecord, ui: uiRecord });
