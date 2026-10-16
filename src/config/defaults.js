@@ -96,6 +96,9 @@ const DEFAULTS = {
     // grant on method.dep_cooldown lifts it). Unverifiable ones never block.
     dep_cooldown: "warn"
   },
+  // KJC-TSK-0719 (SPD-C): kj check says the audit is due after this many
+  // distinct cards or work commits since the last scored audit.
+  audit_cycle: { every_cards: 10, every_commits: 60 },
   review_rules: "./.karajan/review-rules.md",
   coder_rules: "./.karajan/coder-rules.md",
   base_branch: "main",
