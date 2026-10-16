@@ -16,11 +16,22 @@ describe("real-cli weekly workflow", () => {
     expect(wf.on.schedule[0].cron).toMatch(/^\d+ \d+ \* \* [0-6]$/);
   });
 
-  it("without the secret it says so and stops green", () => {
-    const check = step("Check the API key");
-    expect(check.run).toMatch(/ANTHROPIC_API_KEY/);
+  it("without the federation variables it says so and stops green", () => {
+    const check = step("Check the federation config");
+    expect(check.env).toMatchObject({ RULE_ID: "${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}" });
     expect(check.run).toMatch(/::notice::/);
     expect(step("Record the real claude answers").if).toMatch(/steps\.key\.outputs\.present == 'true'/);
+  });
+
+  // KJC-TSK-1062: no static key anywhere; one exchange, its token masked and shared by every claude run.
+  it("exchanges the GitHub OIDC token once for a short-lived Anthropic token, masked", () => {
+    expect(raw).not.toMatch(/secrets\.ANTHROPIC_API_KEY/);
+    const exchange = step("Exchange the OIDC token for an Anthropic token");
+    expect(exchange.run).toMatch(/ACTIONS_ID_TOKEN_REQUEST_URL&audience=https:\/\/api\.anthropic\.com/);
+    expect(exchange.run).toMatch(/api\.anthropic\.com\/v1\/oauth\/token/);
+    expect(exchange.run).toMatch(/::add-mask::/);
+    expect(exchange.run).toMatch(/ANTHROPIC_AUTH_TOKEN=.*>> "\$GITHUB_ENV"/);
+    expect(exchange.run).not.toMatch(/echo "\$RESPONSE"|cat .*jwt/);
   });
 
   it("records review and task answers through kj's own adapter, then replays the contract test", () => {
@@ -32,6 +43,6 @@ describe("real-cli weekly workflow", () => {
     expect(step("Upsert tracking issue").with.script).toMatch(/real-cli-weekly/);
     expect(step("Upsert tracking issue").with.script).toMatch(/version/);
     for (const s of steps.filter((x) => x.uses)) expect(s.uses).toMatch(/@[0-9a-f]{40}/);
-    expect(wf.permissions).toEqual({ contents: "read", issues: "write" });
+    expect(wf.permissions).toEqual({ contents: "read", issues: "write", "id-token": "write" });
   });
 });

@@ -4,7 +4,10 @@ name: Real CLI contract (weekly)
 # job records them again with the REAL claude CLI (kj's own adapter, redacted
 # and privacy-scanned by the recorder) and replays the contract test against
 # them, so a CLI that changes its output shows up within the week. It only
-# informs: no pull_request trigger, green without the secret, one issue.
+# informs: no pull_request trigger, green without its config, one issue.
+# KJC-TSK-1062: no API key. The job's GitHub OIDC token is exchanged ONCE for a
+# short-lived Anthropic token (Workload Identity Federation); the three ids are
+# repo variables, not secrets. One exchange because the GitHub JWT is single use.
 
 on:
   schedule:
@@ -14,6 +17,7 @@ on:
 permissions:
   contents: read
   issues: write
+  id-token: write
 
 jobs:
   contract:
@@ -30,16 +34,18 @@ jobs:
           node-version: 22.x
           cache: npm
 
-      - name: Check the API key
+      - name: Check the federation config
         id: key
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          RULE_ID: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+          ORG_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+          SA_ID: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
         run: |
-          if [ -n "$ANTHROPIC_API_KEY" ]; then
+          if [ -n "$RULE_ID" ] && [ -n "$ORG_ID" ] && [ -n "$SA_ID" ]; then
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::ANTHROPIC_API_KEY is not set: the real CLI contract was not checked this week"
+            echo "::notice::ANTHROPIC_FEDERATION_RULE_ID, ANTHROPIC_ORGANIZATION_ID or ANTHROPIC_SERVICE_ACCOUNT_ID is not set: the real CLI contract was not checked this week"
           fi
 
       - name: Install
@@ -49,12 +55,34 @@ jobs:
           npm install -g @anthropic-ai/claude-code
           claude --version | tee /tmp/claude-version.txt
 
+      - name: Exchange the OIDC token for an Anthropic token
+        if: steps.key.outputs.present == 'true'
+        env:
+          RULE_ID: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+          ORG_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+          SA_ID: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+          WORKSPACE_ID: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
+        run: |
+          set -eo pipefail
+          jwt=$(curl -sS -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://api.anthropic.com" | jq -r .value)
+          body=$(jq -n --arg a "$jwt" --arg r "$RULE_ID" --arg o "$ORG_ID" --arg s "$SA_ID" --arg w "$WORKSPACE_ID" \
+            '{grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: $a, federation_rule_id: $r, organization_id: $o, service_account_id: $s} + (if $w == "" then {} else {workspace_id: $w} end)')
+          status=$(curl -sS -o /tmp/exchange.json -w '%{http_code}' https://api.anthropic.com/v1/oauth/token \
+            -H "content-type: application/json" -d "$body")
+          if [ "$status" != "200" ]; then
+            echo "::error::token exchange denied (HTTP $status, $(jq -r '.error.type // .error // "no error type"' /tmp/exchange.json)): see the authentication history in the Claude Console"
+            exit 1
+          fi
+          token=$(jq -r .access_token /tmp/exchange.json)
+          rm -f /tmp/exchange.json
+          echo "::add-mask::$token"
+          echo "ANTHROPIC_AUTH_TOKEN=$token" >> "$GITHUB_ENV"
+
       - name: Record the real claude answers
         id: record
         if: steps.key.outputs.present == 'true'
         continue-on-error: true
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           set -eo pipefail
           node scripts/record-agent-fixtures.mjs claude 2>&1 | tee /tmp/record.txt
