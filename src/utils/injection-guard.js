@@ -35,8 +35,11 @@ export function assertPortable({ id, expression, flags = "" }) {
 }
 
 /** The catalog compiled per type; a missing or broken catalog fails loudly, never scans empty. */
-export function loadInjectionCatalog(url = new URL("./injection-patterns.json", import.meta.url)) {
-  const catalog = JSON.parse(readFileSync(url, "utf8"));
+// The SEA bundle has no sibling files: scripts/esbuild-sea.config.mjs inlines this exact read.
+const readCatalog = () => readFileSync(new URL("./injection-patterns.json", import.meta.url), "utf8");
+
+export function loadInjectionCatalog() {
+  const catalog = JSON.parse(readCatalog());
   const compiled = { directive: [], unicode: [], comment_block: [], maxCommentBlock: catalog.max_comment_block, version: catalog.version };
   for (const entry of catalog.patterns) {
     const re = assertPortable(entry);

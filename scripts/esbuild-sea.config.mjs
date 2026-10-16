@@ -35,6 +35,13 @@ const seaTransformPlugin = {
         modified = true;
       }
 
+      // KJC-TSK-0703: the injection catalog is data read next to its module; inlined the same way.
+      const CATALOG_READ = /readFileSync\(new URL\("(\.\/injection-patterns\.json)", import\.meta\.url\), "utf8"\)/g;
+      if (CATALOG_READ.test(contents)) {
+        contents = contents.replace(CATALOG_READ, (_m, rel) => JSON.stringify(readFileSync(path.resolve(path.dirname(args.path), rel), "utf8")));
+        modified = true;
+      }
+
       // Replace import.meta.dirname with __dirname
       if (contents.includes("import.meta.dirname")) {
         contents = contents.replaceAll("import.meta.dirname", "__dirname");
