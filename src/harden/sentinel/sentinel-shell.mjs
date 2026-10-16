@@ -155,6 +155,65 @@ export const stripTextOptionValues = (cmd) => cmd
   .replace(KJ_TITLE, (m, pre, head, val) => `${pre}${head}${val[0]}${val[0]}`)
   .replace(QUOTED_OPTION_VALUE, (m, pre, opt, sep, val) => (TEXT_OPTIONS.has(opt) ? `${pre}${opt}${sep}${val[0]}${val[0]}` : m));
 
+// KJC-BUG-0354: commands that only STORE their text: there, a quoted text value
+// is never run. Anywhere else it may be (flock --command '...'), so it stays.
+// git's global options that only pick where and how it runs may precede commit.
+const GIT_GLOBAL_WITH_VALUE = new Set(["-c", "-C", "--git-dir", "--work-tree", "--namespace"]);
+const GIT_GLOBAL_FLAG = /^(?:--no-pager|--(?:git-dir|work-tree|namespace)=\S+)$/;
+
+const isGitCommit = (words) => {
+  let i = 1;
+  while (i < words.length) {
+    if (GIT_GLOBAL_WITH_VALUE.has(words[i])) i += 2;
+    else if (GIT_GLOBAL_FLAG.test(words[i])) i += 1;
+    else break;
+  }
+  return words[0] === "git" && words[i] === "commit";
+};
+
+const isTextOnlyHead = (seg) => /^kj\s+(?:hu|adr)\s+add\b/.test(seg) || isGitCommit(seg.split(/\s+/));
+
+/**
+ * KJC-BUG-0354: blank the quoted text values (stripTextOptionValues) only when the
+ * whole input is a text-only command, so the human-act guards stop reading a
+ * title or a commit message that merely mentions a guarded command.
+ * @param {string} cmd
+ */
+export const stripTextOnlyCommandValues = (cmd) => {
+  // Only a whole input that is ONE simple text-storage command: a chained
+  // segment could follow a shell function that turns the stored text into code.
+  const bare = stripInertQuotes(cmd);
+  if (splitOutsideQuotes(cmd).length !== 1 || /[(){}<>`$\n]/.test(bare) || !isTextOnlyHead(cmd.trim())) return cmd;
+  return stripTextOptionValues(cmd);
+};
+
+/** Segments and the ; && || | between them, cut only outside quotes (the pieces join back to cmd). */
+function splitOutsideQuotes(cmd) {
+  const parts = [];
+  let start = 0;
+  let quote = null;
+  let i = 0;
+  while (i < cmd.length) {
+    const c = cmd[i];
+    const op = quote ? null : /^(?:&&|\|\||;|\|)/.exec(cmd.slice(i))?.[0];
+    if (quote) {
+      // inside double quotes a backslash escapes the next character
+      if (c === "\\" && quote === '"') i += 1;
+      else if (c === quote) quote = null;
+    } else if (c === "'" || c === '"') {
+      quote = c;
+    } else if (op) {
+      parts.push(cmd.slice(start, i), op);
+      start = i + op.length;
+      i = start;
+      continue;
+    }
+    i += 1;
+  }
+  parts.push(cmd.slice(start));
+  return parts;
+}
+
 /**
  * KJC-BUG-0245: the values of the named options, read by the shell reader, so a
  * `;`, `&&` or `|` right after a path ends the word instead of joining it.
