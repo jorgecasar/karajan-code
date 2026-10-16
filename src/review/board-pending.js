@@ -11,7 +11,9 @@
  * One verifiable fact carries a pending, never a promise in prose: the same card
  * has another OPEN pull request. A branch named after the card is not enough,
  * because the merged branch carries that name too, so accepting it would forgive
- * every merge made from its own lane.
+ * every merge made from its own lane. KJC-BUG-0362 narrows that, never widens
+ * it: the current branch carries only with unmerged commits and when it is not
+ * the merged PR's head.
  */
 
 import { execFileSync } from "node:child_process";
@@ -31,7 +33,20 @@ const cardOf = (text) => {
  *
  * @returns {{blocking: Array<object>, carried: Array<{card: string, why: string}>, reason?: string}}
  */
-export function blockingMoves({ pendings = [], openPrHeads = null, openPrNumbers = [] }) {
+/**
+ * KJC-BUG-0362 (#2199): the next PR of a split card may not exist yet (committed,
+ * not pushed). The branch the session stands on carries the card when it names
+ * that card, holds commits the base does not have, and is NOT the merged PR's
+ * head: the merged lane stays unforgiven, as above.
+ */
+function carriedByLocalBranch(pending, card, localBranch, mergedHeads) {
+  if (!localBranch?.name || !(localBranch.unique > 0)) return null;
+  const mergedHead = mergedHeads[Number(pending.pr)];
+  if (!mergedHead || mergedHead === localBranch.name || cardOf(localBranch.name) !== card) return null;
+  return { card, why: `sigue entregándose en la rama ${localBranch.name}, con ${localBranch.unique} commit(s) sin mergear` };
+}
+
+export function blockingMoves({ pendings = [], openPrHeads = null, openPrNumbers = [], localBranch = null, mergedHeads = {} }) {
   if (pendings.length === 0) return { blocking: [], carried: [] };
   if (openPrHeads === null) return { blocking: [...pendings], carried: [], reason: "no se pudo comprobar si la card sigue viva en otra PR abierta (gh no respondió) — se bloquea" };
   const openCards = new Set();
@@ -46,7 +61,9 @@ export function blockingMoves({ pendings = [], openPrHeads = null, openPrNumbers
   for (const p of pendings) {
     const card = p.card ? String(p.card).toUpperCase() : null;
     if (!card) { blocking.push(p); continue; } // nothing to check against
-    if (openCards.has(card)) carried.push({ card, why: "sigue entregándose en una PR abierta" });
+    if (openCards.has(card)) { carried.push({ card, why: "sigue entregándose en una PR abierta" }); continue; }
+    const byBranch = carriedByLocalBranch(p, card, localBranch, mergedHeads);
+    if (byBranch) carried.push(byBranch);
     else blocking.push(p);
   }
   return { blocking, carried };
@@ -64,5 +81,21 @@ export function boardGate({ projectDir = process.cwd(), sessionId = "default", d
   let open = null;
   try { open = JSON.parse(run("gh", ["pr", "list", "--state", "open", "--limit", "100", "--json", "number,headRefName"])); } catch { /* fail closed */ }
   const listed = Array.isArray(open) ? open : null;
-  return blockingMoves({ pendings, openPrHeads: listed?.map((p) => p.headRefName) ?? null, openPrNumbers: listed?.map((p) => Number(p.number)) ?? [] });
+  return blockingMoves({ pendings, openPrHeads: listed?.map((p) => p.headRefName) ?? null, openPrNumbers: listed?.map((p) => Number(p.number)) ?? [], ...localFacts(run, pendings) });
+}
+
+/** The current branch, its commits outside the base, and each merged PR's head; unreadable facts forgive nothing. */
+function localFacts(run, pendings) {
+  const facts = { localBranch: null, mergedHeads: {} };
+  try {
+    const name = run("git", ["rev-parse", "--abbrev-ref", "HEAD"]).trim();
+    let base = "origin/main"; // a clone without origin/HEAD measures against origin/main
+    try { base = run("git", ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]).trim() || base; } catch { /* keep origin/main */ }
+    const unique = Number(run("git", ["rev-list", "--count", `${base}..HEAD`]).trim());
+    if (name && name !== "HEAD" && Number.isInteger(unique)) facts.localBranch = { name, unique };
+  } catch { return facts; }
+  for (const p of pendings) {
+    try { facts.mergedHeads[Number(p.pr)] = JSON.parse(run("gh", ["pr", "view", String(p.pr), "--json", "headRefName"])).headRefName; } catch { /* unknown head: not forgiven */ }
+  }
+  return facts;
 }
