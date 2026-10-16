@@ -1,0 +1,98 @@
+name: Real CLI contract (weekly)
+
+# KJC-TSK-1040 (QS-C): the agent contract tests replay recorded answers. This
+# job records them again with the REAL claude CLI (kj's own adapter, redacted
+# and privacy-scanned by the recorder) and replays the contract test against
+# them, so a CLI that changes its output shows up within the week. It only
+# informs: no pull_request trigger, green without the secret, one issue.
+
+on:
+  schedule:
+    - cron: "41 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  contract:
+    name: Agent contract with the real claude CLI
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: Check the API key
+        id: key
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::ANTHROPIC_API_KEY is not set: the real CLI contract was not checked this week"
+          fi
+
+      - name: Install
+        if: steps.key.outputs.present == 'true'
+        run: |
+          npm ci
+          npm install -g @anthropic-ai/claude-code
+          claude --version | tee /tmp/claude-version.txt
+
+      - name: Record the real claude answers
+        id: record
+        if: steps.key.outputs.present == 'true'
+        continue-on-error: true
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -eo pipefail
+          node scripts/record-agent-fixtures.mjs claude 2>&1 | tee /tmp/record.txt
+          node scripts/record-agent-fixtures.mjs claude --task 2>&1 | tee -a /tmp/record.txt
+
+      - name: Replay the agent contract
+        id: replay
+        if: steps.key.outputs.present == 'true'
+        continue-on-error: true
+        run: |
+          npx vitest run tests/agents/agent-contract-fixtures.test.js 2>&1 | tail -60 > /tmp/contract.txt
+          status=${PIPESTATUS[0]}
+          git diff --stat -- tests/agents/fixtures/claude > /tmp/fixture-diff.txt
+          exit "$status"
+
+      - name: Upsert tracking issue
+        if: steps.key.outputs.present == 'true' && (steps.record.outcome == 'failure' || steps.replay.outcome == 'failure')
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const fs = require('node:fs');
+            const read = (f) => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8').trim() : '(not produced)');
+            const title = '[real-cli-weekly] The real claude CLI broke the agent contract';
+            const body = [
+              `_Auto-updated by \`.github/workflows/real-cli-weekly.yml\` (run [${context.runId}](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}))._`,
+              '',
+              `**claude version:** ${read('/tmp/claude-version.txt')}`,
+              '',
+              '## Recording (redacted and privacy-scanned by the recorder)',
+              '```', read('/tmp/record.txt'), '```',
+              '## Contract test',
+              '```', read('/tmp/contract.txt'), '```',
+              '## Fixtures that changed',
+              '```', read('/tmp/fixture-diff.txt'), '```',
+            ].join('\n');
+            const { data: issues } = await github.rest.issues.listForRepo({ owner: context.repo.owner, repo: context.repo.repo, state: 'open', labels: 'real-cli-weekly' });
+            if (issues.length > 0) {
+              await github.rest.issues.update({ owner: context.repo.owner, repo: context.repo.repo, issue_number: issues[0].number, body });
+            } else {
+              await github.rest.issues.create({ owner: context.repo.owner, repo: context.repo.repo, title, body, labels: ['real-cli-weekly'] });
+            }
