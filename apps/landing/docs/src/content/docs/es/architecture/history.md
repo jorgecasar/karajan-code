@@ -1823,6 +1823,8 @@ El ADR 0020 resuelve los dos extremos. `kj init`, con una persona en la terminal
 
 La misma versión abrió el camino a un equipo trabajando en un mismo repo y a elegir modelo con datos. Arrancar una card ahora la reserva, `kj doctor` comprueba un SonarQube compartido, `kj harden` dice cómo hacer obligatorios los checks del método en la rama base, y `kj review --publish-pr` deja la review de la otra IA a la vista allí donde el equipo la mide. Cada HU registra qué modelo la programó, sus tokens y cuántas veces la devolvió el revisor, y `kj report` lo suma por modelo: la línea base con la que se juzgará cualquier decisión de enrutado.
 
+Antes de publicarse, el enrutado dio sus primeros pasos sobre esa línea base: cada HU sale de la descomposición con su tramo, contrastado con una señal determinista, y los perfiles con nombre (`frugal`, `standard`, `deep`) se apoyan en una sola tabla de modelos por defecto cuyos ids se verificaron contra cada CLI. Los planes aprendieron a decir si un cambio amplía, regenera o reconstruye código existente, y regenerar exige licencia: el mutation score del módulo en 0,8 o más, o antes una HU que lo endurezca. La cuarentena de dependencias ganó un modo que bloquea, `kj check` cuenta el trabajo desde la última auditoría, los patrones de prompt-injection pasaron a un catálogo portable que karajan-radar lee desde Python, y el contrato con claude se comprueba en la máquina del mantenedor: sin credenciales en CI, y `kj release check` sigue en rojo hasta que las grabaciones coinciden con el claude instalado.
+
 ## Decisiones Arquitectonicas Clave
 
 ### CLI wrapping vs llamadas directas a API

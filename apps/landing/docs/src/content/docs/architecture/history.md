@@ -1824,6 +1824,8 @@ ADR 0020 settles both ends. `kj init`, with a person at the terminal, offers to 
 
 The same release opened the way to a team on one repo and to measured model choice. Starting a card now reserves it, `kj doctor` checks a shared SonarQube, `kj harden` says how to make the method's checks required on the base branch, and `kj review --publish-pr` makes the cross-AI review visible where the team measures it. Each HU records which model coded it, its tokens and how many times the reviewer sent it back, and `kj report` adds that up per model: the baseline any routing decision will be judged against.
 
+Before it shipped, routing took its first steps on that baseline: each HU leaves the decomposition with its tier, checked against a deterministic signal, and named profiles (`frugal`, `standard`, `deep`) sit on one table of default models whose ids were verified against each CLI. Plans learned to say whether a change extends, reworks or rebuilds existing code, and a rework needs a licence: the module's mutation score at or over 0.8, or a hardening HU first. The supply-chain cooldown gained a blocking mode, `kj check` counts the work since the last audit, the prompt-injection patterns became a portable catalog karajan-radar reads from Python, and the contract with claude moved to the maintainer's machine: no credential in CI, and `kj release check` stays red until the recordings match the installed claude.
+
 ## Key Architectural Decisions
 
 ### CLI wrapping vs direct API calls
