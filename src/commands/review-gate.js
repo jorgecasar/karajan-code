@@ -31,6 +31,7 @@ import { policyFileHash, recordGateDecision } from "../policy/decisions.js";
 import { evaluatePolicyGate } from "../review/policy-gate.js";
 import { correctionNote, reviewCorrectionRounds } from "../review/correction-rounds.js";
 import { cooldownAdvisories, DEFAULT_COOLDOWN_HOURS, formatCooldown } from "../review/dep-cooldown.js";
+import { branchOverlaps, formatOverlaps } from "../review/branch-overlap.js";
 
 // KJC-TSK-0686 (MG-A): card-first is a gate, not a habit. Runs on --staged
 // (before spending sonar/reviewer effort) AND on --check — the pre-commit
@@ -577,6 +578,11 @@ export async function reviewGateCommand({ config, logger = null, flags = {} }) {
         + `Surviving mutants on the changed lines (weak asserts — fold into your review):\n`
         + mut.survived.map((m) => `- ${formatSurvivor(m)}`).join("\n");
     }
+  }
+
+  // KJC-TSK-1052 (TEAM-F): another branch in progress touching the same files is said, never blocks.
+  if (flags.staged && !flags.range) {
+    for (const line of formatOverlaps(await branchOverlaps({ projectDir, stagedFiles: changedFiles, base: config?.base_branch || "main" }))) console.log(line);
   }
 
   // KJC-TSK-0722: a dependency published under the cooldown is said, and weighed by the reviewer.
