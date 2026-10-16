@@ -48,7 +48,9 @@ function carriedByLocalBranch(pending, card, localBranch, mergedHeads) {
 
 export function blockingMoves({ pendings = [], openPrHeads = null, openPrNumbers = [], localBranch = null, mergedHeads = {} }) {
   if (pendings.length === 0) return { blocking: [], carried: [] };
-  if (openPrHeads === null) return { blocking: [...pendings], carried: [], reason: "no se pudo comprobar si la card sigue viva en otra PR abierta (gh no respondió) — se bloquea" };
+  // KJC-BUG-0363 (#2201): the guard runs BEFORE the command, so a gh auth switch
+  // inside it has not happened yet, and other sessions move the active account.
+  if (openPrHeads === null) return { blocking: [...pendings], carried: [], reason: "no se pudo comprobar si la card sigue viva en otra PR abierta: gh no pudo listar las PR con la cuenta activa. Si el repo es de otra cuenta, cambiala en un comando aparte (gh auth switch --user <cuenta>) y repite: el guard corre antes que el comando" };
   const openCards = new Set();
   for (const [i, head] of openPrHeads.entries()) {
     // A pending must never forgive itself: the PR it came from is merged, and if

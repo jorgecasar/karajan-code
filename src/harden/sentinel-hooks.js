@@ -88,7 +88,7 @@ export const boardGate = (sid, pend) => {
   if (!pend.length) return { blocking: [], carried: [] };
   const bg = spawnSync("kj", ["sentinel", "board-gate", "--session", sid, "--json"], { cwd: ROOT, encoding: "utf8" });
   if (!bg.error && (bg.status === 0 || bg.status === 2)) {
-    try { const d = JSON.parse(bg.stdout); return { blocking: d.blocking || [], carried: d.carried || [] }; } catch { /* unreadable: as always */ }
+    try { const d = JSON.parse(bg.stdout); return { blocking: d.blocking || [], carried: d.carried || [], reason: d.reason || "" }; } catch { /* unreadable: as always */ }
   }
   return { blocking: pend, carried: [] };
 };
@@ -1177,12 +1177,13 @@ process.stdin.on("end", () => {
       if (pend.length > 0 && (mergeM || ADVANCE.test(cmd))) {
         // KJC-BUG-0198: una card partida en varias PRs no puede quedar bloqueada
         // por su primera mitad (boardGate, en la lib).
-        const { blocking, carried } = boardGate(sid, pend);
+        const { blocking, carried, reason } = boardGate(sid, pend);
         for (const c of carried) console.error("karajan sentinel: board-sync arrastra " + c.card + " — " + c.why + ", se movera al cerrarla");
         // ADR 0015 (KJC-TSK-0925): no escape; an epic and a card split across PRs
         // are already decided above (KJC-BUG-0230, 0198).
+        // KJC-BUG-0363: when kj could not check, its reason travels with the block.
         if (blocking.length > 0) {
-          console.error("karajan sentinel: board-sync — el metodo no avanza con cards mergeadas sin mover:\\n" + blocking.map((p) => "- " + pendingText(p)).join("\\n") + doc("board-sync"));
+          console.error("karajan sentinel: board-sync — el metodo no avanza con cards mergeadas sin mover:\\n" + blocking.map((p) => "- " + pendingText(p)).join("\\n") + (reason ? "\\n(" + reason + ")" : "") + doc("board-sync"));
           process.exit(2);
         }
       }

@@ -191,4 +191,20 @@ describe("board-sync gate", () => {
     expect(fs.existsSync(statePath) ? (state().sessions?.s1?.pending_moves ?? []) : []).toHaveLength(0);
     expect(endTurn().status).toBe(0);
   });
+
+  // KJC-BUG-0363 (#2201): when kj could not check (gh as another account), the
+  // block said nothing of why; the reason kj gives now travels with it.
+  it("a block kj could not verify carries kj's reason", () => {
+    merged(12);
+    const bin = path.join(dir, "fakekj");
+    fs.mkdirSync(bin);
+    const out = JSON.stringify({ blocking: [{ card: "KJC-TSK-0042", pr: 12 }], carried: [], reason: "gh no pudo listar las PR con la cuenta activa" });
+    fs.writeFileSync(path.join(bin, "kj"), `#!/bin/sh\necho '${out}'\nexit 2\n`, { mode: 0o755 });
+    const res = spawnSync("node", [gate], {
+      input: JSON.stringify({ session_id: "s1", tool_name: "Bash", tool_input: { command: "gh pr merge 13" } }),
+      encoding: "utf8", cwd: dir, env: { ...process.env, ...env, PATH: `${bin}:${process.env.PATH}` },
+    });
+    expect(res.status).toBe(2);
+    expect(res.stderr).toMatch(/\(gh no pudo listar las PR con la cuenta activa\)/);
+  });
 });
