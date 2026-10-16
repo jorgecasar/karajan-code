@@ -12,6 +12,7 @@ import { detectObservedAgents } from "../utils/agent-detect.js";
 import { panelSummary } from "../environment/panel.js";
 import { loadConfig } from "../config.js";
 import { branchCooldownLines } from "../checks/supply-chain-check.js";
+import { auditCycle } from "../checks/audit-cycle.js";
 
 export async function checkCommand({ projectDir = process.cwd(), profile = "standard", json = false, logger = console } = {}) {
   const result = await checkHarden({ projectDir, profile });
@@ -38,10 +39,12 @@ export async function checkCommand({ projectDir = process.cwd(), profile = "stan
   // KJC-TSK-1059: young dependencies the branch brings in, a warning outside the review.
   const depCooldown = await branchCooldownLines({ projectDir, base: config?.base_branch ?? "main", thresholdHours: config?.supply_chain?.cooldown_hours })
     .catch((err) => [`⚠ supply-chain cooldown not checked: ${err.message}`]);
+  // KJC-TSK-0719 (SPD-C): the audit is due by work cycles too; visibility, never the exit code.
+  const audit = await auditCycle({ projectDir, config }).catch((err) => ({ due: false, line: `⚠ audit cycle not checked: ${err.message}` }));
 
   const ok = result.ok && ragCoverage.ok;
   if (json) {
-    logger.info?.(JSON.stringify({ ...result, ok, method, ragCoverage, aiSurface, depCooldown }));
+    logger.info?.(JSON.stringify({ ...result, ok, method, ragCoverage, aiSurface, depCooldown, auditCycle: audit }));
     return ok ? 0 : 1;
   }
 
@@ -51,6 +54,7 @@ export async function checkCommand({ projectDir = process.cwd(), profile = "stan
   logger.info?.(`  ${ragCoverage.ok ? "✓" : "✗"} rag-coverage: ${ragCoverage.detail}`);
   if (aiSurface) logger.info?.(`  ${formatAiSurface(aiSurface)}`);
   for (const line of depCooldown) logger.info?.(`  ${line}`);
+  logger.info?.(`  ${audit.line}`);
   // KJC-TSK-0865: who writes and who reviews is the user's choice, so it is
   // said out loud next to everything else that describes the project. Never
   // a check: it has no ok/fail, it informs.

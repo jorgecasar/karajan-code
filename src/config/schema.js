@@ -249,6 +249,11 @@ export const ConfigSchema = v.looseObject({
     "state_backend must be \"hu-board\", \"planning-game\" or \"external\""
   )),
   review_rules: v.optional(v.string()),
+  // KJC-TSK-0719 (SPD-C): kj check says the audit is due past these counts.
+  audit_cycle: v.optional(v.looseObject({
+    every_cards: v.optional(PositiveInt),
+    every_commits: v.optional(PositiveInt),
+  })),
   coder_rules: v.optional(v.string()),
   base_branch: v.optional(v.string()),
   coder_options: CoderOptions,
