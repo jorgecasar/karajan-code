@@ -1,4 +1,7 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterAll } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { createNoopLoggerWithContext } from "../_fixtures/loggers.js";
 
 // AuditRole.collectDeterministic() + executeWithDeterministic() drive
@@ -51,8 +54,15 @@ vi.mock("../../src/audit/harness-section.js", () => ({
   harnessSummaryForJson: vi.fn(() => null),
 }));
 
+// KJC-BUG-0361: without a projectDir, auditCommand records the run in
+// process.cwd() — the real repo's .karajan/audit-history.db. Every run here
+// goes to a throwaway directory instead.
+const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "kj-audit-cmd-"));
+afterAll(() => fs.rmSync(projectDir, { recursive: true, force: true }));
+
 function makeConfig(overrides = {}) {
   return {
+    projectDir,
     roles: { audit: { provider: "claude" } },
     ...overrides,
   };
