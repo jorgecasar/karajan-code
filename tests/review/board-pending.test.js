@@ -95,6 +95,15 @@ describe("boardGate", () => {
     expect(boardGate({ sessionId: "s1", deps: { readState: () => state, run } }).blocking).toEqual([]);
   });
 
+  // KJC-BUG-0363 (#2201): the hook runs BEFORE the command's own gh auth switch,
+  // and other sessions move the active account: gh pr list as the wrong account
+  // answered 404, and the block said nothing of why. It still blocks, and says so.
+  it("when gh cannot list the open PRs it blocks and names the account switch as the way out", () => {
+    const res = gate(null);
+    expect(res.blocking).toHaveLength(1);
+    expect(res.reason).toMatch(/cuenta activa.*gh auth switch --user <cuenta>.*corre antes que el comando/);
+  });
+
   it("decides nothing without state, session or pendings", () => {
     for (const st of [null, {}, { sessions: { s1: {} } }, { sessions: { s1: { pending_moves: [] } } }]) {
       expect(gate([], st)).toEqual({ blocking: [], carried: [] });
