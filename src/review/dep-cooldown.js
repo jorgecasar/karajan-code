@@ -38,6 +38,22 @@ async function publishedAt({ name, version }, run) {
   return when;
 }
 
+export const COOLDOWN_RULE_ID = "method.dep_cooldown";
+
+/**
+ * KJC-TSK-1056: with method_gates.dep_cooldown: block, a young dependency stops
+ * the review; only a live human grant on method.dep_cooldown lifts it. What
+ * could not be verified (no registry) never blocks: a false positive would
+ * stop legitimate work for a network blip.
+ */
+export function cooldownGate({ result, mode, standingExceptions = [], now = new Date() }) {
+  if (mode !== "block" || result.young.length === 0) return { block: false };
+  const grant = standingExceptions.find((e) => e.rule_id === COOLDOWN_RULE_ID && new Date(e.expiresAt).getTime() > now.getTime());
+  if (grant) return { block: false, grant };
+  const list = result.young.map((p) => `${p.name}@${p.version} (${p.hours} h)`).join(", ");
+  return { block: true, reason: `${result.young.length} dependency(ies) under the cooldown: ${list} (method_gates.dep_cooldown: block). Wait it out, pin an older version, or a human lifts it: kj policy grant --rule ${COOLDOWN_RULE_ID} --until <iso> --reason "<why>"` };
+}
+
 /** What kj review prints, and the note the reviewer gets; empty when there is nothing to say. */
 export function formatCooldown({ young, unverified, skipped = 0 }, thresholdHours = DEFAULT_COOLDOWN_HOURS) {
   const lines = [

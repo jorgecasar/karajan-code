@@ -90,7 +90,11 @@ const DEFAULTS = {
     // the turn's final message against that turn's tool outputs. "off" (adoption
     // is explicit) | "warn" (report only) | "block" (a datum DENIED by its own
     // source refuses to end the turn; unbacked data is still only reported).
-    claims: "off"
+    claims: "off",
+    // KJC-TSK-1056: a dependency published under supply_chain.cooldown_hours
+    // ago: "warn" (said in kj review) | "block" (stops the review; a human
+    // grant on method.dep_cooldown lifts it). Unverifiable ones never block.
+    dep_cooldown: "warn"
   },
   review_rules: "./.karajan/review-rules.md",
   coder_rules: "./.karajan/coder-rules.md",
