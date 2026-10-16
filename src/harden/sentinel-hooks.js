@@ -473,7 +473,7 @@ import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { doc, CODE, TESTS, ROOT, BASE_BRANCHES, CARD, STATE, branchOf, foreignLane, load, save, session, violations, boardGate, pendingMoves, pendingText } from "./sentinel-lib.mjs";
 // KJC-TSK-0915 (ADR 0014): the shell reader is a real, unit-tested module copied here as is.
-import { isGhIssueCreate, isPublishCommand, optionValues, shellSegments, stripInertQuotes, stripTextOptionValues } from "./sentinel-shell.mjs";
+import { isGhIssueCreate, isPublishCommand, optionValues, shellSegments, stripInertQuotes, stripTextOptionValues, stripTextOnlyCommandValues } from "./sentinel-shell.mjs";
 import { DISCARD_VERBS, discardOf, foreignLost, removedFiles } from "./sentinel-discard.mjs";
 import { shellWrites, writesRepo } from "./sentinel-bash-write.mjs";
 const EDIT_TOOLS = ["Write", "Edit", "MultiEdit", "NotebookEdit"];
@@ -606,7 +606,8 @@ process.stdin.on("end", () => {
     // — si un agente pudiera enrolar una clave SUYA, contestaria la capa 5 el
     // solo. Ni el comando ni el fichero de enrolamiento desde la sesion.
     {
-      const enrollCmd = String(input.command || "");
+      // KJC-BUG-0354: un titulo o un mensaje de commit que solo lo MENCIONA no es enrolar.
+      const enrollCmd = stripTextOnlyCommandValues(String(input.command || ""));
       const namesEnroll = (enrollCmd.includes("identity") && enrollCmd.includes("enroll-phone")) || enrollCmd.includes("supervisor-phone.json");
       const writesEnroll = EDIT_TOOLS.includes(tool) && String(input.file_path || "").includes("supervisor-phone.json");
       if ((tool === "Bash" && namesEnroll) || writesEnroll) {
@@ -618,11 +619,13 @@ process.stdin.on("end", () => {
     // sesion ni lo intenta. Sin escape (superficie de supervisor). includes()
     // a proposito: cero ambiguedad de escapes en plantilla, y fail-closed
     // (mencionarlo en un argumento tambien bloquea: preferible a un hueco).
+    // KJC-BUG-0354: salvo en el texto entrecomillado de kj hu add, kj adr add y
+    // git commit, que solo guardan texto (decision del usuario, 16-oct).
     // ANTES de KJ_SENTINEL_OFF a proposito, como el guard PROTECTED de
     // arriba: un env var lo pone tambien un agente — el supervisor no se
     // apaga con interruptores al alcance del supervisado.
     {
-      const kjCmd = String(input.command || "");
+      const kjCmd = stripTextOnlyCommandValues(String(input.command || ""));
       if (tool === "Bash" && kjCmd.includes("harden") && kjCmd.includes("--commit")) {
         console.error("karajan sentinel: kj harden --commit es un acto humano (ADR 0009) — pideselo a tu usuario; ninguna sesion de agente lo ejecuta." + doc("supervisor"));
         process.exit(2);
