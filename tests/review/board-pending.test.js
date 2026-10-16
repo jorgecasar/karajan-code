@@ -46,6 +46,23 @@ describe("blockingMoves", () => {
   it("decides nothing without pendings", () => {
     expect(blockingMoves({ pendings: [], openPrHeads: [] })).toEqual({ blocking: [], carried: [] });
   });
+
+  // KJC-BUG-0362 (#2199): PR 1 merged, PR 2 committed but not pushed yet: no open
+  // PR exists to carry the card, so its own push was blocked.
+  it("carries on the current branch of the same card with unmerged commits that is not the merged one", () => {
+    const local = { name: "fix/KJC-BUG-0197-part-2", unique: 2 };
+    const res = call({ localBranch: local, mergedHeads: { 1802: "fix/KJC-BUG-0197-part-1" } });
+    expect(res.blocking).toEqual([]);
+    expect(res.carried).toEqual([{ card: "KJC-BUG-0197", why: "sigue entregándose en la rama fix/KJC-BUG-0197-part-2, con 2 commit(s) sin mergear" }]);
+  });
+
+  it("still blocks the merged branch itself, a branch with nothing unmerged, another card's branch, or an unknown merged head", () => {
+    const merged = { 1802: "fix/KJC-BUG-0197-part-1" };
+    expect(call({ localBranch: { name: "fix/KJC-BUG-0197-part-1", unique: 3 }, mergedHeads: merged }).blocking).toHaveLength(1);
+    expect(call({ localBranch: { name: "fix/KJC-BUG-0197-part-2", unique: 0 }, mergedHeads: merged }).blocking).toHaveLength(1);
+    expect(call({ localBranch: { name: "fix/KJC-BUG-0300-x", unique: 2 }, mergedHeads: merged }).blocking).toHaveLength(1);
+    expect(call({ localBranch: { name: "fix/KJC-BUG-0197-part-2", unique: 2 }, mergedHeads: {} }).blocking).toHaveLength(1);
+  });
 });
 
 describe("boardGate", () => {
@@ -60,6 +77,22 @@ describe("boardGate", () => {
     expect(gate([{ number: 1803, headRefName: "fix/KJC-BUG-0197-verify" }]).blocking).toEqual([]);
     expect(gate([{ number: 1900, headRefName: "fix/KJC-BUG-0300-x" }]).blocking).toHaveLength(1);
     expect(gate(null).reason).toMatch(/no se pudo comprobar/);
+  });
+
+  it("asks git and gh for the current branch, its unmerged commits and the merged PR's head", () => {
+    const answers = {
+      "pr list": "[]",
+      "rev-parse --abbrev-ref HEAD": "fix/KJC-BUG-0197-part-2\n",
+      "symbolic-ref --short refs/remotes/origin/HEAD": "origin/main\n",
+      "rev-list --count origin/main..HEAD": "2\n",
+      "pr view 1802": JSON.stringify({ headRefName: "fix/KJC-BUG-0197-part-1" }),
+    };
+    const run = (cmd, args) => {
+      const key = Object.keys(answers).find((k) => args.join(" ").startsWith(k));
+      if (!key) throw new Error(`unexpected ${cmd} ${args.join(" ")}`);
+      return answers[key];
+    };
+    expect(boardGate({ sessionId: "s1", deps: { readState: () => state, run } }).blocking).toEqual([]);
   });
 
   it("decides nothing without state, session or pendings", () => {
