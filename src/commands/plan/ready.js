@@ -10,7 +10,7 @@ export async function planReadyCommand({ config, planId }) {
   const plan = await loadPlan(projectDir, planId);
   if (!plan) { console.error(`Plan not found: ${planId}`); process.exitCode = 1; return; }
 
-  const validation = validatePlan(plan);
+  const validation = validatePlan(plan, { reworkMin: config?.method_gates?.rework_mutation_min });
   if (!validation.valid) {
     console.error("Plan validation failed:");
     for (const err of validation.errors) console.error(`  - ${err}`);

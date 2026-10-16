@@ -91,6 +91,8 @@ const DEFAULTS = {
     // is explicit) | "warn" (report only) | "block" (a datum DENIED by its own
     // source refuses to end the turn; unbacked data is still only reported).
     claims: "off",
+    // KJC-TSK-0717 (SPD-A): the module mutation score a REWORK needs (0.8 = 80 %).
+    rework_mutation_min: 0.8,
     // KJC-TSK-1056: a dependency published under supply_chain.cooldown_hours
     // ago: "warn" (said in kj review) | "block" (stops the review; a human
     // grant on method.dep_cooldown lifts it). Unverifiable ones never block.

@@ -12,6 +12,7 @@ import {
   planShareCommand,
   planUnshareCommand,
 } from "../commands/plan.js";
+import { planLicenseCommand } from "../commands/plan/license.js";
 import { parseCanvasMarkdown } from "../canvas/parse-md.js";
 import { validateCanvas } from "../canvas/validate.js";
 import { canvasToTask } from "../canvas/to-flat.js";
@@ -194,6 +195,15 @@ export function registerPlan(program, { pkgVersion }) {
       await planRemoveHuCommand({ config, planId, huId });
     });
   });
+
+  // KJC-TSK-0717 (SPD-A): the REWORK licence, from the module's mutation score.
+  plan.command("license").description("Score a module with kj mutate and record the REWORK licence on an HU")
+    .argument("<planId>").argument("<huId>").requiredOption("--module <path>", "The module the REWORK regenerates")
+    .action(async (planId, huId, flags) => {
+      await withConfig(pkgVersion, "plan", flags, async ({ config }) => {
+        process.exitCode = await planLicenseCommand({ config, planId, huId, module: flags.module });
+      });
+    });
 
   // KJC-TSK-0402: re-ejecuta reviewer + self-fix + structural pass sobre
   // un plan existente. Acepta --prompt opcional con feedback humano que

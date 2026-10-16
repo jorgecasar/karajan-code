@@ -9,7 +9,7 @@ export async function planValidateCommand({ config, planId }) {
   const plan = await loadPlan(projectDir, planId);
   if (!plan) { console.error(`Plan not found: ${planId}`); process.exitCode = 1; return; }
 
-  const result = validatePlan(plan);
+  const result = validatePlan(plan, { reworkMin: config?.method_gates?.rework_mutation_min });
   if (result.valid) {
     console.log(`✅ Plan ${planId} is valid (${plan.hus.length} HUs, status: ${plan.status})`);
   } else {
