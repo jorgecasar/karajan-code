@@ -7,13 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [4.53.0] - 2026-10-15
+## [4.53.0] - 2026-10-16
 
 ### Added
 
 - **`kj init` offers to enroll the phone** (KJC-TSK-1046, ADR 0020): with a person at the terminal and no phone enrolled, the wizard offers to enroll it and collects the public key from karajancode.com/sign; once the wizard is closed, the identity command enrolls it with all its checks, roster and recovery code. Without a terminal init only informs.
+- **`kj review --publish-pr <n>`** (KJC-TSK-0913): the approved verdict of each commit of a PR, found by the diff it brought, is published on it as one GitHub review (event COMMENT), so the review counts in `reviews.totalCount`; a commit without one fails it, and a review already published for the same head is not repeated.
+- **`kj review` warns of dependencies published under 72 hours ago** (KJC-TSK-0722): it reads what a `package-lock.json` diff installs, asks npm how old each version is and hands the young ones to the reviewer; `supply_chain.cooldown_hours` moves the threshold, and a regenerated lockfile is said in one line.
+- **`kj harden` says how to make the method's checks required** (KJC-TSK-0928): on a GitHub remote it reads the base branch protection and gives the exact step (the full command for an unprotected branch, the additive one for missing checks, or the settings page where a command could undo existing protection). It never applies it.
+- **Starting a card reserves it** (KJC-TSK-1047, team Karajan): `kj hu move <id> running` reserves the card to who works the clone; a running card reserved by someone else moves only with `--release`; `kj hu list` shows it.
+- **Per-HU measurement for model routing** (KJC-TSK-0702, KJC-TSK-1057): each HU records the coder's provider and model, tokens out and the reviewer's rejections, and `kj report` adds up cost and first-time failures per coder model, with earlier HUs as the baseline.
+- **`kj worktree prune` also deletes loose `kj-hu-*` branches** with no commits of their own, and measures against `origin/<base>` (KJC-TSK-1037, ADR 0019).
 
 ### Changed
+
+- **claude runs on `claude-opus-5-5`** unless the user declares a model (KJC-TSK-0914).
+- **The pipeline stamp proves Sonar coverage per staged source** (KJC-TSK-0839), as `kj review --staged` does, and the method report judges it by that coverage.
+- **`kj doctor` checks the team's SonarQube** (KJC-TSK-1051): with `sonarqube.external` it no longer advises a local Docker, and with `sonarqube.quality_profile` it checks the project runs on that profile.
+- **The Sentinel treats `.karajan/security-level.json` as a governance file** (KJC-TSK-1054): only `kj security` writes it.
+- **The injection guard no longer flags a long JSDoc of tags** (KJC-TSK-0743), and its two source exclusions are gone.
 
 - **With no phone anywhere, a person lowers the level at the terminal** (KJC-TSK-1045, ADR 0020): at the default max level and with no phone enrolled, lowering to normal demanded the very phone that was missing. Now the human layers and the typed code lower it; the record says it is unsigned and reads as max again once a phone is enrolled. An agent session is still refused.
 
@@ -26,7 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Infrastructure
 
-- **Contract tests replay real CLI answers** (KJC-TSK-1039, KJC-TSK-1043): `scripts/record-agent-fixtures.mjs` records what claude (with and without hooks), codex, copilot, agy, gemini and opencode really emit; the contract test replays each through the path kj reads verdicts by, and demands a failure's own reason.
+- **Contract tests replay real CLI answers** (KJC-TSK-1039, KJC-TSK-1043, KJC-TSK-1044): `scripts/record-agent-fixtures.mjs` records what claude (with and without hooks), codex, copilot, agy, gemini and opencode really emit, as reviewer and as coder; the contract test replays each through the path kj reads them by, and demands a failure's own reason.
+- **The root prettier covers `packages/watch`** with its own config (KJC-TSK-0744), and `docs/family-contracts.md` lists the family's published contracts (KJC-TSK-0782).
 
 ## [4.52.0] - 2026-10-15
 

@@ -1821,6 +1821,8 @@ Un usuario actualizó kj y se encontró con el nivel máximo por defecto pidién
 
 El ADR 0020 resuelve los dos extremos. `kj init`, con una persona en la terminal, ofrece enrolar el móvil y reutiliza el comando de identidad con todas sus comprobaciones. Sin ningún móvil, las capas humanas y un código tecleado bajan el nivel, el registro dice que va sin firma y vuelve a leerse como máxima en cuanto existe un móvil. `kj doctor` falla ahora con nivel máximo y sin móvil, y dice qué se rechaza. Alrededor, el coder recibe cada issue de Sonar en vez de los recuentos por severidad, y unos tests de contrato reproducen lo que emite de verdad cada CLI de agentes, que ya cazaron un fallo de opencode que llegaba a kj sin su motivo.
 
+La misma versión abrió el camino a un equipo trabajando en un mismo repo y a elegir modelo con datos. Arrancar una card ahora la reserva, `kj doctor` comprueba un SonarQube compartido, `kj harden` dice cómo hacer obligatorios los checks del método en la rama base, y `kj review --publish-pr` deja la review de la otra IA a la vista allí donde el equipo la mide. Cada HU registra qué modelo la programó, sus tokens y cuántas veces la devolvió el revisor, y `kj report` lo suma por modelo: la línea base con la que se juzgará cualquier decisión de enrutado.
+
 ## Decisiones Arquitectonicas Clave
 
 ### CLI wrapping vs llamadas directas a API
