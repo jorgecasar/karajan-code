@@ -10,6 +10,7 @@ import { addCheckpoint } from "../../session/store.js";
 import { emitProgress, makeEvent } from "../../utils/events.js";
 import { buildDecompositionPrompt, parseDecompositionOutput, uncoveredCriteria } from "../../prompts/hu-reviewer.js";
 import { criteriaOfCard } from "../../roles/acceptance-coverage-role.js";
+import { huComplexity } from "../../hu/complexity-tier.js";
 import { createStallDetector } from "../../utils/stall-detector.js";
 import { createHuBatch, loadHuBatch, saveHuBatch, updateStoryStatus, updateStoryQuality, updateStoryCertified, addContextRequest, answerContextRequest } from "../../hu/store.js";
 import { topologicalSort } from "../../hu/graph.js";
@@ -88,11 +89,17 @@ async function decomposeTaskIntoHUs({ config, logger, emitter, eventBase, sessio
     }));
   }
 
+  // KJC-TSK-0698 (MR-A): each HU's tier and why, from this same answer plus the deterministic signal.
+  for (const story of stories) {
+    story.complexity = huComplexity(story);
+    logger.info(`${story.id} tier ${story.complexity.tier}: ${story.complexity.reason}`);
+  }
+
   emitProgress(
     emitter,
     makeEvent("hu-reviewer:decompose-end", { ...eventBase, stage: "hu-reviewer" }, {
       message: `Task decomposed into ${stories.length} HUs`,
-      detail: { count: stories.length, ids: stories.map(s => s.id) }
+      detail: { count: stories.length, ids: stories.map(s => s.id), tiers: Object.fromEntries(stories.map((s) => [s.id, s.complexity])) }
     })
   );
 
@@ -230,7 +237,8 @@ export async function runHuReviewerStage({ config, logger, emitter, eventBase, s
           id: hu.id,
           text: isFirst ? fullText : skeletonText,
           blocked_by: hu.dependsOn || [],
-          needsRefinement: !isFirst
+          needsRefinement: !isFirst,
+          complexity: hu.complexity
         };
       });
     } else {

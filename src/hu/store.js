@@ -55,6 +55,8 @@ export async function createHuBatch(sessionId, stories) {
       status: "pending",
       original: { text: s.text },
       blocked_by: s.blocked_by || [],
+      // KJC-TSK-0698: the tier travels with the HU; a story without one (single auto-story) carries none.
+      ...(s.complexity ? { complexity: s.complexity } : {}),
       certified: null,
       quality: null,
       context_requests: [],

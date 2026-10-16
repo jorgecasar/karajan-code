@@ -27,6 +27,13 @@ describe("HU Store", () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
+  it("KJC-TSK-0698: the HU's tier travels into the batch; a story without one carries none", async () => {
+    const complexity = { tier: "deep", judged: "standard", signal: "deep", reason: "signal deep over judged standard" };
+    const batch = await createHuBatch("tier-session", [{ id: "HU-001", text: "t", complexity }, { id: "HU-002", text: "u" }]);
+    expect(batch.stories[0].complexity).toEqual(complexity);
+    expect("complexity" in batch.stories[1]).toBe(false);
+  });
+
   it("createHuBatch creates directory and writes JSON", async () => {
     const stories = [
       { id: "HU-001", text: "As a user, I want login", blocked_by: [] },

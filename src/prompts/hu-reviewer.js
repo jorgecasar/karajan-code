@@ -156,12 +156,13 @@ export function buildDecompositionPrompt(task, { criteria = [] } = {}) {
 
   sections.push(
     "Return a single valid JSON object and nothing else.",
-    `JSON schema: {"stories":[{"id":string,"title":string,"role":string,"goal":string,"benefit":string,"acceptanceCriteria":[string],"dependsOn":[string],"covers":[number]}]}`,
+    `JSON schema: {"stories":[{"id":string,"title":string,"role":string,"goal":string,"benefit":string,"acceptanceCriteria":[string],"dependsOn":[string],"covers":[number],"tier":"trivial"|"standard"|"deep","tierReason":string}]}`,
     "Rules:",
     "- Generate between 2 and 5 HUs",
     "- Each id must be unique, formatted as HU-DECOMP-NNN (e.g. HU-DECOMP-001)",
     "- dependsOn is an array of other HU ids from this decomposition that must be completed first (empty array if no dependencies)",
     "- acceptanceCriteria should be concrete, testable statements",
+    "- tier is how hard the HU is to implement right (trivial: a local change; standard: several files or one module; deep: design decisions, many modules, or security/migrations), and tierReason says why in one line",
     "- Order stories so that dependencies are respected (a story should only depend on stories with lower ids)",
     ...(criteria.length > 0 ? [
       "- covers lists the numbers of the card's acceptance criteria this HU implements; EVERY card criterion must appear in the covers of at least one HU, and an HU's acceptanceCriteria must include each criterion it covers, verbatim",
@@ -201,7 +202,9 @@ export function parseDecompositionOutput(raw) {
       benefit: s.benefit || "",
       acceptanceCriteria: Array.isArray(s.acceptanceCriteria) ? s.acceptanceCriteria : [],
       dependsOn: Array.isArray(s.dependsOn) ? s.dependsOn : [],
-      covers: Array.isArray(s.covers) ? s.covers.map(Number).filter(Number.isInteger) : []
+      covers: Array.isArray(s.covers) ? s.covers.map(Number).filter(Number.isInteger) : [],
+      tier: s.tier ?? null,
+      tierReason: s.tierReason ?? null
     }));
 
   return stories.length > 0 ? stories : null;
