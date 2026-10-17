@@ -40,13 +40,15 @@ describe("thirdPartyReview", () => {
       gitDiff: async () => DIFF, run,
       // KJC-TSK-1076: the PR-requirement checks travel in the same document.
       requirements: async ({ range }) => [{ id: "size", ok: false, detail: `over the limit in ${range}` }],
+      // KJC-TSK-1077: the security checks read the same diff.
+      security: async ({ diff }) => [{ id: "secrets", ok: true, detail: `scanned ${diff.length} chars` }],
     });
     expect(run).toHaveBeenCalledWith(expect.objectContaining({ diff: DIFF, persist: false, reviewerOverride: "claude" }));
     expect(res).toMatchObject({
       mode: "third-party", range: "main...pr", reviewer: "claude",
       verdict: { approved: false, summary: "s" },
       findings: [{ file: "x.js", line: 1, severity: "high", description: "d", suggested_fix: "f" }],
-      suggestions: ["n"], checks: [{ id: "size", ok: false, detail: "over the limit in main...pr" }],
+      suggestions: ["n"], checks: [{ id: "size", ok: false, detail: "over the limit in main...pr" }, { id: "secrets", ok: true, detail: `scanned ${DIFF.length} chars` }],
     });
   });
 });

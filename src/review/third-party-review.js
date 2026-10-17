@@ -9,6 +9,7 @@ import { runCommand } from "../utils/process.js";
 import { resolveRole } from "../config/role-resolver.js";
 import { runOneShotReview } from "./one-shot-review.js";
 import { prRequirementChecks } from "./pr-requirements.js";
+import { prSecurityChecks } from "./pr-security.js";
 
 const gitDiffOf = async (projectDir, range) => {
   const res = await runCommand("git", ["diff", range], { cwd: projectDir });
@@ -22,10 +23,10 @@ const finding = (i) => ({
 });
 
 /** The review as data: verdict, findings, suggestions and the PR-requirement checks. */
-export async function thirdPartyReview({ range, config, projectDir, logger, task = null, gitDiff = gitDiffOf, run = runOneShotReview, requirements = prRequirementChecks }) {
+export async function thirdPartyReview({ range, config, projectDir, logger, task = null, gitDiff = gitDiffOf, run = runOneShotReview, requirements = prRequirementChecks, security = prSecurityChecks }) {
   const diff = await gitDiff(projectDir, range);
-  // KJC-TSK-1076: the PR's requirements, with no tokens; they never stop the review.
-  const checks = await requirements({ range, projectDir, config });
+  // KJC-TSK-1076/1077: the PR's requirements and its security, with no tokens; they never stop the review.
+  const checks = [...await requirements({ range, projectDir, config }), ...await security({ diff, projectDir, config })];
   const record = await run({
     diff, task, config, logger, projectDir,
     reviewerOverride: resolveRole(config, "reviewer").provider || null,
