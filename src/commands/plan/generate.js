@@ -9,7 +9,7 @@ import { promptProjectName } from "../../utils/prompt-project-name.js";
 import { deriveProjectNameFromCwd } from "../../utils/derive-project-name-from-cwd.js";
 import { applyReviewerFeedback, applyFixerPatch, patchChanged } from "../../plan/plan-fixer.js";
 import { runStructuralPass } from "../../plan/plan-structural-pass.js";
-import { recommendModelsForHu, complexityFromTaskType } from "../../hu/model-router.js";
+import { planHuModels } from "../../hu/model-router.js";
 import { withBrainRecovery } from "../../brain/with-brain-recovery.js";
 import { buildStandbyState } from "../../brain/standby-store.js";
 import { printResumeHint } from "../../utils/display/resume-hint.js";
@@ -206,16 +206,15 @@ async function planGenerateImpl({ task, config, logger, json, context, runLog, f
     const symbolicId = typeof step === "object" && typeof step.id === "string" && step.id.trim()
       ? step.id.trim() : null;
     const taskType = classifyTaskType(desc);
-    // KJC-TSK-0405 step 2: asigna coder_model + reviewer_model
-    // automáticamente según complexity inferido del task_type. El
-    // planner puede emitir `step.complexity` (trivial/simple/medium/complex
-    // o score 1-5) para override más fino. Cross-provider reviewer
-    // (claude↔codex) por defecto.
-    const coderProvider = config?.roles?.coder?.provider || config?.coder || "claude";
-    const complexity = (typeof step === "object" && step.complexity)
-      ? step.complexity
-      : complexityFromTaskType(taskType);
-    const models = recommendModelsForHu({ complexity, coderProvider, config });
+    // KJC-TSK-1072 (MR-D4): coder_model comes from the HU's tier (MR-A), the
+    // criterion the run uses; the board can change it. Cross-provider reviewer.
+    const models = planHuModels({
+      title: desc, goal: desc,
+      acceptanceCriteria: tests.map((t) => (typeof t === "object" ? String(t.content ?? "") : String(t))),
+      tier: typeof step === "object" ? step.tier ?? null : null,
+      tierReason: typeof step === "object" ? step.tierReason ?? null : null,
+      config: config ?? {},
+    });
     const hu = addHu(plan, {
       title: desc.slice(0, 80),
       task_type: taskType,
@@ -232,6 +231,8 @@ async function planGenerateImpl({ task, config, logger, json, context, runLog, f
     // KJC-TSK-0661: provenance stamp (addHu builds its object explicitly,
     // so this goes on the returned reference, not in huData).
     hu.created_by = "planner";
+    // KJC-TSK-1072: the tier rides on the HU, so the run gives its coder the tier's effort.
+    hu.complexity = models.complexity;
     // KJC-TSK-1061: the classification travels to the HU; validatePlan judges it (KJC-TSK-0717).
     for (const key of ["change_class", "change_criterion", "hardens"]) {
       const value = typeof step === "object" ? step[key] : null;
