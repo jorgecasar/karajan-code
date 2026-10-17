@@ -33,6 +33,27 @@ function hasTool(dirs, tool) {
   return false;
 }
 
+/**
+ * Why kj leaves a missing config alone, or null when it seeds it. KJC-BUG-0370:
+ * kj check reads the same answer, so it never calls drift what harden skips.
+ */
+export function configLeftAlone(cfg, altDirs) {
+  const id = artifactIdForConfig(cfg);
+  const alt = findAlternative(altDirs, id);
+  if (alt) return { action: "covered", by: alt.foundAt };
+  // KJC-BUG-0119: a same-tool variant (eslint.config.mjs, .eslintrc.json,
+  // package.json#eslintConfig…) means the config already EXISTS — seeding
+  // kj's default filename next to it would silently ECLIPSE the user's
+  // real config (eslint resolves eslint.config.js before .mjs).
+  const variant = findEquivalentIn(altDirs, id);
+  if (variant) return { action: "covered", by: variant };
+  // KJC-BUG-0137: no tool ⇒ no config — report the actionable gap instead.
+  if (cfg.requires && !hasTool(altDirs, cfg.requires)) {
+    return { action: "omitted", note: `${cfg.requires} is not installed — npm i -D ${cfg.requires}, then re-run kj harden` };
+  }
+  return null;
+}
+
 function writeFile(target, content) {
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, content);
@@ -50,30 +71,10 @@ function seedInto(targetDir, configs, dryRun, prefix, results, altDirs = [target
     const exists = existsSync(target);
     const file = prefix === "." ? cfg.file : join(prefix, cfg.file);
 
-    if (!exists) {
-      const alt = findAlternative(altDirs, artifactIdForConfig(cfg));
-      if (alt) {
-        results.push({ file, action: "covered", by: alt.foundAt });
-        continue;
-      }
-      // KJC-BUG-0119: a same-tool variant (eslint.config.mjs, .eslintrc.json,
-      // package.json#eslintConfig…) means the config already EXISTS — seeding
-      // kj's default filename next to it would silently ECLIPSE the user's
-      // real config (eslint resolves eslint.config.js before .mjs).
-      const variant = findEquivalentIn(altDirs, artifactIdForConfig(cfg));
-      if (variant) {
-        results.push({ file, action: "covered", by: variant });
-        continue;
-      }
-      // KJC-BUG-0137: no tool ⇒ no config — report the actionable gap instead.
-      if (cfg.requires && !hasTool(altDirs, cfg.requires)) {
-        results.push({
-          file,
-          action: "omitted",
-          note: `${cfg.requires} is not installed — npm i -D ${cfg.requires}, then re-run kj harden`,
-        });
-        continue;
-      }
+    const leftAlone = exists ? null : configLeftAlone(cfg, altDirs);
+    if (leftAlone) {
+      results.push({ file, ...leftAlone });
+      continue;
     }
 
     if (cfg.json) {

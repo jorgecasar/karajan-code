@@ -11,8 +11,9 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import { runCommand } from "../utils/process.js";
-import { artifactIdForConfig, findAlternative } from "./alternatives.js";
+import { configLeftAlone } from "./config-engine.js";
 import { CONFIGS_BY_LANGUAGE, UNIVERSAL_CONFIGS } from "./config-templates.js";
+import { readHardenConfig } from "./harden-scope.js";
 import { PROFILE_HOOKS } from "./hook-templates.js";
 import { detectStackRoots } from "./stack-roots.js";
 import { qualityWorkflowFor, WORKFLOWS } from "./workflow-templates.js";
@@ -49,24 +50,24 @@ export async function checkHarden({ projectDir = process.cwd(), profile = "stand
   // Config + workflows ship with standard+ — and surface the greenfield gap:
   // a language now present but never hardened ⇒ its config shows as missing.
   if (profile !== "minimal") {
-    const roots = detectStackRoots(projectDir);
+    // KJC-BUG-0370: the same scope (package.json kj.harden) and the same verdict on a
+    // missing config as kj harden, so check never calls drift what harden leaves alone.
+    const { only = [], exclude = [] } = readHardenConfig(projectDir);
+    const roots = detectStackRoots(projectDir, { only, exclude });
+    const configCheck = (cfg, rel, altDirs, missing) => {
+      const leftAlone = existsSync(join(projectDir, rel)) ? null : configLeftAlone(cfg, altDirs);
+      if (!leftAlone) return presence(projectDir, rel, `config:${rel}`, missing);
+      const detail = leftAlone.action === "covered" ? `covered by ${leftAlone.by}` : `omitted: ${leftAlone.note}`;
+      return { id: `config:${rel}`, ok: true, detail };
+    };
     for (const cfg of UNIVERSAL_CONFIGS) {
-      checks.push(presence(projectDir, cfg.file, `config:${cfg.file}`, "missing — run kj harden"));
+      checks.push(configCheck(cfg, cfg.file, [projectDir], "missing — run kj harden"));
     }
     for (const { dir, language } of roots) {
       const rootDir = dir === "." ? projectDir : join(projectDir, dir);
       for (const cfg of CONFIGS_BY_LANGUAGE[language] ?? []) {
         const rel = dir === "." ? cfg.file : join(dir, cfg.file);
-        // A config covered by the user's own tool (biome.json ⇒ eslint+prettier)
-        // is not drift — kj must not demand a second linter/formatter (KJC-TSK-0614).
-        if (!existsSync(join(projectDir, rel))) {
-          const alt = findAlternative([rootDir, projectDir], artifactIdForConfig(cfg));
-          if (alt) {
-            checks.push({ id: `config:${rel}`, ok: true, detail: `covered by ${alt.foundAt} (${alt.tool})` });
-            continue;
-          }
-        }
-        checks.push(presence(projectDir, rel, `config:${rel}`, `missing for ${language} — run kj harden`));
+        checks.push(configCheck(cfg, rel, [rootDir, projectDir], `missing for ${language} — run kj harden`));
       }
     }
     const expectedWf = [...WORKFLOWS];
