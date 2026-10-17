@@ -75,6 +75,13 @@ describe("runSonarPregate coverage", () => {
     expect(r.uncovered).toEqual(["packages/radar/app/x.py"]); // README is not a source: neither
   });
 
+  // KJC-TSK-1078: a third-party PR's clone need not be the cwd; the scan runs there.
+  it("scans the project directory it is given, not the cwd", async () => {
+    issuesMock.mockResolvedValue({ total: 0, issues: [] });
+    await runSonarPregate({ config: {}, stagedFiles: ["src/a.js"], exists: () => false, projectDir: "/clones/pr-42" });
+    expect(scanMock).toHaveBeenLastCalledWith({}, null, { verbose: true, cwd: "/clones/pr-42" });
+  });
+
   it("scans each package from its own properties; paths and issues come back repo-relative", async () => {
     scanMock.mockImplementation(async (_c, _k, opts) => (opts.cwd
       ? { ok: true, projectKey: "radar", stdout: scanLog("backend/x.py") }
