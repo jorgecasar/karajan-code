@@ -121,7 +121,7 @@ export class AgentRole extends BaseRole {
   async execute(input) {
     const extracted = this.extractInput(input);
     const provider = this.resolveProvider();
-    const agent = this.createAgentInstance(provider);
+    const agent = this.createAgentInstance(provider, extracted);
 
     const promptResult = await this.buildPrompt(extracted);
     const { prompt, onOutput, stablePrompt, volatilePrompt } = typeof promptResult === "string"

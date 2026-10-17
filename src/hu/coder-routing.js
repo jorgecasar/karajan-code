@@ -21,22 +21,38 @@ const userChoice = (config) => {
   return null;
 };
 
+const routed = ({ model, effort, escalated, why }) => ({ skip: false, model, effort, escalated, reason: `${why} -> ${model}${effort ? ` (effort ${effort})` : ""}` });
+
 /**
- * @param {{ tier?: string, attempt: number, config: object }} args
+ * KJC-TSK-1070: huModel is the HU's coder_model (kj plan fills it from the
+ * tier, the user may change it on the board); it drives the first iteration.
+ * @param {{ tier?: string, huModel?: string|null, attempt: number, config: object }} args
  * @returns {{ skip: true, reason: string } | { skip: false, model: string, effort: string|null, escalated: boolean, reason: string }}
  */
-export function routeCoder({ tier, attempt, config }) {
+export function routeCoder({ tier, huModel = null, attempt, config }) {
   const chosen = userChoice(config);
   if (chosen) return { skip: true, reason: chosen };
+  const provider = config.roles?.coder?.provider || config.coder;
+  const effortOf = (route) => (EFFORT_PROVIDERS.has(provider) ? route?.effort ?? null : null);
   const escalated = attempt > 1;
+  if (!escalated && huModel) return routed({ model: huModel, effort: effortOf(TIER_ROUTE[tier]), escalated, why: "the HU's coder_model" });
   const route = escalated ? ESCALATED : TIER_ROUTE[tier];
   if (!route) return { skip: true, reason: tier === "deep" ? "deep HU: the usual model and effort" : `no tier to route by (${tier ?? "none"})` };
-  const provider = config.roles?.coder?.provider || config.coder;
   const tierMap = getDefaultModelTiers();
   for (const [name, levels] of Object.entries(config.model_routing?.by_provider ?? {})) tierMap[name] = { ...tierMap[name], ...levels };
   const model = resolveModelForRole({ role: "coder", provider, level: route.level, tierMap });
   if (!model) return { skip: true, reason: `${provider} has no known model for the ${route.level} level` };
-  const effort = EFFORT_PROVIDERS.has(provider) ? route.effort : null;
   const why = escalated ? `iteration ${attempt} after a failed one: the most capable model` : `${tier} HU`;
-  return { skip: false, model, effort, escalated, reason: `${why} -> ${model}${effort ? ` (effort ${effort})` : ""}` };
+  return routed({ model, effort: effortOf(route), escalated, why });
+}
+
+/**
+ * KJC-TSK-1070: the route of an HU's coder for this attempt, on its lane
+ * config (coder_route, read by the coder stage); a skipped route clears it.
+ */
+export function applyCoderRoute({ laneConfig, story, attempt, config, logger }) {
+  const route = routeCoder({ tier: story.complexity?.tier, huModel: story.coder_model || null, attempt, config });
+  laneConfig.coder_route = route.skip ? null : { model: route.model, effort: route.effort };
+  logger.info(`HU ${story.id}: coder ${route.skip ? "not routed" : "routed"}: ${route.reason}`);
+  return route;
 }

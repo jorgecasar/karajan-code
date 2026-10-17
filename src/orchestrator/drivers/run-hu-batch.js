@@ -36,6 +36,7 @@ import { createHuSnapshot } from "../../git/hu-snapshot.js";
 import { generateDiff } from "../../review/diff-generator.js";
 import { runAcceptanceCoverageStage } from "../stages/acceptance-coverage-stage.js";
 import { criteriaOfCard } from "../../roles/acceptance-coverage-role.js";
+import { applyCoderRoute } from "../../hu/coder-routing.js";
 
 /**
  * @param {object} args
@@ -180,6 +181,7 @@ export async function runHuBatch({ ctx, task, askQuestion, emitter, logger }) {
 
         for (let attempt = 1; attempt <= laneConfig.max_iterations; attempt++) {
           logger.info(`HU ${story.id}: coder iteration ${attempt}/${laneConfig.max_iterations}`);
+          applyCoderRoute({ laneConfig, story, attempt, config: ctx.config, logger });
           emitProgress(emitter, makeEvent("iteration:start", { ...ctx.eventBase, stage: "iteration" }, {
             message: `Iteration ${attempt}/${laneConfig.max_iterations}`,
             detail: { iteration: attempt, maxIterations: laneConfig.max_iterations }
@@ -386,7 +388,8 @@ export async function runHuBatch({ ctx, task, askQuestion, emitter, logger }) {
       // Fallback: no acceptance_tests → standard pipeline (reviewer/tester).
       // The loop reads everything through ctx.* — handing it a lane view
       // keeps the shared ctx untouched (no more mutate-and-restore dance).
-      const laneCtx = { ...ctx, config: laneConfig, pipelineFlags: laneFlags, session: laneSession, brainCtx: laneBrain, plannedTask: lanePlannedTask };
+      const laneCtx = { ...ctx, config: laneConfig, pipelineFlags: laneFlags, session: laneSession, brainCtx: laneBrain, plannedTask: lanePlannedTask,
+        beforeIteration: (attempt) => applyCoderRoute({ laneConfig, story, attempt, config: ctx.config, logger }) };
       const result = await runIterationLoop(laneCtx, { task: huTask, askQuestion, emitter, logger });
       if (result?.approved) {
         // KJC-BUG-0248: what the HU's push or PR said joins what the loop recorded.

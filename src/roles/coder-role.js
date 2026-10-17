@@ -16,7 +16,11 @@ export class CoderRole extends AgentRole {
     return this.config?.roles?.coder?.provider || this.config?.coder || "claude";
   }
 
-  createAgentInstance(provider) {
+  createAgentInstance(provider, input = {}) {
+    // KJC-TSK-1070 (MR-D2): the HU's route rides on this call only; the shared
+    // role keeps its own config (lanes run in parallel).
+    const route = input?.route;
+    const config = route ? { ...this.config, roles: { ...this.config?.roles, coder: { ...this.config?.roles?.coder, model: route.model, effort: route.effort } } } : this.config;
     // KJC-BUG-0129 (issues #1301/#1303): running INSIDE an agent does not
     // make it "the host executor" — delegating sent the full instruction
     // prompt through elicitInput as a hanging board "question". A CLI
@@ -29,7 +33,7 @@ export class CoderRole extends AgentRole {
       }
       this.logger.info(`Running inside ${provider} — spawning it as a subprocess anyway (set roles.coder.host_delegation: true to delegate to the host)`);
     }
-    return this._createAgent(provider, this.config, this.logger);
+    return this._createAgent(provider, config, this.logger);
   }
 
   extractInput(input) {
@@ -66,6 +70,8 @@ export class CoderRole extends AgentRole {
       projectDir: input?.projectDir || null,
       // PAR-H (KJC-TSK-0631): per-call subprocess env (lane slot vars).
       env: input?.env || null,
+      // KJC-TSK-1070: the model and effort this HU's coder runs on.
+      route: input?.route || null,
       onOutput: input?.onOutput || null
     };
   }

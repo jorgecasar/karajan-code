@@ -79,6 +79,8 @@ export async function runCoderStage({ coderRoleInstance, coderRole, config, logg
       // PAR-H (KJC-TSK-0631): lane env (KJ_LANE_SLOT / KJ_PORT_OFFSET)
       // reaches the coder subprocess so services it starts don't collide.
       env: config?.lane_env || null,
+      // KJC-TSK-1070 (MR-D2): the model and effort of this HU's coder.
+      route: config?.coder_route || null,
       onOutput: coderStall.onOutput,
       // Lets Brain Recovery persist a standby snapshot if the coder's
       // provider hits a quota cap mid-run (KJC hibernation wiring).
