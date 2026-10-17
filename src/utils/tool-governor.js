@@ -28,35 +28,50 @@ function isPidAlive(pid) {
   }
 }
 
-/** Machine-wide lock for `tool` → {release}; ELOCKTIMEOUT if the live holder outlasts `timeoutMs`. */
-export async function acquireToolLock(tool, { locksDir = DEFAULT_LOCKS_DIR, timeoutMs = 180_000, pollMs = 500 } = {}) {
-  fs.mkdirSync(locksDir, { recursive: true });
-  const lockPath = path.join(locksDir, `${tool}.lock`);
-  const deadline = Date.now() + timeoutMs;
+/** One slot: {release} when taken, else the live holder; a dead or unreadable holder is stolen. */
+function tryTakeSlot(lockPath) {
   for (;;) {
     try {
       // wx = atomic create-or-fail: the filesystem is the arbiter.
       const fd = fs.openSync(lockPath, "wx");
       fs.writeSync(fd, JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() }));
       fs.closeSync(fd);
-      return { release: () => fs.rmSync(lockPath, { force: true }) };
+      return { lock: { release: () => fs.rmSync(lockPath, { force: true }) } };
     } catch (err) {
       if (err.code !== "EEXIST") throw err;
       let holder = null;
       try {
         holder = JSON.parse(fs.readFileSync(lockPath, "utf8"));
       } catch { /* unreadable → stale */ }
-      if (!holder || !Number.isInteger(holder.pid) || !isPidAlive(holder.pid)) {
-        fs.rmSync(lockPath, { force: true });
-        continue;
-      }
-      if (Date.now() >= deadline) {
-        const e = new Error(`${tool} is already running (pid ${holder.pid}, since ${holder.startedAt}) — gave up waiting after ${timeoutMs}ms`);
-        e.code = "ELOCKTIMEOUT";
-        throw e;
-      }
-      await new Promise((r) => setTimeout(r, pollMs));
+      if (holder && Number.isInteger(holder.pid) && isPidAlive(holder.pid)) return { holder };
+      fs.rmSync(lockPath, { force: true });
     }
+  }
+}
+
+/**
+ * Machine-wide lock for `tool` → {release}; ELOCKTIMEOUT if every live holder
+ * outlasts `timeoutMs`. KJC-BUG-0368 (#2216): `slots` lets that many run at
+ * once (slot 0 keeps the single-lock path `<tool>.lock`).
+ */
+export async function acquireToolLock(tool, { locksDir = DEFAULT_LOCKS_DIR, timeoutMs = 180_000, pollMs = 500, slots = 1 } = {}) {
+  fs.mkdirSync(locksDir, { recursive: true });
+  const paths = Array.from({ length: Math.max(1, slots) }, (_, n) => path.join(locksDir, n === 0 ? `${tool}.lock` : `${tool}.${n}.lock`));
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    let holder = null;
+    for (const lockPath of paths) {
+      const slot = tryTakeSlot(lockPath);
+      if (slot.lock) return slot.lock;
+      holder ??= slot.holder;
+    }
+    if (Date.now() >= deadline) {
+      const busy = paths.length > 1 ? `, all ${paths.length} slots busy` : "";
+      const e = new Error(`${tool} is already running (pid ${holder.pid}, since ${holder.startedAt}${busy}) — gave up waiting after ${timeoutMs}ms`);
+      e.code = "ELOCKTIMEOUT";
+      throw e;
+    }
+    await new Promise((r) => setTimeout(r, pollMs));
   }
 }
 

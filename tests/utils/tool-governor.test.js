@@ -31,6 +31,19 @@ describe("acquireToolLock", () => {
     expect(fs.existsSync(path.join(locksDir, "semgrep.lock"))).toBe(false);
   });
 
+  // KJC-BUG-0368 (#2216): one global lock starved concurrent reviews machine-wide.
+  it("with slots, lets that many holders in at once and queues the next", async () => {
+    const a = await acquireToolLock("sonar-scanner", { locksDir, slots: 2 });
+    const b = await acquireToolLock("sonar-scanner", { locksDir, slots: 2, timeoutMs: 300, pollMs: 50 });
+    await expect(acquireToolLock("sonar-scanner", { locksDir, slots: 2, timeoutMs: 300, pollMs: 50 }))
+      .rejects.toMatchObject({ code: "ELOCKTIMEOUT" });
+    a.release();
+    const c = await acquireToolLock("sonar-scanner", { locksDir, slots: 2, timeoutMs: 300, pollMs: 50 });
+    b.release();
+    c.release();
+    expect(fs.readdirSync(locksDir)).toEqual([]);
+  });
+
   it("steals a lock whose holder pid is dead", async () => {
     const lockPath = path.join(locksDir, "semgrep.lock");
     fs.writeFileSync(lockPath, JSON.stringify({ pid: 999999999, startedAt: "x" }));

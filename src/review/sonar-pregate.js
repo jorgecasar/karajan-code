@@ -14,6 +14,8 @@ import { dirname, join } from "node:path";
 import { indexedFilesFrom, runSonarScan } from "../sonar/scanner.js";
 import { getOpenIssues } from "../sonar/api.js";
 import { acquireToolLock } from "../utils/tool-governor.js";
+
+const DEFAULT_SCAN_SLOTS = 2;
 import { sourceFilesOf } from "./tests-with-code.js";
 
 const BLOCKING_SEVERITIES = new Set(["BLOCKER", "CRITICAL"]);
@@ -84,9 +86,14 @@ export async function runSonarPregate({ config, stagedFiles = [], touchedLines =
   if (config?.review_gate?.sonar === false) {
     return { available: false, reason: "disabled in config (review_gate.sonar: false)" };
   }
+  // KJC-BUG-0368 (#2216): concurrent reviews on one machine share the scanner slots.
+  const slots = config?.sonarqube?.max_parallel_scans ?? DEFAULT_SCAN_SLOTS;
+  if (!Number.isInteger(slots) || slots < 1) {
+    return { available: false, reason: `sonarqube.max_parallel_scans must be a positive integer (got ${JSON.stringify(slots)})` };
+  }
   let lock = null;
   try {
-    lock = await acquireToolLock("sonar-scanner", { timeoutMs: 300_000 });
+    lock = await acquireToolLock("sonar-scanner", { timeoutMs: 300_000, slots });
     const groups = groupByScanRoot(stagedFiles, { exists });
     if (groups.size === 0) groups.set("", []);
     const indexed = new Set();
