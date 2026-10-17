@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.54.0] - 2026-10-17
+
+Minor. **The skills reach the prompts, the human gets a task window, and the agent knows when to ask qmd.**
+
+### Added
+
+- **The skills kj picks for a task reach the coder and the reviewer** (KJC-TSK-1065): up to 3 per role, the project's own skills first, then the local catalog (the task's before the role's). A claude coder is told where to read each one; other providers get the content inline, and the prompt names the ones left out. `kj hu move <id> running` prints the skills that apply, so the host session reads them before it starts.
+- **`kj handoff watch`, a task window for the human** (KJC-TSK-1066): `kj handoff add <command> --why "<what for>"` registers something only the user can do (publish, seal, run a script), `kj handoff done <id>` closes it, and `kj handoff watch` shows, in another terminal, the pending ones and each new one as it lands, with local date and time, apart from the session's scroll. A denial recorded by a gate keeps the gate's own why.
+- **qmd in the agent's toolbox** (KJC-TSK-1067): `kj env install` wires `qmd mcp` into the project's `.mcp.json` when qmd is installed and not already wired (project or global), the method tells the agent to ask qmd about docs, notes, ADRs and plans and the RAG about code, and `kj doctor` and the installation guide say what it brings: answers from the documents, with fewer tokens and a source.
+
+### Fixed
+
+- **rag-first counts an MCP answer cut short and a query with `2>&1`** (KJC-BUG-0365, #2208): a `kj_rag_query` answer handed over cut short recorded no source, so the next edit was blocked although the file was the top hit; its sources are now read from the text. And `2>&1` or `2>/dev/null` no longer take a `kj rag query` out of the read-only set.
+
+### Infrastructure
+
+- **The claude contract follows claude 2.1.302** (KJC-TSK-1068).
+
 ## [4.53.1] - 2026-10-16
 
 Patch. **board-sync stops blocking a card split into stacked PRs, and a title that mentions a human act is text.**

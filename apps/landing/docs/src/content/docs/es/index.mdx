@@ -65,7 +65,11 @@ El caveat que el loop engineering recalca — *los bucles desatendidos cometen e
 
 Las versiones más recientes, la última primero. Las anteriores están en [Arquitectura › Historia](/docs/es/architecture/history/) y en el [CHANGELOG](https://github.com/manufosela/karajan-code/blob/main/CHANGELOG.md).
 
-### v4.53.1: las PRs apiladas pasan board-sync (actual)
+### v4.54.0: las skills llegan a los prompts y tienes una ventana de tareas (actual)
+
+Las skills que encajan con la tarea (primero las del proyecto, luego las del catálogo local) llegan al coder y al reviewer, hasta 3 por rol, y al arrancar una HU se nombran. `kj handoff watch` muestra en otra terminal lo que solo puedes hacer tú (publicar, sellar, ejecutar un script), con fecha y motivo, fuera del scroll de la sesión. `kj env install` conecta el MCP de qmd para que el agente le pregunte por documentos, notas, ADRs y planes, y al RAG por el código. Y rag-first cuenta una respuesta de `kj_rag_query` que llega cortada.
+
+### v4.53.1: las PRs apiladas pasan board-sync
 
 La siguiente PR de una card partida en PRs apiladas se puede subir y abrir antes de mover la card de la primera, un push ya no contradice la respuesta que board-sync acaba de darle, un bloqueo que kj no pudo comprobar dice por qué (casi siempre otra cuenta de gh activa), y un título de card o un mensaje de commit que solo menciona sellar el harness o enrolar el móvil se lee como texto.
 
