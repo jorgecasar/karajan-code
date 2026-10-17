@@ -15,6 +15,7 @@ import { statusCommand } from "../commands/status.js";
 import { loadPlan } from "../plan/plan-store.js";
 import { withConfig } from "./_shared.js";
 import { publishPrReview } from "../review/publish-pr.js";
+import { thirdPartyReviewCommand } from "../review/third-party-review.js";
 
 /**
  * Register the "core pipeline" commands: everything the user runs day-to-day
@@ -257,8 +258,15 @@ export function registerPipeline(program, { pkgVersion }) {
     .option("--walked <route>", "Recorrido comprobado como lo haría una persona (repetible) — queda en el veredicto", (v, prev) => [...(prev || []), v], [])
     .option("--walked-with <tool>", "Con qué se comprobó el recorrido (por ejemplo chrome-devtools)")
     .option("--publish-pr <n>", "Publish the cross-AI verdicts of a PR's commits on it as one GitHub review")
+    .option("--third-party", "Review someone else's PR (--range base...head): reviewer only, no own-work gates, no verdict stored")
+    .option("--json", "With --third-party: print the review as one JSON document on stdout")
     .action(async (task, flags) => {
       await withConfig(pkgVersion, "review", flags, async ({ config, logger }) => {
+        // KJC-TSK-1075 (#2227): a third-party PR, for reviewer agents; own work keeps every gate.
+        if (flags.thirdParty) {
+          process.exitCode = await thirdPartyReviewCommand({ flags: { ...flags, task: task ?? null }, config });
+          return;
+        }
         // KJC-TSK-0913: the verdicts kj already holds, published on the PR as one review.
         if (flags.publishPr) {
           const r = await publishPrReview({ projectDir: config.projectDir || process.cwd(), pr: flags.publishPr });

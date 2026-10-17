@@ -55,12 +55,17 @@ export async function runOneShotReview({
   createAgentFn = createAgent,
   detectAgents = detectAvailableAgents,
   candidateStatusFn = candidateStatus,
+  // KJC-TSK-1075: a third-party PR is not the host's own work, so the reviewer
+  // it names runs even if it is the host; and nothing is stored, so the
+  // review can never unlock a commit of one's own.
+  reviewerOverride = null,
+  persist = true,
 }) {
   if (!diff || !diff.trim()) {
     throw new Error("nothing to review — the diff is empty (stage your changes or pass --range)");
   }
 
-  const reviewer = await pickCrossReviewer({ config, hostAgent, detectAgents });
+  const reviewer = reviewerOverride || await pickCrossReviewer({ config, hostAgent, detectAgents });
   if (!reviewer) {
     throw new Error(
       `cross-AI review requires an agent other than the host (${hostAgent || "unknown"}) — install codex, claude or another supported CLI`
@@ -123,7 +128,7 @@ export async function runOneShotReview({
     throw new Error(await reportUnparseableVerdict({ projectDir, reviewer: activeReviewer, output: result.output, hash: diffHash(diff) }));
   }
 
-  return saveVerdict(projectDir, diff, {
+  const record = {
     verdict: parsed.approved ? "approved" : "rejected",
     reviewer: activeReviewer,
     host: hostAgent || null,
@@ -140,5 +145,6 @@ export async function runOneShotReview({
     // the verdict, bound to this diff, like the other two proofs.
     ...(ui ? { ui } : {}),
     confidence: parsed.confidence ?? null,
-  });
+  };
+  return persist ? saveVerdict(projectDir, diff, record) : record;
 }
