@@ -1,5 +1,5 @@
 import { buildRtkInstructions } from "./rtk-snippet.js";
-import { loadAvailableSkills, buildSkillSection } from "../skills/skill-loader.js";
+import { roleSkills, buildRoleSkillSection } from "../skills/role-skills.js";
 import { getLanguageInstruction } from "../utils/locale.js";
 import { section, buildPromptLayout, joinLayout, STABLE, VOLATILE } from "./prompt-layout.js";
 
@@ -215,10 +215,10 @@ export async function buildCoderPromptLayout({ task, reviewerFeedback = null, so
 
   const stackRule = buildStackSection({ stack, testFramework });
   const rtkSnippet = buildRtkInstructions({ rtkAvailable });
+  // KJC-TSK-1065: the project's skills and the catalog's for this task, up to 3.
   let skillSection = null;
   if (projectDir) {
-    const skills = await loadAvailableSkills(projectDir);
-    skillSection = buildSkillSection(skills, { provider });
+    skillSection = buildRoleSkillSection(await roleSkills({ role: "coder", task, projectDir }), { provider }) || null;
   }
 
   // Volatile sections keep the legacy relative order — order matters:

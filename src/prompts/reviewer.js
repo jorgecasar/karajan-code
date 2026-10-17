@@ -1,5 +1,5 @@
 import { buildRtkInstructions } from "./rtk-snippet.js";
-import { loadAvailableSkills, buildSkillSection } from "../skills/skill-loader.js";
+import { roleSkills, buildRoleSkillSection } from "../skills/role-skills.js";
 import { getLanguageInstruction } from "../utils/locale.js";
 import { section, buildPromptLayout, joinLayout, STABLE, VOLATILE } from "./prompt-layout.js";
 import { clipDiff } from "./diff-clip.js";
@@ -42,10 +42,10 @@ export async function buildReviewerPromptLayout({ task, diff, reviewRules, mode,
 
   const langInstruction = getLanguageInstruction(language);
   const rtkSnippet = buildRtkInstructions({ rtkAvailable });
+  // KJC-TSK-1065: the reviewer gets the skills of its role and of the task, up to 3.
   let skillSection = null;
   if (projectDir) {
-    const skills = await loadAvailableSkills(projectDir);
-    skillSection = buildSkillSection(skills, { provider, role: "reviewer" });
+    skillSection = buildRoleSkillSection(await roleSkills({ role: "reviewer", task, projectDir }), { provider }) || null;
   }
 
   return buildPromptLayout([
