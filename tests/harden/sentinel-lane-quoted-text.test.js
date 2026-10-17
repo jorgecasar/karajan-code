@@ -61,6 +61,15 @@ describe("the lane guard with quoted text (PreToolUse Bash)", () => {
     expect(bash(`cp "/otro carril/x.js" y.js`).stderr).toMatch(/comillas SIMPLES: entre dobles la shell lo ejecuta/);
   });
 
+  // KJC-BUG-0365 (#2208): 2>&1 / 2>/dev/null only fold stderr; they wrote nothing, yet
+  // they took a read-only kj rag query out of the read-only set and into the lane guard.
+  it("a read-only chain keeps reading with 2>&1 or 2>/dev/null; a real redirection still counts", () => {
+    for (const cmd of [`kj rag query "referrer practices in packages/domain/src/referrer/referrer.js" 2>&1 | grep "score" | head -3`, `kj rag query 'what does packages/a b.js do' 2>/dev/null | head -8`]) {
+      expect(bash(cmd).stderr, cmd).not.toContain("entrecomillada");
+    }
+    expect(bash(`grep -n x "a b.js" > "/otro carril/x.txt"`).status).toBe(2);
+  });
+
   it("lets the text of kj report-issue and kj hu add through (KJC-BUG-0306)", () => {
     for (const cmd of [`kj report-issue --title 'Sentinel blocks src/a b' --description 'it denies kj hu add' --error 'ENOENT /x y/z'`, `kj hu add 'the a/b flow' --scope 'src/a b'`]) {
       expect(bash(cmd).stderr, cmd).not.toContain("entrecomillada");

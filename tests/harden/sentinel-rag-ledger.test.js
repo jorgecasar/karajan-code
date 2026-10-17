@@ -86,4 +86,13 @@ describe("rag ledger (PostToolUse)", () => {
     const r = spawnSync("node", [stop, "--status"], { encoding: "utf8", cwd: dir, env: { ...process.env, ...env } });
     expect(r.stdout).toMatch(/rag=1 queries\/1 sources/);
   });
+
+  // KJC-BUG-0365 (#2208): an MCP answer the host hands over cut short (five
+  // whole code chunks) is no longer valid JSON; its sources are still there.
+  it("reads the sources of an MCP answer that is no longer valid JSON", () => {
+    const full = JSON.stringify({ hits: [{ source: `${dir}/packages/domain/src/referrer.js`, matchedBy: "path", text: "x".repeat(50) }, { source: `${dir}/src/b.js`, text: "y" }] });
+    const cut = full.slice(0, full.indexOf("src/b.js") + 12);
+    expect(run({ tool_name: "mcp__kj-rag__kj_rag_query", tool_input: { text: "referrer" }, tool_response: { content: [{ type: "text", text: cut }] } }).status).toBe(0);
+    expect(session().rag_hits).toEqual(["packages/domain/src/referrer.js", "src/b.js"]);
+  });
 });
