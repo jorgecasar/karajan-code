@@ -27,6 +27,7 @@ import { isGeneratedPath, splitAddedByFile } from "../privacy/diff-scope.js";
 import { budgetedAdded, budgetedNet } from "../review/loc-budget.js";
 import { checkStagedDiff, loadPolicy } from "../policy/engine.js";
 import { prSizeLimit } from "../review/pr-requirements.js";
+import { stewardBlocking } from "../steward/gate.js";
 import { loadStandingExceptions, recordPolicyException } from "../policy/exceptions.js";
 import { policyFileHash, recordGateDecision } from "../policy/decisions.js";
 import { evaluatePolicyGate } from "../review/policy-gate.js";
@@ -227,6 +228,14 @@ export async function reviewGateCommand({ config, logger = null, flags = {} }) {
 
   const card = await enforceCardFirst({ config, projectDir });
   if (!card.ok) return { verdict: "rejected", reviewer: "card-first", issues: [{ severity: "high", description: card.reason }] };
+
+  // KJC-TSK-1086: the Steward's block at commit too, not only where Edit starts work.
+  const steward = stewardBlocking({ projectDir, config });
+  if (steward) {
+    console.log(`✗ ${steward.reason}`);
+    process.exitCode = 1;
+    return { verdict: "rejected", reviewer: "steward", issues: [{ severity: "high", description: steward.reason }] };
+  }
 
   // KJC-TSK-0687 (MG-B): the verifiable half of TDD — sources without a
   // single test change warn (block via method_gates.tests_with_code).
