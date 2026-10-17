@@ -2,18 +2,22 @@
  * kj handoff add|list|show (KJC-TSK-0968, HUM-E, ADR 0018): the agent registers
  * what a gate denied it, with the gate's why; the human reads it by id.
  */
-import { addHandoff, listHandoffs, readHandoff } from "../harden/handoff.js";
+import { addHandoff, listHandoffs, markHandoffDone, readHandoff, watchHandoffs } from "../harden/handoff.js";
 
-const line = (h) => `${h.id}  ${h.status.padEnd(8)}  ${h.createdAt}  ${h.command}`;
+const line = (h) => {
+  const why = h.kind === "task" ? "  (" + h.why + ")" : "";
+  return `${h.id}  ${h.status.padEnd(8)}  ${h.createdAt}  ${h.command}${why}`;
+};
 
 /** @returns {Promise<0|1>} */
 export async function handoffCommand({ action = "list", config, flags = {}, log = console.log }) {
   const projectDir = config?.projectDir || process.cwd();
   try {
     if (action === "add") {
-      const record = addHandoff({ projectDir, command: flags.command, cwd: flags.cwd ?? projectDir });
+      const record = addHandoff({ projectDir, command: flags.command, cwd: flags.cwd ?? projectDir, why: flags.why ?? null });
       log(`encargo ${record.id} registrado: ${record.command}`);
-      log(`por qué lo negó el gate (${record.denial.at}):\n${record.denial.why}`);
+      if (record.kind === "task") log(`para qué (propuesto por el agente): ${record.why}`);
+      else log(`por qué lo negó el gate (${record.denial.at}):\n${record.denial.why}`);
       log(`tu usuario lo revisa con kj handoff show ${record.id}; nadie copia y pega el comando.`);
       return 0;
     }
@@ -24,7 +28,21 @@ export async function handoffCommand({ action = "list", config, flags = {}, log 
       log(`comando   ${h.command}`);
       log(`sha256    ${h.sha256}`);
       log(`cwd       ${h.cwd}`);
-      log(`gate      ${h.denial.tool} negó el ${h.denial.at}:\n${h.denial.why}`);
+      if (h.kind === "task") log(`para qué   ${h.why}\n          (propuesto por el agente, no lo negó ningún gate)`);
+      else log(`gate      ${h.denial.tool} negó el ${h.denial.at}:\n${h.denial.why}`);
+      if (h.doneAt) log(`hecho     ${h.doneAt}`);
+      return 0;
+    }
+    if (action === "done") {
+      const h = markHandoffDone({ projectDir, id: flags.id });
+      log(`encargo ${h.id} hecho: ${h.command}`);
+      return 0;
+    }
+    if (action === "watch") {
+      log("kj handoff watch: lo que te toca hacer a ti, según llega (Ctrl+C para salir)");
+      const ctl = new AbortController();
+      process.once("SIGINT", () => ctl.abort());
+      await watchHandoffs({ projectDir, log, signal: ctl.signal });
       return 0;
     }
     const all = listHandoffs({ projectDir });
