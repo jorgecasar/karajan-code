@@ -366,6 +366,9 @@ export class ClaudeAgent extends BaseAgent {
   async _runTaskExec(task, model, _role) {
     const { args, input } = buildPromptArgs(task);
     if (model) args.push("--model", model);
+    // KJC-TSK-1070 (MR-D2): the effort the HU's route gives the coder.
+    const effort = this.config?.roles?.[_role]?.effort;
+    if (effort) args.push("--effort", effort);
     // PL-C (KJC-TSK-0735): el rol del subproceso viaja en KJ_POLICY_ROLE —
     // si su harness corre hooks (claude -p), el tier A evalúa la policy con
     // el rol que ACTÚA. El rol del ORQUESTADOR es autoritativo: task.env no

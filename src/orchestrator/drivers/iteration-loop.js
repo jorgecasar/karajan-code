@@ -210,6 +210,8 @@ export async function runIterationLoop(ctx, { task: loopTask, askQuestion, emitt
 
     ctx.eventBase.iteration = i;
     ctx.iteration = i;
+    // KJC-TSK-1070 (MR-D2): an HU lane picks its coder's route per iteration.
+    ctx.beforeIteration?.(i);
 
     let iterResult;
     try {
