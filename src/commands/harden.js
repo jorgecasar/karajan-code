@@ -16,6 +16,7 @@ import { interactiveHarden } from "../harden/interactive.js";
 import { createWizard, isTTY } from "../utils/wizard.js";
 import { commitSupervisorRegeneration } from "../harden/supervisor-commit.js";
 import { installConfigsForRoots } from "../harden/config-engine.js";
+import { readHardenConfig } from "../harden/harden-scope.js";
 import { installGuidelines } from "../harden/guidelines-engine.js";
 import { maybeRulesyncGenerate } from "../utils/rulesync.js";
 import { commandsForLanguage } from "../harden/hook-commands.js";
@@ -34,21 +35,6 @@ const JS_TEST_CMD = {
   jest: "npx jest",
   mocha: "npx mocha",
 };
-
-/**
- * Per-repo harden scope, persisted in package.json `kj.harden` so a repo with
- * sub-tools (e.g. a python wrapper) excludes them once instead of on every
- * invocation (KJC-TSK-0564). CLI flags are merged on top.
- */
-function readHardenConfig(projectDir) {
-  const pkgPath = join(projectDir, "package.json");
-  if (!existsSync(pkgPath)) return {};
-  try {
-    return JSON.parse(readFileSync(pkgPath, "utf8")).kj?.harden ?? {};
-  } catch {
-    return {};
-  }
-}
 
 /**
  * Resolve the hook's lint/format/test commands for the primary language.
