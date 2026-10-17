@@ -134,6 +134,8 @@ const DEFAULTS = {
   },
   sonarqube: {
     enabled: true,
+    // KJC-BUG-0368 (#2216): sonar-scanner runs this many reviews at once per machine.
+    max_parallel_scans: 2,
     host: "http://localhost:9000",
     external: false,
     container_name: "karajan-sonarqube",

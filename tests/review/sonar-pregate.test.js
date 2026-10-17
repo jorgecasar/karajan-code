@@ -121,6 +121,20 @@ describe("runSonarPregate", () => {
     expect(release).toHaveBeenCalled(); // lock always released
   });
 
+  // KJC-BUG-0368 (#2216): reviews on one machine share scanner slots, not one global lock.
+  it("takes a scanner slot (2 by default, sonarqube.max_parallel_scans) and refuses a bad value loudly", async () => {
+    issuesMock.mockResolvedValue({ total: 0, issues: [] });
+    await runSonarPregate({ config: {}, stagedFiles: ["src/a.js"] });
+    expect(lockMock).toHaveBeenLastCalledWith("sonar-scanner", expect.objectContaining({ slots: 2 }));
+    await runSonarPregate({ config: { sonarqube: { max_parallel_scans: 4 } }, stagedFiles: ["src/a.js"] });
+    expect(lockMock).toHaveBeenLastCalledWith("sonar-scanner", expect.objectContaining({ slots: 4 }));
+    const bad = await runSonarPregate({ config: { sonarqube: { max_parallel_scans: 0 } }, stagedFiles: ["src/a.js"] });
+    expect(bad).toMatchObject({ available: false, reason: expect.stringMatching(/max_parallel_scans/) });
+    const { safeParseConfig } = await import("../../src/config/schema.js");
+    expect(safeParseConfig({ sonarqube: { max_parallel_scans: 3 } }).success).toBe(true);
+    expect(safeParseConfig({ sonarqube: { max_parallel_scans: 0 } }).success).toBe(false);
+  });
+
   // KJC-TSK-0795 AC3 (epic KJC-PCS-0082) — measured in GREBLA: a 3-line PR
   // listed 30+ preexisting issues and got blocked by debt it never touched.
   // Only issues on lines the diff ADDS may veto; the rest is trend, not veto.

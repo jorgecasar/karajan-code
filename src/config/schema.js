@@ -259,6 +259,10 @@ export const ConfigSchema = v.looseObject({
     every_commits: v.optional(PositiveInt),
   })),
   coder_rules: v.optional(v.string()),
+  // KJC-BUG-0368 (#2216): how many sonar-scanner reviews run at once per machine.
+  sonarqube: v.optional(v.looseObject({
+    max_parallel_scans: v.optional(PositiveInt),
+  })),
   base_branch: v.optional(v.string()),
   coder_options: CoderOptions,
   reviewer_options: ReviewerOptions,
