@@ -216,7 +216,11 @@ process.stdin.on("end", () => {
       // KJC-BUG-0293: the host may hand the answer as {content:[parts]}, as the
       // bare array of parts, or as the text itself; all three are the same answer.
       const parts = Array.isArray(response?.content) ? response.content : Array.isArray(response) ? response : [{ text: typeof response === "string" ? response : "" }];
-      recordRag(input.text, parts.flatMap((p) => sourcesOf(parseJson(String(p?.text || "")))), parts.map((p) => String(p?.text || "")).join(String.fromCharCode(10)));
+      let found = parts.flatMap((p) => sourcesOf(parseJson(String(p?.text || ""))));
+      // KJC-BUG-0365 (#2208): an answer cut short (whole code chunks) is no
+      // longer valid JSON, but every "source" it carries still names a hit.
+      if (found.length === 0) found = [...text.matchAll(/\\\\?"source\\\\?"\\s*:\\s*\\\\?"([^"\\\\]+)\\\\?"/g)].map((m) => m[1]);
+      recordRag(input.text, found, parts.map((p) => String(p?.text || "")).join(String.fromCharCode(10)));
       process.exit(0);
     }
     if (/__update_card$/.test(String(tool)) && /^mcp__/.test(String(tool))) {
@@ -812,7 +816,9 @@ process.stdin.on("end", () => {
       // it need no verifying when nothing after it writes. One mutating segment
       // and the whole command is judged below, as before.
       const CD_LITERAL = /^[ \\t]*(cd|pushd)([ \\t]+[^ \\t;|&<>$\`(){}\\n\\r]*)?[ \\t]*$/;
-      const readsOnly = (s) => s.split(/&&|\\|\\||[;|]/).every((seg) => READONLY.test(seg) || CD_LITERAL.test(seg));
+      // KJC-BUG-0365: 2>&1 and 2>/dev/null only fold stderr, they write nothing.
+      const QUIET = /[ \\t]2>(?:&1|\\/dev\\/null)(?=[ \\t]|$)/g;
+      const readsOnly = (s) => s.split(/&&|\\|\\||[;|]/).every((seg) => READONLY.test(seg.replace(QUIET, "")) || CD_LITERAL.test(seg.replace(QUIET, "")));
       // KJC-BUG-0243: operators inside inert quotes (grep -e "a|b") do not chain anything.
       if (!readsOnly(stripInertQuotes(cmd))) {
         // cd/pushd invalida TODO razonamiento textual de rutas posteriores
