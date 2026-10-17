@@ -19,7 +19,16 @@ export default defineConfig({
     // apps/** y **/node_modules/**: los paquetes fusionados (ADR 0002) traen
     // sus propias suites y, tras un deploy local de la landing, node_modules
     // anidados que el patrón de primer nivel no cubría.
-    exclude: ["**/node_modules/**", "packages/**", "apps/**", ".claude/**", ".kj/**", "demo/**"],
+    // KJC-BUG-0367: .karajan/ is kj's runtime (the skills catalog brings its own eval fixtures).
+    exclude: [
+      "**/node_modules/**",
+      "packages/**",
+      "apps/**",
+      ".claude/**",
+      ".kj/**",
+      ".karajan/**",
+      "demo/**",
+    ],
     setupFiles: ["./tests/setup.js"],
     // KJC-BUG-0075: mtime-based purge of stale `karajan-vitest-*` tmp dirs
     // (>24 h) as a safety net for SIGKILL'd / crashed forks that miss the
