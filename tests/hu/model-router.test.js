@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  recommendModelsForHu, complexityToLevel, complexityFromTaskType,
+  recommendModelsForHu, complexityToLevel,
 } from "../../src/hu/model-router.js";
 
 // KJC-TSK-0405: dado un HU con complexity score, devuelve qué coder_model
@@ -93,32 +93,6 @@ describe("recommendModelsForHu", () => {
   it("provider desconocido → coder_model null pero no throws", () => {
     const r = recommendModelsForHu({ complexity: "medium", coderProvider: "unknownProvider", config: baseConfig });
     expect(r.coder_model).toBeNull();
-  });
-});
-
-// KJC-TSK-0405 step 2: heurística task_type → complexity para inferir
-// nivel cuando el planner no emite score explícito.
-describe("complexityFromTaskType", () => {
-  it("sw / refactor → medium", () => {
-    expect(complexityFromTaskType("sw")).toBe("medium");
-    expect(complexityFromTaskType("refactor")).toBe("medium");
-  });
-  it("doc / infra / no-code → trivial", () => {
-    expect(complexityFromTaskType("doc")).toBe("trivial");
-    expect(complexityFromTaskType("infra")).toBe("trivial");
-    expect(complexityFromTaskType("no-code")).toBe("trivial");
-  });
-  it("spike / research / audit → complex", () => {
-    expect(complexityFromTaskType("spike")).toBe("complex");
-    expect(complexityFromTaskType("research")).toBe("complex");
-    expect(complexityFromTaskType("audit")).toBe("complex");
-  });
-  it("add-tests → simple", () => {
-    expect(complexityFromTaskType("add-tests")).toBe("simple");
-  });
-  it("desconocido → medium (fallback conservador)", () => {
-    expect(complexityFromTaskType("foobar")).toBe("medium");
-    expect(complexityFromTaskType(undefined)).toBe("medium");
   });
 });
 

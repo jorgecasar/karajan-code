@@ -1,4 +1,6 @@
 import { getDefaultModelTiers } from "../utils/model-selector.js";
+import { huComplexity } from "./complexity-tier.js";
+import { routeCoder } from "./coder-routing.js";
 
 // KJC-TSK-0405: dado un HU con complexity score, recomienda coder_model y
 // reviewer_model. El reviewer por defecto usa el provider alternativo al
@@ -34,26 +36,6 @@ const CROSS_PROVIDER_REVIEWER = {
   opencode: "claude",
   aider: "claude",
 };
-
-// KJC-TSK-0405 step 2: heurística para inferir complexity desde
-// task_type cuando el planner no emite un score explícito. Permite
-// que el model-router asigne modelos razonables sin un triage explícito.
-const TASK_TYPE_COMPLEXITY = {
-  sw: "medium",
-  refactor: "medium",
-  "add-tests": "simple",
-  infra: "trivial",
-  doc: "trivial",
-  spike: "complex",
-  research: "complex",
-  audit: "complex",
-  analysis: "medium",
-  "no-code": "trivial",
-};
-
-export function complexityFromTaskType(taskType) {
-  return TASK_TYPE_COMPLEXITY[taskType] || "medium";
-}
 
 export function complexityToLevel(complexity) {
   if (typeof complexity === "string" && LEVELS.includes(complexity)) return complexity;
@@ -96,4 +78,20 @@ export function recommendModelsForHu({ complexity, coderProvider, config = {} })
     reviewer_model,
     reviewer_provider,
   };
+}
+
+const TIER_LEVEL = { trivial: "trivial", standard: "medium", deep: "complex" };
+
+/**
+ * KJC-TSK-1072 (MR-D4): the models kj plan writes on an HU. coder_model comes
+ * from the HU's tier (MR-A) through routeCoder, the criterion the run uses;
+ * empty for a deep HU or a model the config already chose. The reviewer keeps
+ * its cross-provider recommendation. The tier travels as `complexity`.
+ */
+export function planHuModels({ title = "", goal = "", acceptanceCriteria = [], tier = null, tierReason = null, config = {} }) {
+  const complexity = huComplexity({ title, goal, acceptanceCriteria, tier, tierReason });
+  const coderProvider = config.roles?.coder?.provider || config.coder || "claude";
+  const route = routeCoder({ tier: complexity.tier, attempt: 1, config });
+  const reviewer = recommendModelsForHu({ complexity: TIER_LEVEL[complexity.tier], coderProvider, config });
+  return { ...reviewer, coder_model: route.skip ? null : route.model, complexity };
 }
