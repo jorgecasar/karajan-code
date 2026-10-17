@@ -208,6 +208,8 @@ const Skills = v.optional(v.looseObject({
  *     forzar Sonnet en todo el proyecto, por ejemplo.
  */
 const ModelRouting = v.optional(v.looseObject({
+  // KJC-TSK-0701 (MR-D): the coder of each HU runs on its tier's model; false turns it off.
+  enabled: v.optional(v.boolean("model_routing.enabled must be true or false")),
   by_provider: v.optional(v.record(
     v.string(),
     v.looseObject({
