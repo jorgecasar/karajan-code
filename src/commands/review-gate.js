@@ -26,6 +26,7 @@ import { loadPrivacyList, scanText } from "../privacy/scan.js";
 import { isGeneratedPath, splitAddedByFile } from "../privacy/diff-scope.js";
 import { budgetedAdded, budgetedNet } from "../review/loc-budget.js";
 import { checkStagedDiff, loadPolicy } from "../policy/engine.js";
+import { prSizeLimit } from "../review/pr-requirements.js";
 import { loadStandingExceptions, recordPolicyException } from "../policy/exceptions.js";
 import { policyFileHash, recordGateDecision } from "../policy/decisions.js";
 import { evaluatePolicyGate } from "../review/policy-gate.js";
@@ -246,16 +247,12 @@ export async function reviewGateCommand({ config, logger = null, flags = {} }) {
   // PL-C (KJC-TSK-0735), fuente única de umbrales: si la policy declara el
   // invariante net_lines_added, SU max es el umbral — el mismo número que
   // aplican kj policy check y el tier C de CI; method_gates queda de fallback.
-  const pol = loadPolicy({ projectDir });
-  const locInv = pol.errors.length === 0
-    ? (pol.policy.invariants || []).find((i) => i.kind === "diff-threshold" && i.metric === "net_lines_added")
-    : null;
   // KJC-BUG-0326 (#2085): two tiers. ~150 is the ideal (method_gates.pr_size_warn);
   // up to the limit (the policy's net_lines_added max, else method_gates.pr_size_max,
-  // 200) is allowed without asking; above the limit, partition.
-  const sizeIdeal = config?.method_gates?.pr_size_warn ?? 150;
-  const sizeWarn = locInv?.max ?? config?.method_gates?.pr_size_max ?? 200;
-  const sizeSource = locInv ? `policy [${locInv.id}]` : "method_gates";
+  // 200) is allowed without asking; above the limit, partition. KJC-TSK-1076: one
+  // source, shared with the third-party PR checks.
+  const pol = loadPolicy({ projectDir });
+  const { ideal: sizeIdeal, limit: sizeWarn, source: sizeSource } = prSizeLimit({ projectDir, config });
   if (sizeWarn > 0) {
     const numstat = await rawDiff(flags.range, ["--numstat"]);
     // KJC-BUG-0205: the budget caps CODE growth, so generated output and human

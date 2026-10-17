@@ -38,13 +38,15 @@ describe("thirdPartyReview", () => {
     const res = await thirdPartyReview({
       range: "main...pr", config: { roles: { reviewer: { provider: "claude" } } }, projectDir: dir, logger: { info() {} },
       gitDiff: async () => DIFF, run,
+      // KJC-TSK-1076: the PR-requirement checks travel in the same document.
+      requirements: async ({ range }) => [{ id: "size", ok: false, detail: `over the limit in ${range}` }],
     });
     expect(run).toHaveBeenCalledWith(expect.objectContaining({ diff: DIFF, persist: false, reviewerOverride: "claude" }));
     expect(res).toMatchObject({
       mode: "third-party", range: "main...pr", reviewer: "claude",
       verdict: { approved: false, summary: "s" },
       findings: [{ file: "x.js", line: 1, severity: "high", description: "d", suggested_fix: "f" }],
-      suggestions: ["n"], checks: [],
+      suggestions: ["n"], checks: [{ id: "size", ok: false, detail: "over the limit in main...pr" }],
     });
   });
 });

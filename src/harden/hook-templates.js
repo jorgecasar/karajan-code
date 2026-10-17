@@ -10,8 +10,9 @@
 
 import { homedir } from "node:os";
 
-const CONVENTIONAL_TYPES = "feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert";
-const AI_ATTRIBUTION = "co-authored-by:.*(claude|gpt|copilot|gemini)|(generated|written) (by|with) .*(claude|gpt|copilot)";
+// KJC-TSK-1076: exported so the third-party PR checks apply the same rules.
+export const CONVENTIONAL_TYPES = "feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert";
+export const AI_ATTRIBUTION = "co-authored-by:.*(claude|gpt|copilot|gemini)|(generated|written) (by|with) .*(claude|gpt|copilot)";
 
 export const SHEBANG = "#!/usr/bin/env sh";
 
