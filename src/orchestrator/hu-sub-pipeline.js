@@ -156,7 +156,7 @@ function sumTokenField(entries, field) {
  *   entries recorded during this HU. Cost D (KJC-TSK-0515).
  * @returns {object}
  */
-function buildHuOutcome({ story: _story, iterResult, status, startedAt, huBudgetEntries }) {
+function buildHuOutcome({ story, iterResult, status, startedAt, huBudgetEntries }) {
   const r = iterResult || {};
   const git = r.git || {};
   // Iterations are tracked in the standard pipeline as
@@ -198,6 +198,8 @@ function buildHuOutcome({ story: _story, iterResult, status, startedAt, huBudget
     // KJC-TSK-0702 (MR-E): the baseline model routing is measured against.
     tokens_out: sumTokenField(huBudgetEntries, 'tokens_out'),
     ...routingBaseline(huBudgetEntries, status),
+    // KJC-TSK-1071 (MR-D3): the routing decision applyCoderRoute left on the HU.
+    coder_routing: story?.coder_routing ?? null,
     finishedAt: new Date().toISOString(),
   };
 }

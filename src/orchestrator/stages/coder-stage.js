@@ -89,7 +89,8 @@ export async function runCoderStage({ coderRoleInstance, coderRole, config, logg
   } finally {
     coderStall.stop();
   }
-  trackBudget({ role: "coder", provider: coderRole.provider, model: coderRole.model, result: coderExecResult.result, duration_ms: Date.now() - coderStart });
+  // KJC-TSK-1071 (MR-D3): the model the HU's route ran the coder on, so kj report measures the real one.
+  trackBudget({ role: "coder", provider: coderRole.provider, model: config?.coder_route?.model ?? coderRole.model, result: coderExecResult.result, duration_ms: Date.now() - coderStart });
   applyQuotaSimulation(coderExecResult, { iteration, agent: coderRole.provider });
   // KJC-BUG-0285 (#1982): a commit the coder made on its own carried the error the
   // reviewer then rejected, and stayed on the branch. Undone softly: the changes

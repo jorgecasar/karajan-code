@@ -4,7 +4,8 @@
  * fixed set of fields, so the measured ones are kept here, in the plan, where
  * kj report reads them. Unmeasured fields stay out rather than written as null.
  */
-export const ROUTING_FIELDS = ["cost_usd", "tokens_in", "tokens_out", "cached_tokens", "coder", "reviewer_rejections"];
+// KJC-TSK-1071 (MR-D3): coder_routing is the coder's routing decision for the HU.
+export const ROUTING_FIELDS = ["cost_usd", "tokens_in", "tokens_out", "cached_tokens", "coder", "reviewer_rejections", "coder_routing"];
 
 export function keepRoutingMetrics(plan, huId, outcome) {
   const hu = plan?.hus?.find((h) => h.id === huId);

@@ -18,6 +18,7 @@ describe("modelTally", () => {
         { model: "glm", hus: 1, cost_usd: 0.1, tokens_in: 500, tokens_out: 100, mean_iterations: 2, failure_rate: 1 },
       ],
       unmeasured: 0,
+      routing: { routed: 0, escalated: 0 },
     });
   });
 

@@ -53,6 +53,14 @@ export function routeCoder({ tier, huModel = null, attempt, config }) {
 export function applyCoderRoute({ laneConfig, story, attempt, config, logger }) {
   const route = routeCoder({ tier: story.complexity?.tier, huModel: story.coder_model || null, attempt, config });
   laneConfig.coder_route = route.skip ? null : { model: route.model, effort: route.effort };
+  // KJC-TSK-1071 (MR-D3): the HU keeps its last decision, and whether it ever climbed.
+  story.coder_routing = {
+    tier: story.complexity?.tier ?? null,
+    model: route.skip ? null : route.model,
+    effort: route.skip ? null : route.effort,
+    escalated: Boolean(story.coder_routing?.escalated || route.escalated),
+    reason: route.reason,
+  };
   logger.info(`HU ${story.id}: coder ${route.skip ? "not routed" : "routed"}: ${route.reason}`);
   return route;
 }
