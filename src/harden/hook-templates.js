@@ -46,10 +46,12 @@ export function toPortableHooksDir(dir, home = homedir()) {
 function chainToGlobal(hook, globalHooksDir) {
   if (!globalHooksDir) return [];
   const dir = toPortableHooksDir(globalHooksDir);
+  // KJC-TSK-1085: pre-push already read the refs from stdin; the chained hook gets them back.
+  const call = hook === "pre-push" ? `printf '%s\\n' "$kj_push_refs" | "${dir}/${hook}" "$@"; rc=$?` : `"${dir}/${hook}" "$@"; rc=$?`;
   return [
     "# Chain the machine's previous global hook (kj harden keeps it active).",
     `if [ -x "${dir}/${hook}" ]; then`,
-    `  "${dir}/${hook}" "$@"; rc=$?`,
+    `  ${call}`,
     '  [ "$rc" -eq 0 ] || exit "$rc"',
     "fi",
   ];
@@ -101,6 +103,22 @@ function identityGuard(hook) {
   }
   return [
     ...head,
+    // KJC-TSK-1085: every commit the push brings carries the declared identity
+    // (a rebase, cherry-pick, merge or tag never ran pre-commit).
+    "  kj_declared_email=$(sed -n 's/^git_email:[[:space:]]*//p' .karajan/identity.local.yml | head -n1)",
+    '  if [ -n "$kj_declared_email" ]; then',
+    '    printf "%s\\n" "$kj_push_refs" | while read -r kj_lref kj_lsha kj_rref kj_rsha; do',
+    '      case "$kj_lsha" in *[!0]*) ;; *) continue ;; esac',
+    // A new ref: what the PUSH TARGET ($1, the remote git hands the hook) does not have yet.
+    '      case "$kj_rsha" in *[!0]*) kj_new=$(git rev-list "$kj_rsha..$kj_lsha") ;; *) kj_new=$(git rev-list "$kj_lsha" --not --remotes="${1:-origin}") ;; esac',
+    "      for kj_c in $kj_new; do",
+    '        kj_who=$(git log -1 --format="%ae %ce" "$kj_c")',
+    '        if [ "$kj_who" != "$kj_declared_email $kj_declared_email" ]; then',
+    '          echo "kj harden: identity lock — commit $(git log -1 --format=%h "$kj_c") is authored/committed as $kj_who but this clone is declared as $kj_declared_email"; exit 1',
+    "        fi",
+    "      done",
+    "    done || exit 1",
+    "  fi",
     "  kj_declared_gh=$(sed -n 's/^gh_user:[[:space:]]*//p' .karajan/identity.local.yml | head -n1)",
     '  kj_hosts="${GH_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/gh}/hosts.yml"',
     "  kj_active_gh=$(awk '/^github.com:/{f=1;next} f&&/^[^[:space:]]/{f=0} f&&/^[[:space:]]*user:/{sub(/^[[:space:]]*user:[[:space:]]*/,\"\");print;exit}' \"$kj_hosts\" 2>/dev/null)",
@@ -179,6 +197,8 @@ export function hookBody(hook, cmds = {}, { globalHooksDir = null, baseBranch = 
       ].join("\n");
     case "pre-push": {
       const lines = [
+        // KJC-TSK-1085: git hands the pushed refs on stdin; kept for the identity check and the chained hook.
+        "[ -t 0 ] || kj_push_refs=$(cat)",
         "# Identity guard — never push without a configured git identity.",
         'if [ -z "$(git config user.email)" ] || [ -z "$(git config user.name)" ]; then',
         "  echo 'kj harden: git user.name/user.email not set — refusing to push'; exit 1",

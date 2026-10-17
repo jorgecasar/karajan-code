@@ -16,11 +16,11 @@ A guard leaves the Sentinel only when a checkpoint already gives its protection,
 | 4 | Supervisor files named in a Bash command | raw text | seal tamper check (PreToolUse and Stop) plus host sandbox write deny on `.karajan/harness` | retire after the sandbox rule |
 | 5 | AI attribution in `gh pr/issue/release` bodies | raw text + body files | pre-commit diff and commit-msg (commits); CI attribution workflow (PR body) | retire for PRs; issue/release bodies: decide |
 | 6 | `gh issue create` to karajan-code | raw text | `kj report-issue` is the documented route; low value as a guard | retire |
-| 7 | Phone enrollment as a human act | raw text | `kj identity enroll-phone` checks its own caller | verify, then retire |
-| 8 | `kj harden --commit` as a human act | raw text | `kj harden --commit` refuses a process descended from an agent (ADR 0009, seen working on 2026-10-17) | retire |
+| 7 | Phone enrollment as a human act | raw text | `kj identity enroll-phone` checks its own caller (KJC-TSK-1084). The phone key file itself: no checkpoint yet (sandbox) | command retired; key file stays |
+| 8 | `kj harden --commit` as a human act | raw text | `kj harden --commit` refuses a process descended from an agent (ADR 0009); its check now fails closed (KJC-TSK-1084) | retired |
 | 9 | Discards (`git checkout --`, `restore`, `rm`) | raw text | host sandbox for writes outside the lane; inside the lane, nothing reads text reliably | decide with the user |
 | 10 | `KJ_SENTINEL_OFF` | env | | stays |
-| 11 | Identity lock (own tokenizer) | raw text | pre-commit and pre-push identity guard | retire |
+| 11 | Identity lock (own tokenizer) | raw text | git part: pre-commit (author) and pre-push (every pushed commit, gh session), KJC-TSK-1085. gh part: no checkpoint sees `gh` API calls (the incident behind it) | git part retired; gh part stays |
 | 12 | Lane guard MONO-0 (cd, quoted paths, substitutions, path tokens) | raw text | host sandbox limited to the lane directory | retire after the sandbox rule; largest source of false positives |
 | 13 | Repo writes through Bash | raw text | the gates it protected (card-first, rag-first) are also enforced at commit (card ref, RAG proof in the review gate) | retire |
 | 14 | Policy engine on the Bash input | whole input | policy gate at commit (`kj review`) and CI policy job | retire from Bash |
