@@ -173,7 +173,7 @@ export async function indexProject(projectDir, { db, embedder, karajanHome, logg
       if (source.startsWith(prefix) && outOf(source) !== null) deleteChunksBySource(db, source);
     }
     for (const s of sources) {
-      const r = await indexFile(s, { db, embedder, logger, project: slug, kind: sourceKind(s) });
+      const r = await indexFile(s, { db, embedder, logger, project: slug, kind: sourceKind() });
       totals.indexed += r.indexed; totals.failed += r.failed; totals.files += 1;
     }
   }
@@ -211,7 +211,7 @@ export async function indexProjectDelta(projectDir, { db, embedder, since, logge
       logger.info?.(`[rag-indexer] delta delete ${relative(process.cwd(), abs)}`);
     } else if (indexableReason(relative(projectDir, abs), abs, { exclude, projectDir }) === null) {
       // KJC-TSK-0891: the same criterion as the full walk, not a list of extensions.
-      const r = await indexFile(abs, { db, embedder, logger, project: slug, kind: sourceKind(abs) });
+      const r = await indexFile(abs, { db, embedder, logger, project: slug, kind: sourceKind() });
       totals.indexed += r.indexed; totals.failed += r.failed; totals.files += 1;
     }
   }
