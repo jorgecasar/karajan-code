@@ -65,7 +65,11 @@ The caveat loop engineering insists on — *unattended loops make unattended mis
 
 The most recent releases, newest first. Older versions live in [Architecture › History](/docs/architecture/history/) and the [CHANGELOG](https://github.com/manufosela/karajan-code/blob/main/CHANGELOG.md).
 
-### v4.53.1: stacked PRs pass board-sync (current)
+### v4.54.0: skills in the prompts, a task window for you (current)
+
+The skills that fit the task (the project's own first, then the local catalog) reach the coder and the reviewer, up to 3 per role, and starting an HU names them. `kj handoff watch` keeps, in another terminal, what only you can do (publish, seal, run a script), with date and why, out of the session's scroll. `kj env install` wires qmd's MCP so the agent asks it about docs, notes, ADRs and plans, and the RAG about code. And rag-first counts a `kj_rag_query` answer cut short.
+
+### v4.53.1: stacked PRs pass board-sync
 
 The next PR of a card split into stacked PRs can be pushed and opened before the first one's card is moved, a push no longer contradicts the answer board-sync just gave it, a block kj could not verify says why (usually another gh account active), and a card title or commit message that only mentions sealing the harness or enrolling the phone is read as text.
 
