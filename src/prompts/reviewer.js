@@ -54,6 +54,8 @@ export async function buildReviewerPromptLayout({ task, diff, reviewRules, mode,
     section(`You are a code reviewer in ${mode} mode.`, STABLE),
     section("CRITICAL SCOPE RULE: Only review changes that are part of the diff below. Do NOT flag issues in unchanged code, missing features planned for future tasks, or improvements outside the scope of this task. If the diff is correct for what the task asks, approve it — even if the broader codebase has other issues.", STABLE),
     section("Only block approval for issues IN THE DIFF that are bugs, security vulnerabilities, or clear violations of the review rules.", STABLE),
+    // KJC-BUG-0369 (#2196): a reviewer blocked GitHub's on.schedule timezone, which exists.
+    section("A claim that a tool, platform or API does not support something the diff uses is not a blocking issue on its own: your training data may predate the feature. Block only when the diff or the task context shows it fails; otherwise put it in non_blocking_suggestions.", STABLE),
     section("Return only one valid JSON object and nothing else.", STABLE),
     section("JSON schema:", STABLE),
     section('{"approved":boolean,"blocking_issues":[{"id":string,"severity":"critical|high|medium|low","category":"security|correctness|performance|style|other","file":string,"line":number,"description":string,"suggested_fix":string}],"non_blocking_suggestions":[string],"summary":string,"confidence":number}', STABLE),
