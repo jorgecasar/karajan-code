@@ -145,10 +145,12 @@ export const stripInertQuotes = (cmd) => {
 
 // Options whose value is prose, never a path (gh, git, kj).
 // KJC-BUG-0306: --error and --command of kj report-issue, --scope and --tests of kj hu add.
-const TEXT_OPTIONS = new Set(["--title", "--body", "--message", "-m", "--notes", "--description", "--ac", "--criteria", "--reason", "--decision", "--context", "--consequences", "--position", "--error", "--command", "--scope", "--tests"]);
+// KJC-BUG-0366: --why of kj handoff add.
+const TEXT_OPTIONS = new Set(["--title", "--body", "--message", "-m", "--notes", "--description", "--ac", "--criteria", "--reason", "--decision", "--context", "--consequences", "--position", "--error", "--command", "--scope", "--tests", "--why"]);
 const QUOTED_OPTION_VALUE = /(^|\s)(--?[a-z]+)(=|\s+)("[^"$`\\]*"|'[^']*')/g;
 // KJC-BUG-0306: the title kj hu add and kj adr add take as their first argument, at the start of a segment.
-const KJ_TITLE = /(^|[;&|]\s*)(kj\s+(?:hu|adr)\s+add\s+)("[^"$`\\]*"|'[^']*')/g;
+// KJC-BUG-0366: and the command kj handoff add stores for the human.
+const KJ_TITLE = /(^|[;&|]\s*)(kj\s+(?:hu|adr|handoff)\s+add\s+)("[^"$`\\]*"|'[^']*')/g;
 
 /** KJC-BUG-0243: blank the inert quoted value of a text option (--title "a/b c"): prose, not a path. */
 export const stripTextOptionValues = (cmd) => cmd
@@ -171,7 +173,7 @@ const isGitCommit = (words) => {
   return words[0] === "git" && words[i] === "commit";
 };
 
-const isTextOnlyHead = (seg) => /^kj\s+(?:hu|adr)\s+add\b/.test(seg) || isGitCommit(seg.split(/\s+/));
+const isTextOnlyHead = (seg) => /^kj\s+(?:hu|adr|handoff)\s+add\b/.test(seg) || isGitCommit(seg.split(/\s+/));
 
 /**
  * KJC-BUG-0354: blank the quoted text values (stripTextOptionValues) only when the
