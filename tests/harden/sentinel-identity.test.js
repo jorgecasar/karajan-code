@@ -59,7 +59,8 @@ describe("identity lock — gh", () => {
     expect(gh.status).toBe(2);
     expect(gh.stderr).toContain("kj identity set");
     expect(gh.stderr).not.toContain("KJ_ALLOW");
-    expect(run("git push origin x").status).toBe(2);
+    // KJC-TSK-1085: git push is no longer read here; an undeclared clone gets the
+    // pre-push hook's advisory (kj harden declares the identity when it installs).
     expect(run("git status").status).toBe(0);
     expect(run("KJ_ALLOW_IDENTITY=1 gh issue list").status).toBe(2);
     // Sin sesion gh (hosts.yml ausente) tampoco se adivina: deny.
@@ -80,46 +81,15 @@ describe("identity lock — gh", () => {
   });
 });
 
-describe("identity lock — autoria git (IDN-B2)", () => {
-  it("commit/tag/merge/rebase/cherry-pick con email efectivo distinto: deny; con -c user.email= del declarado pasa", () => {
+// KJC-TSK-1085 (ADR 0015): git authorship and push identity moved to the git hooks
+// (pre-commit: the author; pre-push: every pushed commit and the gh session; see
+// identity-hooks.test.js). The Sentinel no longer reads git commands for identity.
+describe("identity lock — git lives in the hooks", () => {
+  it("git commit, tag, rebase or push with another identity is not the Sentinel's to deny", () => {
     declare("manufosela", "otro@mail.x");
-    activeGh("manufosela");
-    const denied = run('git commit -m "feat: x"');
-    expect(denied.status).toBe(2);
-    expect(denied.stderr).toContain("otro@mail.x");
-    expect(denied.stderr).toContain("a@b.c");
-    expect(run('git -c user.email=otro@mail.x commit -m "feat: x"').status).toBe(0);
-    for (const m of ["git tag v1", "git merge feat/y", "git cherry-pick abc", "git rebase main", "git --git-dir .git commit -m x", "git --work-tree . am p.patch"]) expect(run(m).status).toBe(2);
-    declare("manufosela", "a@b.c");
-    expect(run('git commit -m "feat: x"').status).toBe(0);
-  });
-
-  it("todas las fuentes que git honra (catch de codex): env en el comando o en la sesion, --author, y -C otro-repo", () => {
-    declare("manufosela", "a@b.c");
-    activeGh("manufosela");
-    expect(run("GIT_AUTHOR_EMAIL=zzz@x.y git commit -m x").status).toBe(2);
-    expect(run('git commit --author="Z <zzz@x.y>" -m x').status).toBe(2);
-    expect(run("git commit -m x", { GIT_COMMITTER_EMAIL: "zzz@x.y" }).status).toBe(2);
-    // git resuelve la identidad (catch de codex): GIT_CONFIG_* inyectado tambien cuenta
-    // (EMAIL no: git solo lo usa como fallback cuando no hay user.email configurado).
-    expect(run("GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=user.email GIT_CONFIG_VALUE_0=zzz@x.y git commit -m x").status).toBe(2);
-    const other = path.join(dir, "otro");
-    // user.name tambien: sin el, git var falla (CI no tiene config global) y el gate deniega por "none".
-    execSync(`git init -q ${other} && git -C ${other} config user.email zzz@other.x && git -C ${other} config user.name z`, { cwd: dir });
-    expect(run(`git -C ${other} commit -m x`).status).toBe(2);
-    expect(run(`git -C ${other} -c user.email=a@b.c commit -m x`).status).toBe(0);
-  });
-});
-
-describe("identity lock — git push", () => {
-  it("push autentica con la sesion de gh, no con user.email (catch de codex): cuenta distinta deny, switch como prefijo pasa; lectura libre", () => {
-    declare("manufosela", "a@b.c");
     activeGh("manufosela-tribbu");
-    const denied = run("git push -u origin feat/x");
-    expect(denied.status).toBe(2);
-    expect(denied.stderr).toContain("gh auth switch --user manufosela");
-    expect(run("gh auth switch --user manufosela && git push -u origin feat/x").status).toBe(0);
-    expect(run("git -C sub -c core.x=1 push origin x").status).toBe(2);
-    expect(run("git log --oneline -1").status).toBe(0);
+    for (const m of ['git commit -m "feat: x"', "git tag v1", "git rebase main", "git push -u origin feat/x"]) {
+      expect(run(m).stderr, m).not.toMatch(/identity lock/);
+    }
   });
 });

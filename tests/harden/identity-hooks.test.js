@@ -69,4 +69,25 @@ describe("pre-push identity lock", () => {
     expect(push().status).not.toBe(0);
     expect(push({ KJ_ALLOW_IDENTITY: "1" }).status).not.toBe(0);
   });
+
+  // KJC-TSK-1085: a rebase, cherry-pick, merge or tag never ran pre-commit; the
+  // push checks every commit it brings against the declared identity.
+  it("rechaza un commit del push con otra identidad aunque no pasara por pre-commit", () => {
+    declare("manufosela", "t@t");
+    hosts("manufosela");
+    const pushRefs = () => {
+      const sha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
+      return spawnSync("sh", [path.join(dir, ".karajan", "hooks", "pre-push")], {
+        cwd: dir, encoding: "utf8", input: `refs/heads/x ${sha} refs/heads/x ${"0".repeat(40)}\n`, env: { ...process.env, GH_CONFIG_DIR: ghDir },
+      });
+    };
+    expect(commit().status).toBe(0);
+    expect(pushRefs().status).toBe(0);
+    fs.writeFileSync(path.join(dir, "f.js"), "// other\n");
+    execFileSync("git", ["add", "f.js"], { cwd: dir });
+    execFileSync("git", ["-c", "core.hooksPath=/dev/null", "-c", "user.email=intruder@x.y", "commit", "-q", "-m", "feat: y"], { cwd: dir });
+    const denied = pushRefs();
+    expect(denied.status).not.toBe(0);
+    expect(denied.stdout).toMatch(/identity lock — commit \w+ is authored\/committed as intruder@x\.y intruder@x\.y but this clone is declared as t@t/);
+  });
 });
