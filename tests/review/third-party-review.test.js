@@ -42,13 +42,15 @@ describe("thirdPartyReview", () => {
       requirements: async ({ range }) => [{ id: "size", ok: false, detail: `over the limit in ${range}` }],
       // KJC-TSK-1077: the security checks read the same diff.
       security: async ({ diff }) => [{ id: "secrets", ok: true, detail: `scanned ${diff.length} chars` }],
+      // KJC-TSK-1078: Sonar closes the list.
+      sonar: async () => ({ id: "sonar", ok: true, detail: "not available: no SonarQube" }),
     });
     expect(run).toHaveBeenCalledWith(expect.objectContaining({ diff: DIFF, persist: false, reviewerOverride: "claude" }));
     expect(res).toMatchObject({
       mode: "third-party", range: "main...pr", reviewer: "claude",
       verdict: { approved: false, summary: "s" },
       findings: [{ file: "x.js", line: 1, severity: "high", description: "d", suggested_fix: "f" }],
-      suggestions: ["n"], checks: [{ id: "size", ok: false, detail: "over the limit in main...pr" }, { id: "secrets", ok: true, detail: `scanned ${DIFF.length} chars` }],
+      suggestions: ["n"], checks: [{ id: "size", ok: false, detail: "over the limit in main...pr" }, { id: "secrets", ok: true, detail: `scanned ${DIFF.length} chars` }, { id: "sonar", ok: true, detail: "not available: no SonarQube" }],
     });
   });
 });

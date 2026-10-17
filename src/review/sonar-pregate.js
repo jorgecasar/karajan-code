@@ -82,7 +82,8 @@ export function groupByScanRoot(files, { root = process.cwd(), exists = existsSy
   return groups;
 }
 
-export async function runSonarPregate({ config, stagedFiles = [], touchedLines = null, logger = null, exists = existsSync }) {
+// KJC-TSK-1078: projectDir is where the files live (a third-party PR's clone may not be the cwd).
+export async function runSonarPregate({ config, stagedFiles = [], touchedLines = null, logger = null, exists = existsSync, projectDir = process.cwd() }) {
   if (config?.review_gate?.sonar === false) {
     return { available: false, reason: "disabled in config (review_gate.sonar: false)" };
   }
@@ -94,7 +95,9 @@ export async function runSonarPregate({ config, stagedFiles = [], touchedLines =
   let lock = null;
   try {
     lock = await acquireToolLock("sonar-scanner", { timeoutMs: 300_000, slots });
-    const groups = groupByScanRoot(stagedFiles, { exists });
+    const groups = groupByScanRoot(stagedFiles, { root: projectDir, exists });
+    // The root keeps the scanner's own default (cwd) unless the project lives elsewhere.
+    const rootCwd = projectDir === process.cwd() ? null : projectDir;
     if (groups.size === 0) groups.set("", []);
     const indexed = new Set();
     const issues = [];
@@ -103,7 +106,8 @@ export async function runSonarPregate({ config, stagedFiles = [], touchedLines =
     for (const dir of groups.keys()) {
       const prefix = dir ? `${dir}/` : "";
       // KJC-TSK-0838: verbose, so the scanner names every file it indexed.
-      const scan = await runSonarScan(config, null, { verbose: true, ...(dir ? { cwd: join(process.cwd(), dir) } : {}) });
+      const scanCwd = dir ? join(projectDir, dir) : rootCwd;
+      const scan = await runSonarScan(config, null, { verbose: true, ...(scanCwd ? { cwd: scanCwd } : {}) });
       if (scan.note) logger?.warn?.(scan.note); // KJC-BUG-0156: precedence is said, never silent
       if (!scan.ok) {
         return { available: false, reason: (scan.stderr || scan.stdout || "sonar scan failed").trim() };
