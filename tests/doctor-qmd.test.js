@@ -17,7 +17,7 @@ describe("doctor QMD check", () => {
     const result = await check.detect();
     expect(result.ok).toBe(true);
     expect(result.detail).toContain("qmd 2.5.3");
-    expect(result.detail).toContain("semantic wiki active");
+    expect(result.detail).toContain("answers about the project");
   });
 
   it.each([
