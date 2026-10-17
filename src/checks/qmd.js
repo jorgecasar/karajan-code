@@ -22,14 +22,15 @@ function createQmdCheck() {
       try {
         const res = await runCommand("qmd", ["--version"]);
         if (res.exitCode === 0) {
-          return { ok: true, severity: "info", detail: `${res.stdout.trim()} — semantic wiki active` };
+          // KJC-TSK-1067: say what it is for, not only that it is there.
+          return { ok: true, severity: "info", detail: `${res.stdout.trim()} — answers about the project's docs, notes, ADRs and plans from the documents, with fewer tokens (kj env install wires its MCP)` };
         }
       } catch { /* not installed */ }
       const installCmd = getInstallCommand("qmd");
       return {
         ok: false,
         severity: "warn",
-        detail: "Not found — semantic wiki via QMD available",
+        detail: "Not found — qmd answers questions about the project's docs, notes, ADRs and plans from the documents, with fewer tokens and a source",
         fix: withDocLink(`Install: ${installCmd}`, "qmd_install"),
       };
     },
