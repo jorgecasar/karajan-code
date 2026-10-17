@@ -42,6 +42,22 @@ describe("refuseAgentSession", () => {
     expect(agentAncestry(ancestry)).toMatchObject({ agent: true });
     expect(() => refuseAgentSession("kj x", { ...HUMAN, ancestry })).toThrow(/desciende de un agente \(claude/);
   });
+
+  // KJC-TSK-1084: the Sentinel no longer reads the text of a human act, so the
+  // command's own check must fail closed: an ancestry it cannot read is refused.
+  it("refuses when the ancestry cannot be read", () => {
+    const ancestry = { pid: 300, readProc: () => { throw new Error("EACCES"); } };
+    expect(agentAncestry(ancestry)).toMatchObject({ agent: false, unknown: true });
+    expect(() => refuseAgentSession("kj x", { ...HUMAN, ancestry })).toThrow(/no se pudo comprobar la ascendencia/);
+  });
+});
+
+describe("agentAncestry without /proc", () => {
+  it("reads the parent chain with ps", () => {
+    const outputs = { 400: "  350 node kj\n", 350: "    1 claude --session\n" };
+    const ps = (pid) => outputs[pid];
+    expect(agentAncestry({ pid: 400, hasProc: false, ps })).toMatchObject({ agent: true, match: "claude --session" });
+  });
 });
 
 describe("confirmHuman", () => {
