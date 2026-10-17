@@ -606,32 +606,17 @@ process.stdin.on("end", () => {
         }
       }
     }
-    // KJC-TSK-0822 v1.1: enrolar (o pisar) la clave del movil es acto humano
-    // — si un agente pudiera enrolar una clave SUYA, contestaria la capa 5 el
-    // solo. Ni el comando ni el fichero de enrolamiento desde la sesion.
+    // KJC-TSK-0822 v1.1: la clave del movil (capa 5) no se toca desde la sesion.
+    // KJC-TSK-1084 (ADR 0015): los comandos de acto humano (kj harden --commit,
+    // kj identity enroll-phone) ya no se leen aqui: la propia orden rechaza un
+    // proceso que desciende de un agente (src/harden/human-act.js). Queda el
+    // FICHERO de la clave, que solo esto protege hasta que el sandbox lo vete.
     {
-      // KJC-BUG-0354: un titulo o un mensaje de commit que solo lo MENCIONA no es enrolar.
-      const enrollCmd = stripTextOnlyCommandValues(String(input.command || ""));
-      const namesEnroll = (enrollCmd.includes("identity") && enrollCmd.includes("enroll-phone")) || enrollCmd.includes("supervisor-phone.json");
+      // KJC-BUG-0354: un titulo o un mensaje de commit que solo lo MENCIONA no es escribirlo.
+      const namesPhoneFile = stripTextOnlyCommandValues(String(input.command || "")).includes("supervisor-phone.json");
       const writesEnroll = EDIT_TOOLS.includes(tool) && String(input.file_path || "").includes("supervisor-phone.json");
-      if ((tool === "Bash" && namesEnroll) || writesEnroll) {
-        console.error("karajan sentinel: el enrolamiento del movil (capa 5) es un acto humano — pideselo a tu usuario; supervisor-phone.json no se toca desde la sesion." + doc("supervisor"));
-        process.exit(2);
-      }
-    }
-    // ADR 0009 (KJC-BUG-0161): kj harden --commit es un ACTO HUMANO — la
-    // sesion ni lo intenta. Sin escape (superficie de supervisor). includes()
-    // a proposito: cero ambiguedad de escapes en plantilla, y fail-closed
-    // (mencionarlo en un argumento tambien bloquea: preferible a un hueco).
-    // KJC-BUG-0354: salvo en el texto entrecomillado de kj hu add, kj adr add y
-    // git commit, que solo guardan texto (decision del usuario, 16-oct).
-    // ANTES de KJ_SENTINEL_OFF a proposito, como el guard PROTECTED de
-    // arriba: un env var lo pone tambien un agente — el supervisor no se
-    // apaga con interruptores al alcance del supervisado.
-    {
-      const kjCmd = stripTextOnlyCommandValues(String(input.command || ""));
-      if (tool === "Bash" && kjCmd.includes("harden") && kjCmd.includes("--commit")) {
-        console.error("karajan sentinel: kj harden --commit es un acto humano (ADR 0009) — pideselo a tu usuario; ninguna sesion de agente lo ejecuta." + doc("supervisor"));
+      if ((tool === "Bash" && namesPhoneFile) || writesEnroll) {
+        console.error("karajan sentinel: la clave del movil (capa 5) es del humano — supervisor-phone.json no se toca desde la sesion; enrolar es kj identity enroll-phone desde su terminal." + doc("supervisor"));
         process.exit(2);
       }
     }

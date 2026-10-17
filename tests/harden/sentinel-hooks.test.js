@@ -193,14 +193,15 @@ describe("pretooluse-sentinel script (stateful gate — the rule fires BEFORE th
     expect(bash("kj worktree done mi-slug").status).toBe(0);
   });
 
-  it("KJC-TSK-0822 v1.1: enrolar la clave del movil es acto humano — comando y fichero denegados", () => {
+  it("KJC-TSK-0822 v1.1: el fichero de la clave del movil no se toca desde la sesion", () => {
     const bash = (command) => ({ session_id: "s1", tool_name: "Bash", tool_input: { command } });
-    expect(run(gate, bash("kj identity enroll-phone QUJDRA==")).status).toBe(2);
     expect(run(gate, bash("cat /home/x/.karajan/supervisor-phone.json")).status).toBe(2);
     const w = run(gate, { session_id: "s1", tool_name: "Write", tool_input: { file_path: "/home/x/.karajan/supervisor-phone.json", content: "{}" } });
     expect(w.status).toBe(2);
-    expect(w.stderr).toMatch(/acto humano/);
+    expect(w.stderr).toMatch(/clave del movil/);
     expect(run(gate, bash("kj identity show")).status).toBe(0);
+    // KJC-TSK-1084: el comando ya no se lee aqui; kj identity enroll-phone se niega solo (human-act.test.js).
+    expect(run(gate, bash("kj identity enroll-phone QUJDRA==")).status).toBe(0);
   });
 
   // KJC-BUG-0252 (#1899): an issue for karajan-code goes through kj report-issue.
@@ -228,14 +229,13 @@ describe("pretooluse-sentinel script (stateful gate — the rule fires BEFORE th
     expect(bash("gh issue create --title x --body y").status).toBe(0);
   });
 
-  it("ADR 0009: kj harden --commit es acto humano — la sesion lo tiene denegado SIN escape", () => {
-    for (const command of ["kj harden --commit", "KJ_ALLOW_CROSS_LANE=1 kj harden --profile strict --commit"]) {
-      const blocked = run(gate, { session_id: "s1", tool_name: "Bash", tool_input: { command } });
-      expect(blocked.status).toBe(2);
-      expect(blocked.stderr).toMatch(/acto humano/);
+  // KJC-TSK-1084 (ADR 0015): kj harden --commit sigue siendo acto humano (ADR 0009),
+  // pero lo impone la propia orden (human-act.test.js: ascendencia de procesos,
+  // tty y nonce), no el texto del comando: el Sentinel ya no lo lee.
+  it("ADR 0009 vive en la orden, no en el Sentinel: el texto de kj harden --commit no se deniega aqui", () => {
+    for (const command of ["kj harden --commit", "kj harden --report"]) {
+      expect(run(gate, { session_id: "s1", tool_name: "Bash", tool_input: { command } }).stderr, command).not.toMatch(/acto humano/);
     }
-    // harden a secas sigue permitido (la regeneracion local es legitima).
-    expect(run(gate, { session_id: "s1", tool_name: "Bash", tool_input: { command: "kj harden --report" } }).status).toBe(0);
   });
 
   it("INF-A: editar un .tf en rama sin card se deniega igual que un .js", () => {

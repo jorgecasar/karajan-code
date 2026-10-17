@@ -8,18 +8,36 @@
  *  4.   a random nonce typed back, read from the real controlling terminal.
  */
 import { randomBytes } from "node:crypto";
-import { closeSync, openSync, readFileSync, readSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { closeSync, existsSync, openSync, readFileSync, readSync } from "node:fs";
 
 const AGENT_PROC = /claude|codex|copilot|gemini|opencode|\bagy\b/i;
 
-export function agentAncestry({ pid = process.pid, readProc = null, maxDepth = 40 } = {}) {
-  const read = readProc || ((p) => {
-    const stat = readFileSync(`/proc/${p}/stat`, "utf8");
-    const ppid = Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[1]);
-    let cmd = "";
-    try { cmd = readFileSync(`/proc/${p}/cmdline`).toString("utf8").replaceAll("\0", " "); } catch { /* gone */ }
-    return { ppid, cmd };
-  });
+const procRead = (p) => {
+  const stat = readFileSync(`/proc/${p}/stat`, "utf8");
+  const ppid = Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[1]);
+  let cmd = "";
+  try { cmd = readFileSync(`/proc/${p}/cmdline`).toString("utf8").replaceAll("\0", " "); } catch { /* gone */ }
+  return { ppid, cmd };
+};
+
+// KJC-TSK-1084: without /proc (macOS) the chain comes from ps, so a human
+// there is not refused for an ancestry nobody could read.
+// The system binary by absolute path: a ps resolved through PATH could be the
+// agent's own forgery prepended to it.
+const PS_BIN = ["/bin/ps", "/usr/bin/ps"].find((p) => existsSync(p)) ?? null;
+const psOutput = (p) => {
+  if (!PS_BIN) throw new Error("no system ps (/bin/ps, /usr/bin/ps)");
+  return execFileSync(PS_BIN, ["-o", "ppid=", "-o", "command=", "-p", String(p)], { encoding: "utf8", env: {} });
+};
+const psRead = (ps) => (p) => {
+  const m = /^\s*(\d+)\s+(.*)$/s.exec(String(ps(p) ?? ""));
+  if (!m) throw new Error(`ps gave nothing for pid ${p}`);
+  return { ppid: Number(m[1]), cmd: m[2].trim() };
+};
+
+export function agentAncestry({ pid = process.pid, readProc = null, maxDepth = 40, hasProc = existsSync("/proc/self/stat"), ps = psOutput } = {}) {
+  const read = readProc || (hasProc ? procRead : psRead(ps));
   let cur = pid;
   for (let i = 0; i < maxDepth && cur > 1; i += 1) {
     let info;
@@ -37,6 +55,11 @@ export function refuseAgentSession(what, { env = process.env, tty = process.stdo
     throw new Error(`${what} es un acto humano: córrelo desde TU terminal, fuera de una sesión de agente (ADR 0009)`);
   }
   const anc = agentAncestry(ancestry);
+  // KJC-TSK-1084: fail closed. Nothing else stops a human act any more (the
+  // Sentinel does not read its text), so an ancestry that cannot be read is no pass.
+  if (anc.unknown) {
+    throw new Error(`${what} es un acto humano y no se pudo comprobar la ascendencia de procesos — córrelo desde TU terminal (ADR 0009)`);
+  }
   if (anc.agent) {
     throw new Error(`${what} es un acto humano y este proceso desciende de un agente (${anc.match}) — ni con pty falso ni con el entorno limpio (ADR 0009)`);
   }

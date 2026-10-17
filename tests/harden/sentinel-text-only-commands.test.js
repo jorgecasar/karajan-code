@@ -58,11 +58,7 @@ describe("the human-act guards with quoted text (PreToolUse Bash)", () => {
     }
   });
 
-  it("still denies running them, chained, with a text option alongside, or quoted where a command runs it", () => {
-    for (const cmd of [HC, `${HC} --reason 'x'`, `kj hu add 'x' ; ${HC}`, `kj(){ eval "command $3"; }; kj hu add '${HC}'`, `flock /tmp/l --command '${HC}'`, `echo '${HC}'`, ENROLL, `kj hu add "$(${HC})"`, `git commit -m "$(${HC})"`, `kj adr add 'x' --decision "\`${HC}\`"`]) {
-      const r = bash(cmd);
-      expect(r.status, cmd).toBe(2);
-      expect(r.stderr, cmd).toMatch(/acto humano/);
-    }
-  });
+  // KJC-TSK-1084 (ADR 0015): running them is refused by the commands themselves
+  // (src/harden/human-act.js: a kj launched by the agent descends from it, however
+  // it is chained or quoted); the Sentinel no longer reads their text.
 });
