@@ -205,6 +205,12 @@ rtk init --global
 
 See [RTK on GitHub](https://github.com/rtk-ai/rtk) for more details.
 
+## Optional: qmd for Questions About Your Project's Documents
+
+[qmd](https://github.com/tobi/qmd) is a local search engine over markdown. `kj init` installs it and registers your project's `docs/`, `.reviews/` and `.karajan/plans/` as collections. `kj env install` then wires its MCP into the agent's session (unless you already have it), and the method tells the agent to ask qmd about docs, notes, ADRs and plans, and `kj rag query` about code.
+
+When you ask your agent something about the project, it answers from the documents, with fewer tokens and a source, instead of re-reading files by hand. `kj doctor` says whether qmd is there.
+
 ## Next Steps
 
 - [Quick Start](/docs/getting-started/quick-start/) — Run your first task

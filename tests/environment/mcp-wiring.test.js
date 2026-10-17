@@ -44,3 +44,26 @@ describe("installProjectMcp", () => {
     expect(fs.readFileSync(mcpPath(), "utf8")).toBe("{ not json");
   });
 });
+
+// KJC-TSK-1067: qmd answers questions about the project's documents (docs,
+// notes, ADRs, plans) with fewer tokens and a source. kj init already installs
+// it and registers the collections; env install now puts it in the agent's toolbox.
+describe("installProjectMcp wires qmd", () => {
+  const quiet = { info() {}, warn() {} };
+  it("with qmd installed and not wired anywhere, adds it to the project as qmd mcp", () => {
+    const res = installProjectMcp({ projectDir: dir, logger: quiet, qmd: { installed: () => true, wiredGlobally: () => false } });
+    expect(read().mcpServers.qmd).toEqual({ command: "qmd", args: ["mcp"] });
+    expect(res.qmd).toBe("added");
+  });
+
+  it("never twice: not when the user already has it globally or in the project, nor without qmd", () => {
+    installProjectMcp({ projectDir: dir, logger: quiet, qmd: { installed: () => true, wiredGlobally: () => true } });
+    expect(read().mcpServers.qmd).toBeUndefined();
+    installProjectMcp({ projectDir: dir, logger: quiet, qmd: { installed: () => false, wiredGlobally: () => false } });
+    expect(read().mcpServers.qmd).toBeUndefined();
+    fs.writeFileSync(mcpPath(), JSON.stringify({ mcpServers: { docs: { command: "/usr/bin/qmd", args: ["mcp"] } } }));
+    const res = installProjectMcp({ projectDir: dir, logger: quiet, qmd: { installed: () => true, wiredGlobally: () => false } });
+    expect(Object.keys(read().mcpServers)).toEqual(["docs", "kj-rag"]);
+    expect(res.qmd).toBe("present");
+  });
+});
