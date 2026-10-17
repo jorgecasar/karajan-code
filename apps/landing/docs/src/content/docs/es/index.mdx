@@ -65,7 +65,11 @@ El caveat que el loop engineering recalca — *los bucles desatendidos cometen e
 
 Las versiones más recientes, la última primero. Las anteriores están en [Arquitectura › Historia](/docs/es/architecture/history/) y en el [CHANGELOG](https://github.com/manufosela/karajan-code/blob/main/CHANGELOG.md).
 
-### v4.54.0: las skills llegan a los prompts y tienes una ventana de tareas (actual)
+### v4.55.0: cada HU con el modelo que pide su tramo (actual)
+
+El coder de cada HU corre con el modelo y la intensidad que pide su tramo (trivial, estándar o deep) y sube al más capaz cuando una iteración falla; un modelo que hayas elegido siempre gana y el reviewer nunca se enruta. `kj plan` rellena el modelo de cada HU a partir de su tramo, el HU Board puede cambiarlo y `kj report` dice cuántas HUs se enrutaron y cuántas subieron. Las reviews en paralelo en una misma máquina comparten plazas de sonar-scanner, un reviewer ya no bloquea una funcionalidad de una plataforma que simplemente no conoce, y `kj handoff add` pasa el Sentinel.
+
+### v4.54.0: las skills llegan a los prompts y tienes una ventana de tareas
 
 Las skills que encajan con la tarea (primero las del proyecto, luego las del catálogo local) llegan al coder y al reviewer, hasta 3 por rol, y al arrancar una HU se nombran. `kj handoff watch` muestra en otra terminal lo que solo puedes hacer tú (publicar, sellar, ejecutar un script), con fecha y motivo, fuera del scroll de la sesión. `kj env install` conecta el MCP de qmd para que el agente le pregunte por documentos, notas, ADRs y planes, y al RAG por el código. Y rag-first cuenta una respuesta de `kj_rag_query` que llega cortada.
 
