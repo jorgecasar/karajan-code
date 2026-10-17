@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.55.0] - 2026-10-17
+
+Minor. **Each HU's coder runs on the model its tier calls for, and climbs to the top one when it fails.**
+
+### Added
+
+- **Model routing per HU** (KJC-TSK-0701, KJC-TSK-1070): the coder of a trivial HU runs on the trivial model with effort low, a standard one on the medium model with effort medium, and a deep one on the usual model; after a failed iteration it climbs to the most capable model with effort max. A model the user chose always wins (`roles.coder.model`, `--coder-model`, `model_profile`, `model_routing.fixed.coder`), the reviewer and Solomon are never routed, only claude takes effort, and `model_routing.enabled: false` turns it off. Each call builds its own agent, so parallel lanes do not leak into each other.
+- **`kj plan` fills each HU's `coder_model` from its tier** (KJC-TSK-1072): the tier of the decomposition (acceptance criteria, sensitive zones, the planner's own judgement), not the task type. The HU Board can change it and the run uses yours.
+- **The routing is on record** (KJC-TSK-1071): each HU keeps its decision (tier, model, effort, why, whether it climbed), the budget records the model the coder really ran on, and `kj report` adds how many HUs were routed and how many climbed. The configuration guide explains it.
+
+### Fixed
+
+- **`kj handoff add` is not blocked by the Sentinel** (KJC-BUG-0366): its quoted command and `--why` are text it stores, like the title of `kj hu add`; a command that names a human act can be registered too. Takes effect once the harness is re-hardened and sealed.
+- **Concurrent reviews share sonar-scanner slots** (KJC-BUG-0368, #2216): one machine-wide lock made sessions on different repos wait 300 s and fail; the pre-gate now takes one of `sonarqube.max_parallel_scans` slots (2 by default).
+- **A claim that a platform lacks a feature does not block a review on its own** (KJC-BUG-0369, #2196): the reviewer blocked GitHub's `on.schedule` timezone, which exists; such a claim blocks only when the diff or the task shows the failure.
+- **The local suite leaves out the kj runtime under `.karajan/`** (KJC-BUG-0367): the skills catalog's eval fixtures no longer turn `npm test` red.
+
 ## [4.54.0] - 2026-10-17
 
 Minor. **The skills reach the prompts, the human gets a task window, and the agent knows when to ask qmd.**
