@@ -201,6 +201,17 @@ describe("iteration-stages: runCoderStage", () => {
     expect(trackBudget).toHaveBeenCalledWith(expect.objectContaining({ role: "coder" }));
   });
 
+  // KJC-TSK-1071 (MR-D3): the budget (and so kj report) records the model the HU's coder ran on.
+  it("hands the HU's route to the coder and records the routed model in the budget", async () => {
+    const executeMock = vi.fn(async () => ({ ok: true, result: { output: "done" }, summary: "Coder completed" }));
+    await runCoderStage({
+      coderRoleInstance: { execute: executeMock }, coderRole, config: { ...makeConfig(), coder_route: { model: "haiku", effort: "low" } }, logger, emitter, eventBase,
+      session: makeSession(), plannedTask: "do X", trackBudget, iteration: 1
+    });
+    expect(executeMock.mock.calls[0][0].route).toEqual({ model: "haiku", effort: "low" });
+    expect(trackBudget).toHaveBeenLastCalledWith(expect.objectContaining({ role: "coder", model: "haiku" }));
+  });
+
   // KJC-BUG-0285 (#1982): a commit the coder made on its own is undone softly and said.
   it("undoes the commits the coder made on its own and says so", async () => {
     const { headSha, undoCommitsSince } = await import("../src/git/coder-commit-guard.js");

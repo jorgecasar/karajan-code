@@ -199,6 +199,29 @@ model_selection:
       model: claude-opus-4-6
 ```
 
+### Routing de modelo por HU
+
+Cuando una tarea se ejecuta en varias HUs, el coder de cada HU corre con el modelo que pide su tramo, para que las HUs sencillas no paguen el modelo más capaz. El tramo sale de la descomposición: el número de criterios de aceptación, las zonas sensibles (auth, secretos, migraciones, seguridad) y el juicio del propio planner; gana el más alto.
+
+| Tramo de la HU | Primera iteración (claude) | Tras una iteración fallida |
+|----------------|----------------------------|----------------------------|
+| trivial | `haiku`, effort `low` | `opus`, effort `max` |
+| estándar | `sonnet`, effort `medium` | `opus`, effort `max` |
+| deep | el modelo de siempre | `opus`, effort `max` |
+
+`kj plan` escribe el `coder_model` de cada HU a partir de su tramo, y puedes cambiarlo en el HU Board: la ejecución usa el tuyo. Solo se enruta el coder; el reviewer y Solomon mantienen su modelo. Un modelo que hayas elegido siempre gana (`roles.coder.model`, `--coder-model`, `model_profile`, `model_routing.fixed.coder`). El effort solo se aplica a claude.
+
+```yaml
+model_routing:
+  enabled: false          # apaga el routing en este proyecto
+  by_provider:            # otros modelos por nivel
+    claude: { trivial: claude-haiku-5-5, medium: claude-sonnet-5-5, complex: claude-opus-5-5 }
+```
+
+`by_provider` nombra niveles de modelo, no tramos: una HU trivial usa `trivial`, una estándar `medium`, y la subida tras un fallo `complex`.
+
+`kj report` muestra, por modelo del coder, el coste y los fallos a la primera, y cuántas HUs se enrutaron y cuántas subieron al modelo máximo, para que veas si el routing compensa.
+
 ### Idioma (i18n)
 
 Configura el idioma de los mensajes del pipeline y las historias de usuario:

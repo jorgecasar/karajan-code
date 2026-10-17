@@ -199,6 +199,29 @@ model_selection:
       model: claude-opus-4-6
 ```
 
+### Model Routing per HU
+
+When a task runs as several HUs, each HU's coder runs on the model its tier calls for, so simple HUs don't pay for the most capable model. The tier comes from the decomposition: the number of acceptance criteria, sensitive zones (auth, secrets, migrations, security) and the planner's own judgement; the higher one wins.
+
+| HU tier | First iteration (claude) | After a failed iteration |
+|---------|--------------------------|--------------------------|
+| trivial | `haiku`, effort `low` | `opus`, effort `max` |
+| standard | `sonnet`, effort `medium` | `opus`, effort `max` |
+| deep | the usual model | `opus`, effort `max` |
+
+`kj plan` writes each HU's `coder_model` from its tier, and you can change it on the HU Board: the run uses yours. Only the coder is routed; the reviewer and Solomon keep their model. A model you chose always wins (`roles.coder.model`, `--coder-model`, `model_profile`, `model_routing.fixed.coder`). Effort applies to claude only.
+
+```yaml
+model_routing:
+  enabled: false          # turn routing off for this project
+  by_provider:            # other models per level
+    claude: { trivial: claude-haiku-5-5, medium: claude-sonnet-5-5, complex: claude-opus-5-5 }
+```
+
+`by_provider` names model levels, not tiers: a trivial HU uses `trivial`, a standard one `medium`, and a climb after a failure `complex`.
+
+`kj report` shows, per coder model, cost and first-time failures, and how many HUs were routed and how many climbed to the top model, so you can tell whether routing pays off.
+
 ### Language (i18n)
 
 Configure the language for pipeline messages and user stories:

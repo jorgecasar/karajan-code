@@ -23,11 +23,14 @@ export function modelTally(hus) {
       failure_rate: round(failed / rows.length, 4),
     };
   });
-  return { models, unmeasured: (hus ?? []).length - measured.length };
+  // KJC-TSK-1071 (MR-D3): how many HUs routing moved off the usual model, and how many climbed.
+  const routed = (hus ?? []).filter((h) => h?.outcome?.coder_routing?.model);
+  const routing = { routed: routed.length, escalated: routed.filter((h) => h.outcome.coder_routing.escalated).length };
+  return { models, unmeasured: (hus ?? []).length - measured.length, routing };
 }
 
 /** The kj report block, or null when no HU was run at all. */
-export function formatModelTally({ models, unmeasured }) {
+export function formatModelTally({ models, unmeasured, routing = null }) {
   if (models.length === 0 && unmeasured === 0) return null;
   const lines = ["Coder models (per HU, from the plans):"];
   for (const m of models) {
@@ -35,5 +38,6 @@ export function formatModelTally({ models, unmeasured }) {
     lines.push(`  ${m.model.padEnd(24)} ${m.hus} HU · $${m.cost_usd.toFixed(4)} · ${m.tokens_in} in / ${m.tokens_out} out · ${iterations} iter · ${Math.round(m.failure_rate * 100)}% failed first time`);
   }
   if (unmeasured > 0) lines.push(`  ${unmeasured} HU(s) before the measurement (baseline, unmeasured)`);
+  if (routing?.routed) lines.push(`  Routing: ${routing.routed} HU routed, ${routing.escalated} climbed to the top model (model_routing.enabled: false turns it off)`);
   return lines.join("\n");
 }
