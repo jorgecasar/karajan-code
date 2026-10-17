@@ -11,6 +11,7 @@ import { savePlan, listPlans, loadPlan } from "../plan/plan-store.js";
 import { detectHostAgent } from "../utils/agent-detect.js";
 import { readIdentity } from "../identity/store.js";
 import { effectiveGitEmail } from "../identity/detect.js";
+import { roleSkills } from "../skills/role-skills.js";
 
 // KJC-TSK-0661 (Jorge's friction): every HU records WHO created it — the
 // board must never show work nobody can trace. Host agent env → that agent;
@@ -238,6 +239,13 @@ export async function huCommand({ config = null, action, args = [], flags = {}, 
     if (starting || takenOver || unclaimedRunning) Object.assign(hu, { claimed_by: who ?? null, claimed_at: who ? new Date().toISOString() : null });
     if (starting && !who) console.warn(`⚠ ${label} is not reserved: kj cannot tell who works this clone — declare it with kj identity set`);
     await savePlan(projectDir, plan);
+    // KJC-TSK-1065: the host session starts the card here; it learns which skills apply and where to read them.
+    if (starting && !flags.json) {
+      const text = [hu.title, hu.scope, ...(Array.isArray(hu.acceptance_criteria) ? hu.acceptance_criteria : [])].filter(Boolean).join(" ");
+      const { skills } = await (deps.skills ?? roleSkills)({ role: "coder", task: text, projectDir });
+      const where = (s) => (s.path ? ": read " + s.path : " (native)");
+      if (skills.length) console.log([`skills for ${label} (read them before you start):`, ...skills.map((s) => "- " + s.name + where(s))].join("\n"));
+    }
     return emit({ id: hu.id, status, claimed_by: hu.claimed_by ?? null }, `✓ ${label} → ${status}`);
   }
 
