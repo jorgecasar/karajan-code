@@ -81,9 +81,13 @@ jobs:
           # there dilutes the signal the AI receives. They follow the
           # same ≤200 LOC discipline as code.
           excludes=(
+            # KJC-BUG-0375: lockfiles wherever they live (packages/*, apps/*), not only at the root.
             ":(exclude)package-lock.json"
             ":(exclude)pnpm-lock.yaml"
             ":(exclude)yarn.lock"
+            ":(exclude)**/package-lock.json"
+            ":(exclude)**/pnpm-lock.yaml"
+            ":(exclude)**/yarn.lock"
             ":(exclude)**/*.snap"
             ":(exclude)**/*.snapshot"
             ":(exclude)dist/**"
