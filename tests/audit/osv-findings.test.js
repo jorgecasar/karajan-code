@@ -110,6 +110,18 @@ describe("parseOsvOutput", () => {
     expect(r.vulnerabilities.map(v => v.id)).toEqual(["CVE-1", "CVE-2", "CVE-3"]);
   });
 
+  // KJC-TSK-1097: the numeric CVSS score osv-scanner puts on each group, which is
+  // what tells a critical advisory (9 or more) apart; null when the group has none.
+  it("carries the group's numeric score, null when there is none", () => {
+    const raw = { results: [{ source: { path: "a/package-lock.json" }, packages: [{
+      package: { name: "astro", version: "5.18.0" },
+      vulnerabilities: [{ id: "GHSA-1" }, { id: "GHSA-2" }],
+      groups: [{ ids: ["GHSA-1"], max_severity: "9.8" }],
+    }] }] };
+    const { vulnerabilities } = parseOsvOutput(raw);
+    expect(vulnerabilities.map((v) => v.score)).toEqual([9.8, null]);
+  });
+
   it("handles empty results gracefully", () => {
     expect(parseOsvOutput({ results: [] })).toEqual({ total: 0, vulnerabilities: [] });
     expect(parseOsvOutput({})).toEqual({ total: 0, vulnerabilities: [] });
