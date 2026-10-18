@@ -65,7 +65,11 @@ El caveat que el loop engineering recalca — *los bucles desatendidos cometen e
 
 Las versiones más recientes, la última primero. Las anteriores están en [Arquitectura › Historia](/docs/es/architecture/history/) y en el [CHANGELOG](https://github.com/manufosela/karajan-code/blob/main/CHANGELOG.md).
 
-### v4.55.0: cada HU con el modelo que pide su tramo (actual)
+### v4.56.0: revisar la PR de otra persona (actual)
+
+`kj review --third-party --json` permite a un agente revisor revisar la PR de otra persona con el reviewer de kj y las reglas del repo destino, y devuelve un único JSON con el veredicto, los hallazgos y los requisitos de la PR (tamaño, commits, tests, secretos, datos personales, dependencias arriesgadas, semgrep, Sonar), sin las gates del trabajo propio y sin guardar veredicto. El Sentinel deja de leer shell donde ya decide un punto de control (actos humanos, identidad, push), `pre-push` comprueba la identidad de cada commit que sube, y el bloqueo del Steward también para un commit.
+
+### v4.55.0: cada HU con el modelo que pide su tramo
 
 El coder de cada HU corre con el modelo y la intensidad que pide su tramo (trivial, estándar o deep) y sube al más capaz cuando una iteración falla; un modelo que hayas elegido siempre gana y el reviewer nunca se enruta. `kj plan` rellena el modelo de cada HU a partir de su tramo, el HU Board puede cambiarlo y `kj report` dice cuántas HUs se enrutaron y cuántas subieron. Las reviews en paralelo en una misma máquina comparten plazas de sonar-scanner, un reviewer ya no bloquea una funcionalidad de una plataforma que simplemente no conoce, y `kj handoff add` pasa el Sentinel.
 

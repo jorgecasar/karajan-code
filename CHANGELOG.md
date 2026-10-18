@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.56.0] - 2026-10-18
+
+Minor. **kj reviews someone else's PR, and the Sentinel starts to stop reading shell.**
+
+### Added
+
+- **`kj review --range base...head --third-party --json`** (KJC-TSK-1075 to 1078, #2227): a reviewer agent reviews another person's PR with kj's reviewer, the target repo's rules and the provider it names (even the one it runs in), and gets one JSON document back (verdict, findings, suggestions, checks), exit 0 whatever the verdict. No own-work gate runs and no verdict is stored, so the mode never unlocks a commit of one's own. The checks need no tokens: size against the repo's budget, Conventional Commits, AI attribution, tests next to the code, secrets, personal data, prompt injection, dependency cooldown, semgrep on the PR's files and Sonar when SonarQube is reachable.
+- **The Steward's block also stops a commit** (KJC-TSK-1086): with `method_gates.steward: block`, `kj review` rejects before any reviewer token when the sweep has vulnerable dependencies or a red main; a missing or unreadable report blocks too.
+- **`pre-push` checks every pushed commit's identity** (KJC-TSK-1085): author and committer against the clone's declared identity, including commits from a rebase, cherry-pick, merge or tag that never ran pre-commit.
+
+### Changed
+
+- **The Sentinel stops reading shell where a checkpoint already decides** (ADR 0014 and 0015, plan in `docs/health/sentinel-retirement-plan.md`): it no longer reads the text of `kj harden --commit` or `kj identity enroll-phone` (those commands refuse an agent themselves, and now fail closed when the process ancestry cannot be read; on macOS it comes from the system `ps` by absolute path), nor git commit, tag, rebase or push for identity (now in the hooks), nor `git push` (protected main, `kj review` at commit, pre-push, stop gate). The gh identity check and the phone key file stay.
+
+### Fixed
+
+- **`kj check` judges configs like `kj harden`** (KJC-BUG-0370): no more permanent "harness drift" for a config covered by a same-tool variant, omitted because its tool is not installed, or in a root the repo excludes.
+- **`sourceKind()` is called with no argument** (KJC-BUG-0372): two critical Sonar findings in the RAG indexer.
+
 ## [4.55.0] - 2026-10-17
 
 Minor. **Each HU's coder runs on the model its tier calls for, and climbs to the top one when it fails.**
