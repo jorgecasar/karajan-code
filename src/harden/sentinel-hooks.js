@@ -475,7 +475,7 @@ import { appendFileSync, existsSync, readFileSync, realpathSync, statSync } from
 import { spawnSync } from "node:child_process";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { doc, CODE, TESTS, ROOT, BASE_BRANCHES, CARD, STATE, branchOf, foreignLane, load, save, session, violations, boardGate, pendingMoves, pendingText } from "./sentinel-lib.mjs";
+import { doc, CODE, TESTS, ROOT, BASE_BRANCHES, CARD, STATE, branchOf, foreignLane, load, save, session, boardGate, pendingMoves, pendingText } from "./sentinel-lib.mjs";
 // KJC-TSK-0915 (ADR 0014): the shell reader is a real, unit-tested module copied here as is.
 import { isGhIssueCreate, isPublishCommand, optionValues, shellSegments, stripInertQuotes, stripTextOptionValues, stripTextOnlyCommandValues } from "./sentinel-shell.mjs";
 import { DISCARD_VERBS, discardOf, foreignLost, removedFiles } from "./sentinel-discard.mjs";
@@ -485,7 +485,6 @@ const inOrder = (want, got) => { let i = 0; for (const w of got) if (w === want[
 // KJC-BUG-0333: a publish is read per simple command by the shell reader, so
 // words inside a quoted argument of another command are not a publish.
 const isPublish = isPublishCommand;
-const PUSH = /\\bgit\\s+push\\b/;
 const PROTECTED = /\\.claude\\/settings\\.json\\b|\\.karajan\\/(hooks|harness)\\//;
 let raw = "";
 process.stdin.on("data", (d) => { raw += d; });
@@ -1124,17 +1123,14 @@ process.stdin.on("end", () => {
         }
       }
       const MERGE = /\\bgh\\s+pr\\s+merge(\\s+(\\d+))?/;
-      const ADVANCE = /\\bgit\\s+commit\\b|\\bgit\\s+push\\b|\\bgh\\s+pr\\s+create\\b/; // push also falls under violations() — explicit here too (review catch)
+      // KJC-TSK-1089: git push is not read any more; pending moves still stop the turn (stop gate).
+      const ADVANCE = /\\bgit\\s+commit\\b|\\bgh\\s+pr\\s+create\\b/;
       const mergeM = cmd.match(MERGE);
       const pend = pendingMoves(load().sessions?.[sid]);
-      // KJC-BUG-0364: one board-gate decision per command; the push gate below
-      // reuses it, so a second slow gh cannot contradict the first answer.
-      let boardDecision = null;
       if (pend.length > 0 && (mergeM || ADVANCE.test(cmd))) {
         // KJC-BUG-0198: una card partida en varias PRs no puede quedar bloqueada
         // por su primera mitad (boardGate, en la lib).
-        boardDecision = boardGate(sid, pend);
-        const { blocking, carried, reason } = boardDecision;
+        const { blocking, carried, reason } = boardGate(sid, pend);
         for (const c of carried) console.error("karajan sentinel: board-sync arrastra " + c.card + " — " + c.why + ", se movera al cerrarla");
         // ADR 0015 (KJC-TSK-0925): no escape; an epic and a card split across PRs
         // are already decided above (KJC-BUG-0230, 0198).
@@ -1181,18 +1177,10 @@ process.stdin.on("end", () => {
           console.error("karajan sentinel: release check en ROJO — no se publica ni despliega hasta resolverlo:" + (items || "\\n- corre kj release check para el detalle") + "\\n(sin escape: se repara lo que el check nombra)" + doc("release"));
           process.exit(2);
         }
-      } else if (PUSH.test(cmd)) {
-        // KJC-BUG-0147: a pending move blocks the push like it blocks the commit.
-        // ADR 0015 (KJC-TSK-0925): with no escape.
-        // KJC-BUG-0262: a carried card does not block the push the commit let through.
-        const sess = load().sessions?.[sid];
-        const decision = boardDecision || boardGate(sid, pendingMoves(sess));
-        const v = violations(sess, branchOf(), decision.blocking);
-        if (v.length) {
-          console.error("karajan sentinel: git push con el metodo en rojo:\\n" + v.map((x) => "- " + x).join("\\n") + (decision.reason ? "\\n(" + decision.reason + ")" : "") + "\\nResuelve antes de empujar. Estado: kj sentinel status" + doc("push-gate"));
-          process.exit(2);
-        }
       }
+      // KJC-TSK-1089 (ADR 0015): git push is no longer read here. The base branch is
+      // protected (required checks), the card and the tests are judged at commit
+      // (kj review), and pending card moves keep the turn from ending (stop gate).
     }
   } catch { /* fail open */ }
   process.exit(0);

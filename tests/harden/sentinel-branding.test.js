@@ -46,7 +46,7 @@ describe("sentinel branding (KJC-TSK-0814)", () => {
     expect(all).toContain(DOC_URL);
     for (const anchor of [
       "card-first", "cross-lane", "identity", "board-sync", "policy",
-      "steward", "claims", "release", "supervisor", "stop-gate", "push-gate", "escapes",
+      "steward", "claims", "release", "supervisor", "stop-gate", "escapes",
     ]) {
       expect(all, `no doc link for #${anchor}`).toContain(`doc("${anchor}")`);
     }

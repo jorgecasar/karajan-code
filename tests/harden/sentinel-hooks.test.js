@@ -261,12 +261,12 @@ describe("pretooluse-sentinel script (stateful gate — the rule fires BEFORE th
     expect(run(gate, editTool(path.join(dir, "src", "a.js"))).status).toBe(2);
   });
 
-  it("blocks git push while method violations are open, allows once green", () => {
+  // KJC-TSK-1089 (ADR 0015): the push is judged at checkpoints (protected base
+  // branch, kj review at commit, the stop gate), not by reading its text here.
+  it("does not read git push for method violations any more", () => {
     run(postScript, editTool(path.join(dir, "src", "a.js")));
     const push = { session_id: "s1", tool_name: "Bash", tool_input: { command: "git push origin HEAD" } };
-    expect(run(gate, push).status).toBe(2);
-    run(postScript, editTool(path.join(dir, "tests", "a.test.js")));
-    expect(run(gate, push).status).toBe(0);
+    expect(run(gate, push).stderr).not.toMatch(/git push con el metodo en rojo/);
   });
 
   it("blocks npm publish when the release check is red, with no escape, and fails open without kj", () => {
