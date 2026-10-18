@@ -87,20 +87,21 @@ export const isGhIssueCreate = (cmd) => shellSegments(cmd).some((words) => {
 });
 
 // KJC-BUG-0204: the real command puts flags between the verb's words
-// (firebase --account a@b deploy), so they are read in order, not adjacent.
-const PUBLISH_VERBS = [["npm", "publish"], ["firebase", "deploy"], ["gh", "release", "create"]];
+// (npm --prefix x publish), so they are read in order, not adjacent.
+// KJC-BUG-0373: only a release of the package; a deploy (database rules, a site)
+// is not one, and gating it kept an open database open.
+const PUBLISH_VERBS = [["npm", "publish"], ["gh", "release", "create"]];
 // Known options that take a separate value: that value is not a subcommand word
 // (npm --tag publish test does not publish). An unknown option is not skipped, so
 // a real publish behind it is still read (a false positive costs less than a miss).
 const VALUE_OPTIONS = {
   npm: ["--prefix", "--tag", "--registry", "--userconfig", "--workspace", "-w", "--otp", "--access", "--cache", "--loglevel", "-C"],
-  firebase: ["--account", "--project", "-P", "--config", "-c", "--only", "--except", "--token", "--message", "-m"],
   gh: ["--repo", "-R", "--hostname"],
 };
 
 /**
- * KJC-BUG-0333 (#2093): a simple command whose head is npm, firebase or gh and
- * whose own words then say publish/deploy/release create. Words inside a quoted
+ * KJC-BUG-0333 (#2093): a simple command whose head is npm or gh and whose own
+ * words then say publish/release create. Words inside a quoted
  * argument of another command (a kj rag query text, a commit message) are one
  * word of THAT command, so they never read as a publish.
  * @param {string} cmd

@@ -16,7 +16,6 @@ describe("isPublishCommand (KJC-BUG-0333)", () => {
     for (const cmd of [
       "npm publish --ignore-scripts --otp=123456",
       "npm --prefix /x publish /x --otp=1",
-      "firebase --account a@b --project p --config c.json deploy --only hosting:main",
       "gh release create v1.2.3 --notes-file n.md",
       "cd x && /usr/bin/npm publish",
       "npm test; npm publish",
@@ -31,7 +30,16 @@ describe("isPublishCommand (KJC-BUG-0333)", () => {
       "npm test && kj pr-size",
       // the value of an option is not the subcommand
       "npm --tag publish test",
-      "firebase --project deploy hosting:channel:list",
+    ]) expect(isPublishCommand(cmd), cmd).toBe(false);
+  });
+
+  // KJC-BUG-0373: a deploy is not a release of the package. Gating it blocked a
+  // `firebase deploy --only database` that would have closed an open database.
+  it("does not read a deploy as a publish, whatever it deploys", () => {
+    for (const cmd of [
+      "firebase --account a@b deploy --only database",
+      "firebase --account a@b --project p --config c.json deploy --only hosting:main",
+      "firebase deploy",
     ]) expect(isPublishCommand(cmd), cmd).toBe(false);
   });
 });

@@ -352,7 +352,9 @@ describe("pretooluse-sentinel script (stateful gate — the rule fires BEFORE th
     }
   });
 
-  it("KJC-BUG-0204: un check en rojo no bloquea el comando que lo repara, y publicar sigue exigiendo todo verde", () => {
+  // KJC-BUG-0373: a deploy is no longer read at all (it is not a release of the
+  // package); publishing still needs the whole check green.
+  it("KJC-BUG-0204/0373: un despliegue no se lee, y publicar sigue exigiendo todo verde", () => {
     const bin = path.join(dir, "remedybin");
     fs.mkdirSync(bin);
     // kj de verdad decide: el fake solo reproduce SU contrato (--for-command),
@@ -369,10 +371,11 @@ describe("pretooluse-sentinel script (stateful gate — the rule fires BEFORE th
     );
     const env = { PATH: `${bin}:${process.env.PATH}` };
     const ask = (command) => run(gate, { session_id: "s1", tool_name: "Bash", tool_input: { command } }, env);
-    const deploy = ask("firebase --account a@b --project p deploy --only hosting:main");
-    expect(deploy.status).toBe(0);
-    // Dicho en voz alta: el paso se explica, no se aplica en silencio.
-    expect(deploy.stderr).toMatch(/landing desplegada/);
+    for (const command of ["firebase --account a@b --project p deploy --only hosting:main", "firebase --account a@b deploy --only database"]) {
+      const deploy = ask(command);
+      expect(deploy.status, command).toBe(0);
+      expect(deploy.stderr, command).not.toMatch(/release check/);
+    }
     const publish = ask("npm publish --otp=123456");
     expect(publish.status).toBe(2);
     expect(publish.stderr).toMatch(/landing desplegada/);
@@ -385,7 +388,7 @@ describe("pretooluse-sentinel script (stateful gate — the rule fires BEFORE th
     const env = { PATH: `${bin}:${process.env.PATH}` };
     const pub = (command, extra = {}) => run(gate, { session_id: "s1", tool_name: "Bash", tool_input: { command } }, { ...env, ...extra });
     expect(pub("KJ_ALLOW_RELEASE=1 npm publish --ignore-scripts --otp=123456").status).toBe(2);
-    expect(pub("KJ_ALLOW_RELEASE=1 firebase deploy --only hosting").status).toBe(2);
+    expect(pub("KJ_ALLOW_RELEASE=1 gh release create v1.0.0").status).toBe(2);
     expect(pub("npm publish && echo ok", { KJ_ALLOW_RELEASE: "1" }).status).toBe(2);
     expect(state().escape_events?.some((e) => e.escape === "KJ_ALLOW_RELEASE")).toBeFalsy();
   });

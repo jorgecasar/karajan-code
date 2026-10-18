@@ -77,7 +77,7 @@ A hard datum in a PR body or final message that is DENIED by this turn's own out
 
 ## release
 
-`kj release check` must be green before anything publishes or deploys, and the guard recognizes the verb wherever the flags sit (`firebase --project p deploy --only hosting` is a deploy).
+`kj release check` must be green before the package is released (`npm publish`, `gh release create`), and the guard recognizes the verb wherever the flags sit (`npm --prefix x publish` is a publish). A deploy is not read (KJC-BUG-0373): deploying database rules or a site is not a release of the package, and gating it kept an open database from being closed.
 
 A red check never blocks the command that **repairs** it. The chicken-and-egg used to be the landing: the check wanted the site deployed with the new version, the guard blocked the deploy, and the only way out was switching the whole gate off. Now the item declares its own remedy:
 

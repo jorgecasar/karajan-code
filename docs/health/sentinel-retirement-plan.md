@@ -28,7 +28,7 @@ A guard leaves the Sentinel only when a checkpoint already gives its protection,
 | 16 | `git add` blanket / runtime files | raw text | runtime files: pre-commit rejects them. Blanket `git add -A` sweeping unrelated files: no checkpoint | runtime part retirable; blanket part stays |
 | 17 | Board-sync on merge/advance | raw text | move to a merge-time check (post-merge hook or CI) | redesign |
 | 18 | Claims in a PR body | raw text | CI claims check | retire after CI has it |
-| 19 | Release check before publish/deploy | raw text | `kj release check` in the release script and `prepublishOnly` | retire after the script runs it |
+| 19 | Release check before publish/deploy | raw text | deploy part retired (KJC-BUG-0373: it blocked a `firebase deploy --only database` that would close an open database). Publish part: no unbypassable checkpoint yet, since publishing a tarball runs no lifecycle script | deploy retired; publish stays |
 | 20 | Push gate | raw text | protected `main`, `kj review` at commit (card, tests), pre-push (identity), stop gate (pending moves) | retired (KJC-TSK-1089) |
 
 Edit/Write gates (steward, card-first, rag-first) read structural signals (the tool's path) and stay, as ADR 0015 allows.

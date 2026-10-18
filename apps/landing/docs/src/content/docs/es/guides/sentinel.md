@@ -77,7 +77,7 @@ Un dato firme en el cuerpo de un PR o en el mensaje final que quede DESMENTIDO p
 
 ## release
 
-`kj release check` debe estar en verde antes de que se publique o despliegue nada, y el guard reconoce el verbo donde quiera que caigan los flags (`firebase --project p deploy --only hosting` es un despliegue).
+`kj release check` debe estar en verde antes de publicar el paquete (`npm publish`, `gh release create`), y el guard reconoce el verbo donde quiera que caigan los flags (`npm --prefix x publish` es publicar). Un despliegue no se lee (KJC-BUG-0373): desplegar reglas de base de datos o un sitio no es publicar el paquete, y bloquearlo impidió cerrar una base de datos abierta.
 
 Un check en rojo nunca bloquea el comando que lo **repara**. El huevo-y-gallina era la landing: el check pedía el sitio desplegado con la versión nueva, el guard bloqueaba el despliegue, y la única salida era apagar el gate entero. Ahora el item declara su propio remedio:
 
