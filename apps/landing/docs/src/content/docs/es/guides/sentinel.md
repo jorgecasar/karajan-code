@@ -138,7 +138,7 @@ El turno no puede terminar mientras el método esté en rojo: suite fallando, di
 
 ## push-gate
 
-Igual que el stop gate, en el momento del `git push`: nada sale de la máquina con el método en rojo.
+El Sentinel ya no lee `git push` (ADR 0015): lo que comprobaba se impone donde el agente no llega. La rama base está protegida con los checks obligatorios del método, la card y los tests se juzgan al commitear con `kj review`, `pre-push` comprueba la identidad de cada commit que envía, y las cards pendientes de mover impiden terminar el turno (stop gate).
 
 ## attribution
 
