@@ -24,19 +24,19 @@ A guard leaves the Sentinel only when a checkpoint already gives its protection,
 | 12 | Lane guard MONO-0 (cd, quoted paths, substitutions, path tokens) | raw text | host sandbox limited to the lane directory | retire after the sandbox rule; largest source of false positives |
 | 13 | Repo writes through Bash | raw text | card-first and rag-first are enforced at commit; the Steward's block too since KJC-TSK-1086. Still only here: unsealed governance files (`kj.config.yml`, `.ragignore`) written through Bash | waits for the sandbox to deny those paths |
 | 14 | Policy engine on the Bash input | whole input | policy gate at commit (`kj review`) and CI policy job | retire from Bash |
-| 15 | `--no-verify` / `core.hooksPath` | raw text | CI required checks and branch protection catch an unhooked commit | waits for branch protection on `main` (an admin act; `main` is unprotected today) |
+| 15 | `--no-verify` / `core.hooksPath` | raw text | `main` is protected since 2026-10-18, but no required check proves each commit had its cross-AI verdict: a commit that skipped the hook skipped the review | waits for a CI check on the published verdicts (KJC-TSK-1088) |
 | 16 | `git add` blanket / runtime files | raw text | runtime files: pre-commit rejects them. Blanket `git add -A` sweeping unrelated files: no checkpoint | runtime part retirable; blanket part stays |
 | 17 | Board-sync on merge/advance | raw text | move to a merge-time check (post-merge hook or CI) | redesign |
 | 18 | Claims in a PR body | raw text | CI claims check | retire after CI has it |
 | 19 | Release check before publish/deploy | raw text | `kj release check` in the release script and `prepublishOnly` | retire after the script runs it |
-| 20 | Push gate | raw text | pre-push hook plus branch protection on `main` | waits for branch protection |
+| 20 | Push gate | raw text | protected `main`, `kj review` at commit (card, tests), pre-push (identity), stop gate (pending moves) | retired (KJC-TSK-1089) |
 
 Edit/Write gates (steward, card-first, rag-first) read structural signals (the tool's path) and stay, as ADR 0015 allows.
 
 ## What the remaining retirements wait for (2026-10-18)
 
 - **The host sandbox** (pilot KJC-TSK-1083): it works on this machine (AppArmor profile for bubblewrap) and blocks writes to sibling repos and `.karajan/harness` at the OS level. `gh` is solved (`excludedCommands: ["gh *"]`); a local SonarQube still needs the proxy (the sandbox sets `NO_PROXY=localhost`). Unblocks #4, #12, #13 and the phone key file.
-- **Branch protection on `main`** with the method's required checks (an admin act that kj prints and never runs). Unblocks #15 and #20.
+- **Branch protection on `main`** with the method's required checks: done on 2026-10-18 (scan, pack-smoke, policy-check, quality). Unblocked #20; #15 also needs a required check on the published verdicts (KJC-TSK-1088).
 
 ## Sandbox pilot (KJC-TSK-1083, 2026-10-18)
 

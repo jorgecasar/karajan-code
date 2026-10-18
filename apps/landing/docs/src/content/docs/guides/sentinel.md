@@ -138,7 +138,7 @@ The turn cannot end while the method is red: suite failing, unreviewed diffs, pe
 
 ## push-gate
 
-Same as the stop gate, at the moment of `git push`: nothing leaves the machine with the method red.
+The Sentinel no longer reads `git push` (ADR 0015): what it checked is enforced where the agent cannot reach. The base branch is protected with the method's required checks, the card and the tests are judged at commit by `kj review`, `pre-push` checks the identity of every commit it sends, and pending card moves keep the turn from ending (stop gate).
 
 ## attribution
 

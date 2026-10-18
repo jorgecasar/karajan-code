@@ -70,9 +70,11 @@ describe("board-sync gate", () => {
     expect(state().sessions.s1.pending_moves[0]).toMatchObject({ card: "KJC-TSK-0042", pr: 21 });
   });
 
-  it("con una card pendiente: commit, push, nuevo PR y cierre de turno se deniegan nombrando card+PR y el remedio", () => {
+  it("con una card pendiente: commit, nuevo PR y cierre de turno se deniegan nombrando card+PR y el remedio", () => {
     merged(12);
-    for (const cmd of ["git commit -m x", "git push origin feat/x", "gh pr create --title t", "gh pr merge 13"]) {
+    // KJC-TSK-1089 (ADR 0015): el push ya no se lee; la card pendiente la sigue parando el cierre de turno.
+    expect(bash("git push origin feat/x").status).toBe(0);
+    for (const cmd of ["git commit -m x", "gh pr create --title t", "gh pr merge 13"]) {
       const r = bash(cmd);
       expect(r.status).toBe(2);
       expect(r.stderr).toContain("KJC-TSK-0042");
@@ -89,8 +91,7 @@ describe("board-sync gate", () => {
   it("KJ_ALLOW_BOARD ya no abre nada (ADR 0015); al mover la card todo vuelve a pasar", () => {
     merged(12);
     expect(bash("KJ_ALLOW_BOARD=1 git commit -m x").status).toBe(2);
-    expect(bash("git push origin feat/x").status).toBe(2);
-    expect(bash("KJ_ALLOW_BOARD=1 git push origin feat/x").status).toBe(2);
+    expect(bash("KJ_ALLOW_BOARD=1 gh pr create --title t").status).toBe(2);
     const st = state();
     st.sessions.s1.pending_moves = [];
     fs.writeFileSync(statePath, JSON.stringify(st));
@@ -156,9 +157,8 @@ describe("board-sync gate", () => {
     const allowed = bash("git commit -m x", { PATH: bin + ":" + process.env.PATH });
     expect(allowed.status).toBe(0);
     expect(allowed.stderr).toMatch(/arrastra KJC-TSK-0042/);
-    // KJC-BUG-0262: y el push de esa misma PR tambien, como el commit.
-    expect(bash("git push -u origin feat/KJC-TSK-0042-x", { PATH: bin + ":" + process.env.PATH }).status).toBe(0);
-    expect(bash("git push -u origin feat/KJC-TSK-0042-x").status).toBe(2);
+    // KJC-TSK-1089: el push ya no se lee; la pendiente la sigue parando el Stop gate.
+    expect(bash("git push -u origin feat/KJC-TSK-0042-x").status).toBe(0);
     // La pendiente NO se borra: el tablero sigue debiendo el movimiento, y el
     // Stop gate sigue impidiendo terminar el turno.
     expect(state().sessions.s1.pending_moves).toHaveLength(1);
@@ -194,21 +194,21 @@ describe("board-sync gate", () => {
 
   // KJC-BUG-0364 (#2205): a git push asked board-gate twice; the first answer
   // carried the card, a second slow or failed gh blocked it. One decision per command.
-  it("a push asks board-gate once and keeps its answer", () => {
+  // KJC-TSK-1089 (ADR 0015): a push no longer asks board-gate at all; the pending
+  // move keeps the turn from ending instead (stop gate).
+  it("a push does not ask board-gate, and the pending move still stops the turn", () => {
     merged(12);
     const bin = path.join(dir, "fakekj2");
     fs.mkdirSync(bin);
     const calls = path.join(dir, "kj-calls");
-    const carried = JSON.stringify({ blocking: [], carried: [{ card: "KJC-TSK-0042", why: "sigue entregándose en una PR abierta" }] });
-    const blocked = JSON.stringify({ blocking: [{ card: "KJC-TSK-0042", pr: 12 }], carried: [], reason: "gh no respondió" });
-    fs.writeFileSync(path.join(bin, "kj"), `#!/bin/sh\necho x >> ${calls}\nif [ "$(wc -l < ${calls})" -eq 1 ]; then echo '${carried}'; exit 0; fi\necho '${blocked}'\nexit 2\n`, { mode: 0o755 });
+    fs.writeFileSync(path.join(bin, "kj"), `#!/bin/sh\necho x >> ${calls}\nexit 2\n`, { mode: 0o755 });
     const res = spawnSync("node", [gate], {
       input: JSON.stringify({ session_id: "s1", tool_name: "Bash", tool_input: { command: "git push origin feat/KJC-TSK-0042-demo" } }),
       encoding: "utf8", cwd: dir, env: { ...process.env, ...env, PATH: `${bin}:${process.env.PATH}` },
     });
-    expect(res.stderr).toMatch(/arrastra KJC-TSK-0042/);
-    expect(res.stderr).not.toMatch(/en rojo/);
-    expect(fs.readFileSync(calls, "utf8").trim().split("\n")).toHaveLength(1);
+    expect(res.status).toBe(0);
+    expect(fs.existsSync(calls)).toBe(false);
+    expect(endTurn().status).toBe(2);
   });
 
   // KJC-BUG-0363 (#2201): when kj could not check (gh as another account), the
