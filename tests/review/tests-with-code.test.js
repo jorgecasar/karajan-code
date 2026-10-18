@@ -4,7 +4,7 @@
 // reviewer; test-PRESENT belongs to the gate.
 
 import { describe, it, expect } from "vitest";
-import { checkTestsWithCode } from "../../src/review/tests-with-code.js";
+import { checkTestsWithCode, sourceFilesOf } from "../../src/review/tests-with-code.js";
 
 const run = (files, cfg = {}, env = {}) => checkTestsWithCode({ config: cfg, stagedFiles: files, env });
 
@@ -84,5 +84,15 @@ describe("checkTestsWithCode", () => {
     expect(run(["main.go", "checks/main_check.go"], cfg).mode).toBe("pass");
     expect(run(["main.go"], cfg).mode).toBe("warn");
     expect(run(["src/app.js"], cfg).mode).toBe("pass"); // .js not a source ext here
+  });
+});
+
+// KJC-BUG-0377: a rebuilt docs site renames its _astro/*.js; nobody wrote those
+// files, so no gate (tests, RAG, Sonar) may treat them as source.
+describe("sourceFilesOf: generated output is not source", () => {
+  it("leaves out build output and keeps the code", () => {
+    const files = ["apps/landing/public/docs/_astro/page.cNngjUgL.js", "dist/kj.js", "packages/x/build/a.js", "src/a.js"];
+    expect(sourceFilesOf({}, files).sources).toEqual(["src/a.js"]);
+    expect(checkTestsWithCode({ stagedFiles: files.slice(0, 3) }).mode).toBe("pass");
   });
 });

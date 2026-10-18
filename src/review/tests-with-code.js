@@ -8,7 +8,9 @@
  * No escape (ADR 0015): deletions and comment-only cleanups already pass.
  */
 
-const DEFAULT_TEST_PATTERNS = ["/tests/", "/__tests__/", ".test.", ".spec."];
+import { isGenerated } from "./loc-budget.js";
+
+const DEFAULT_TEST_PATTERNS =["/tests/", "/__tests__/", ".test.", ".spec."];
 const DEFAULT_SOURCE_EXTS = [".js", ".jsx", ".ts", ".tsx", ".py", ".go", ".java", ".rb", ".php", ".cs"];
 
 /**
@@ -22,8 +24,9 @@ export function sourceFilesOf(config = {}, files = []) {
   // Staged paths are repo-relative (no leading slash) — normalize so the
   // "/tests/" style patterns also match the top-level tests directory.
   const isTest = (f) => patterns.some((p) => `/${f}`.includes(p));
+  // KJC-BUG-0377: build output (a rebuilt docs site's _astro/*.js) is nobody's code.
   return {
-    sources: files.filter((f) => !isTest(f) && exts.some((e) => f.endsWith(e))),
+    sources: files.filter((f) => !isTest(f) && !isGenerated(f) && exts.some((e) => f.endsWith(e))),
     hasTests: files.some(isTest),
   };
 }

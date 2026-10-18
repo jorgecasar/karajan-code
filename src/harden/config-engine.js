@@ -48,10 +48,13 @@ export function configLeftAlone(cfg, altDirs) {
   const variant = findEquivalentIn(altDirs, id);
   if (variant) return { action: "covered", by: variant };
   // KJC-BUG-0137: no tool ⇒ no config — report the actionable gap instead.
-  if (cfg.requires && !hasTool(altDirs, cfg.requires)) {
-    return { action: "omitted", note: `${cfg.requires} is not installed — npm i -D ${cfg.requires}, then re-run kj harden` };
-  }
-  return null;
+  return missingToolGap(cfg, altDirs);
+}
+
+/** KJC-BUG-0376: the first tool the config needs and the project lacks, as a report entry. */
+function missingToolGap(cfg, dirs) {
+  const missing = [cfg.requires ?? []].flat().find((tool) => !hasTool(dirs, tool));
+  return missing ? { action: "omitted", note: `${missing} is not installed — npm i -D ${missing}, then re-run kj harden` } : null;
 }
 
 function writeFile(target, content) {
@@ -87,6 +90,12 @@ function seedInto(targetDir, configs, dryRun, prefix, results, altDirs = [target
     const source = exists ? readFileSync(target, "utf8") : "";
     if (exists && !source.includes(`kj:managed:${cfg.blockId}`)) {
       results.push({ file, action: "skipped" });
+      continue;
+    }
+    // KJC-BUG-0376: never rewrite a managed block into one the project cannot load.
+    const gap = exists ? missingToolGap(cfg, altDirs) : null;
+    if (gap) {
+      results.push({ file, ...gap });
       continue;
     }
     const { content, action } = upsertManagedBlock({

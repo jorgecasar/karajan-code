@@ -72,6 +72,19 @@ export const ESLINT_BODY = [
   "];",
 ].join("\n");
 
+// KJC-BUG-0376: a TypeScript root gets the same rules with the TypeScript parser;
+// without it ESLint 9 fails every .ts/.tsx file with "Parsing error".
+const JS_LANGUAGE_OPTIONS = 'languageOptions: { ecmaVersion: 2025, sourceType: "module" }';
+if (!ESLINT_BODY.includes(JS_LANGUAGE_OPTIONS)) throw new Error("config-templates: ESLINT_BODY lost its languageOptions line");
+export const ESLINT_TS_BODY = [
+  'import tsParser from "@typescript-eslint/parser";',
+  "",
+  ESLINT_BODY.replace(
+    JS_LANGUAGE_OPTIONS,
+    'languageOptions: { parser: tsParser, ecmaVersion: 2025, sourceType: "module", parserOptions: { ecmaFeatures: { jsx: true } } }',
+  ),
+].join("\n");
+
 // Ruff covers lint + format for Python; `UP` (pyupgrade) is the analogue of
 // the ES2025 deprecated-API ban — it rewrites legacy idioms to modern Python.
 export const RUFF_BODY = [
@@ -114,6 +127,9 @@ export const JS_CONFIGS = [
   { file: "eslint.config.js", blockId: "eslint", style: "slash", body: ESLINT_BODY, requires: "eslint" },
   { file: ".prettierrc.json", json: true, body: PRETTIER_BODY, requires: "prettier" },
 ];
+export const TS_CONFIGS = JS_CONFIGS.map((cfg) => (cfg.file === "eslint.config.js"
+  ? { ...cfg, body: ESLINT_TS_BODY, requires: ["eslint", "@typescript-eslint/parser"] }
+  : cfg));
 export const PY_CONFIGS = [{ file: "ruff.toml", blockId: "ruff", style: "hash", body: RUFF_BODY }];
 export const GO_CONFIGS = [{ file: ".golangci.yml", blockId: "golangci", style: "hash", body: GOLANGCI_BODY }];
 
@@ -135,7 +151,7 @@ export const GENERATED_CONFIG_FILES = new Set(
 /** Lint/format configs by detected language. Unknown ⇒ universal only. */
 export const CONFIGS_BY_LANGUAGE = {
   javascript: JS_CONFIGS,
-  typescript: JS_CONFIGS,
+  typescript: TS_CONFIGS,
   python: PY_CONFIGS,
   go: GO_CONFIGS,
   php: PHP_CONFIGS,
