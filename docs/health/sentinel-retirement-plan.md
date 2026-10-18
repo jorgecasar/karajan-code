@@ -38,6 +38,17 @@ Edit/Write gates (steward, card-first, rag-first) read structural signals (the t
 - **The host sandbox** (pilot KJC-TSK-1083): it works on this machine (AppArmor profile for bubblewrap) and blocks writes to sibling repos and `.karajan/harness` at the OS level. `gh` is solved (`excludedCommands: ["gh *"]`); a local SonarQube still needs the proxy (the sandbox sets `NO_PROXY=localhost`). Unblocks #4, #12, #13 and the phone key file.
 - **Branch protection on `main`** with the method's required checks (an admin act that kj prints and never runs). Unblocks #15 and #20.
 
+## Sandbox pilot (KJC-TSK-1083, 2026-10-18)
+
+Tried on this repo with `.claude/settings.local.json`:
+
+- **Works:** writes to sibling repos and to `.karajan/harness` are refused by the OS (EROFS), however the command is disguised; tests, fetch/push over ssh-agent, npm, codex and firebase run fine.
+- **Needs exclusions:** `gh` (its tokens live in the keyring over D-Bus) and `kj review` (a local SonarQube is unreachable: the sandbox sets `NO_PROXY=localhost` and the network namespace blocks the direct connection). `excludedCommands: ["gh *", "kj review *"]` works, but only for simple commands: a chain stays sandboxed if one segment does not match.
+- **Friction:** `.git/config` is a protected path, so creating a branch with an upstream and `push -u` fail; bubblewrap's mount points (`.bashrc`, `.gitconfig`, `.idea`...) show up as untracked inside the sandbox (not on disk).
+- **Prerequisite:** on Ubuntu 24.04 bubblewrap needs an AppArmor profile for `/usr/bin/bwrap` (`userns`). With `allowUnsandboxedCommands: false` and a sandbox that cannot start, no Bash command runs at all.
+
+Decision: the sandbox stays off until `kj harden` configures it with these lessons (KJC-TSK-1087).
+
 ## Order
 
 1. Host sandbox rule: `kj harden` configures the host's sandbox so writes stay in the lane and `.karajan/harness` is read-only. Unblocks #4 and #12.
