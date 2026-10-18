@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useParams, useRouter } from "next/navigation";
 import clsx from "clsx";
 import { useTranslation } from "@/lib/i18n";
 import { Card, CardHeader, CardBody } from "@/components/ui/Card";
@@ -103,21 +103,110 @@ function CollapsibleSection({
   );
 }
 
-/* ─── Page Component ─────────────────────────────────────── */
+/* ─── Scores ─────────────────────────────────────────────── */
 
-export default function SignalDetailPage({
-  params,
-}: {
-  params: { id: string };
-}) {
-  const { id } = params;
-  const { t } = useTranslation();
-  const router = useRouter();
+// The API may send decimals as strings; the types say number.
+const toNumber = (value: number | string) => (typeof value === "string" ? parseFloat(value) : value);
 
+function compositeScore(signal: SignalDetail): number | null {
+  const scientific = signal.scientific_strength_score;
+  const strategic = signal.strategic_relevance_score;
+  if (scientific == null || strategic == null) return null;
+  return (toNumber(scientific) + toNumber(strategic)) / 2;
+}
+
+function ScoreOrDash({ score, label }: { score: number | null; label: string }) {
+  if (score == null) {
+    return (
+      <div className="flex flex-col items-center gap-1">
+        <span className="text-lg font-bold text-[var(--text-tertiary)]">—</span>
+        <span className="text-2xs font-medium text-[var(--text-tertiary)]">{label}</span>
+      </div>
+    );
+  }
+  return <ScoreBadge score={score} label={label} variant="circle" size="lg" />;
+}
+
+function ScoreReasons({ title, reasons }: { title: string; reasons: Record<string, unknown> }) {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)] hover:text-radar-600 transition-colors focus:outline-none focus:underline"
+        aria-expanded={isOpen}
+      >
+        <svg
+          className={clsx("h-3.5 w-3.5 transition-transform", isOpen && "rotate-90")}
+          fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+        </svg>
+        {title}
+      </button>
+      {isOpen && (
+        <dl className="mt-2 animate-fade-in space-y-1.5 pl-6">
+          {Object.entries(reasons).map(([key, value]) => (
+            <div key={key} className="text-sm">
+              <dt className="font-medium text-[var(--text-primary)] inline">{key}: </dt>
+              <dd className="text-[var(--text-secondary)] inline">{String(value)}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </div>
+  );
+}
+
+/* ─── Data loading ───────────────────────────────────────── */
+
+const isNotFoundError = (error: unknown) =>
+  error instanceof Error && "status" in error && (error as { status: number }).status === 404;
+
+/** Loads one signal; a late answer for a previous id is dropped. */
+function useSignal(id: string, onLoaded: (data: SignalDetail) => void) {
   const [signal, setSignal] = useState<SignalDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const loaded = useRef(onLoaded);
+  loaded.current = onLoaded;
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoading(true);
+    setHasError(false);
+    setNotFound(false);
+    fetchSignalById(id)
+      .then((data) => {
+        if (cancelled) return;
+        setSignal(data);
+        loaded.current(data);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        if (isNotFoundError(error)) setNotFound(true);
+        else setHasError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  return { signal, setSignal, isLoading, hasError, notFound };
+}
+
+/* ─── Page Component ─────────────────────────────────────── */
+
+export default function SignalDetailPage() {
+  // KJC-TSK-1095: next 15 hands pages their params as a Promise; a client page reads them here.
+  const { id } = useParams<{ id: string }>();
+  const { t } = useTranslation();
+  const router = useRouter();
 
   /* Review state */
   const [reviewStatus, setReviewStatus] = useState<ReviewStatus>("pending");
@@ -125,45 +214,10 @@ export default function SignalDetailPage({
   const [isSavingReview, setIsSavingReview] = useState(false);
   const [reviewMessage, setReviewMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  /* Score reasons toggle */
-  const [showScientificReasons, setShowScientificReasons] = useState(false);
-  const [showStrategicReasons, setShowStrategicReasons] = useState(false);
-
-  /* Fetch signal */
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadSignal() {
-      setIsLoading(true);
-      try {
-        const data = await fetchSignalById(id);
-        if (!cancelled) {
-          setSignal(data);
-          setReviewStatus(data.review_status);
-          setReviewNotes(data.reviewer_notes ?? "");
-          setHasError(false);
-        }
-      } catch (error: unknown) {
-        if (!cancelled) {
-          const isNotFound = error instanceof Error && "status" in error && (error as { status: number }).status === 404;
-          if (isNotFound) {
-            setNotFound(true);
-          } else {
-            setHasError(true);
-          }
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    loadSignal();
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
+  const { signal, setSignal, isLoading, hasError, notFound } = useSignal(id, (data) => {
+    setReviewStatus(data.review_status);
+    setReviewNotes(data.reviewer_notes ?? "");
+  });
 
   /* Save review */
   const handleSaveReview = useCallback(async () => {
@@ -183,7 +237,7 @@ export default function SignalDetailPage({
       setIsSavingReview(false);
       setTimeout(() => setReviewMessage(null), 4000);
     }
-  }, [signal, reviewStatus, reviewNotes, t]);
+  }, [signal, setSignal, reviewStatus, reviewNotes, t]);
 
   /* Loading */
   if (isLoading) {
@@ -299,40 +353,11 @@ export default function SignalDetailPage({
           {/* Scores */}
           <div className="flex flex-wrap items-start gap-8">
             <div className="flex items-center gap-6">
-              {signal.scientific_strength_score != null ? (
-                <ScoreBadge
-                  score={signal.scientific_strength_score}
-                  label="Scientific"
-                  variant="circle"
-                  size="lg"
-                />
-              ) : (
-                <div className="flex flex-col items-center gap-1">
-                  <span className="text-lg font-bold text-[var(--text-tertiary)]">—</span>
-                  <span className="text-2xs font-medium text-[var(--text-tertiary)]">Scientific</span>
-                </div>
-              )}
-              {signal.strategic_relevance_score != null ? (
-                <ScoreBadge
-                  score={signal.strategic_relevance_score}
-                  label="Strategic"
-                  variant="circle"
-                  size="lg"
-                />
-              ) : (
-                <div className="flex flex-col items-center gap-1">
-                  <span className="text-lg font-bold text-[var(--text-tertiary)]">—</span>
-                  <span className="text-2xs font-medium text-[var(--text-tertiary)]">Strategic</span>
-                </div>
-              )}
+              <ScoreOrDash score={signal.scientific_strength_score} label="Scientific" />
+              <ScoreOrDash score={signal.strategic_relevance_score} label="Strategic" />
               <div className="flex flex-col items-center gap-1">
                 <span className="text-2xl font-bold text-[var(--text-primary)] tabular-nums">
-                  {formatScore(
-                    signal.scientific_strength_score != null && signal.strategic_relevance_score != null
-                      ? ((typeof signal.scientific_strength_score === "string" ? parseFloat(signal.scientific_strength_score) : signal.scientific_strength_score) +
-                         (typeof signal.strategic_relevance_score === "string" ? parseFloat(signal.strategic_relevance_score) : signal.strategic_relevance_score)) / 2
-                      : null
-                  )}
+                  {formatScore(compositeScore(signal))}
                 </span>
                 <span className="text-2xs font-medium text-[var(--text-tertiary)]">
                   {t("detail.composite")}
@@ -344,60 +369,10 @@ export default function SignalDetailPage({
           {/* Score Reasons */}
           <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
             {signal.scientific_strength_reasons && (
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setShowScientificReasons((prev) => !prev)}
-                  className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)] hover:text-radar-600 transition-colors focus:outline-none focus:underline"
-                  aria-expanded={showScientificReasons}
-                >
-                  <svg
-                    className={clsx("h-3.5 w-3.5 transition-transform", showScientificReasons && "rotate-90")}
-                    fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-                  </svg>
-                  {t("detail.scientificReasons")}
-                </button>
-                {showScientificReasons && (
-                  <dl className="mt-2 animate-fade-in space-y-1.5 pl-6">
-                    {Object.entries(signal.scientific_strength_reasons).map(([key, value]) => (
-                      <div key={key} className="text-sm">
-                        <dt className="font-medium text-[var(--text-primary)] inline">{key}: </dt>
-                        <dd className="text-[var(--text-secondary)] inline">{String(value)}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                )}
-              </div>
+              <ScoreReasons title={t("detail.scientificReasons")} reasons={signal.scientific_strength_reasons} />
             )}
             {signal.strategic_relevance_reasons && (
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setShowStrategicReasons((prev) => !prev)}
-                  className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)] hover:text-radar-600 transition-colors focus:outline-none focus:underline"
-                  aria-expanded={showStrategicReasons}
-                >
-                  <svg
-                    className={clsx("h-3.5 w-3.5 transition-transform", showStrategicReasons && "rotate-90")}
-                    fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-                  </svg>
-                  {t("detail.strategicReasons")}
-                </button>
-                {showStrategicReasons && (
-                  <dl className="mt-2 animate-fade-in space-y-1.5 pl-6">
-                    {Object.entries(signal.strategic_relevance_reasons).map(([key, value]) => (
-                      <div key={key} className="text-sm">
-                        <dt className="font-medium text-[var(--text-primary)] inline">{key}: </dt>
-                        <dd className="text-[var(--text-secondary)] inline">{String(value)}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                )}
-              </div>
+              <ScoreReasons title={t("detail.strategicReasons")} reasons={signal.strategic_relevance_reasons} />
             )}
           </div>
         </CardBody>
