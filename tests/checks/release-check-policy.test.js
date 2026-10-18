@@ -36,6 +36,7 @@ describe("release check — policy at the effect boundary", () => {
     expect(c.detail).toMatch(/v1\.0\.0\.\.HEAD/);
     expect(c.detail).toContain("roles.coder.write.deny");
     expect(c.detail).toContain("prod.secret");
+    expect(c.detail).not.toMatch(/kj harden/); // only the supervisor gets the reseal remedy
   });
 
   // KJC-BUG-0178 — the supervisor seal is written BY the supervisor rule it
@@ -109,6 +110,9 @@ describe("release check — first release, no previous tag", () => {
     expect(red.detail).toContain("defaults.supervisor.write");
     expect(red.detail).toContain(".karajan/hooks/pre-commit");
     expect(red.detail).not.toContain(".claude/settings.json"); // still as the setup left it
+    // KJC-BUG-0374: a supervisor file the seal does not back is fixed by regenerating
+    // and resealing, and the check says so instead of leaving it as old history.
+    expect(red.detail).toMatch(/kj harden, then ask your user for kj harden --commit/);
   });
 
   // KJC-TSK-1033: a policy change committed after the setup without the human's seal.

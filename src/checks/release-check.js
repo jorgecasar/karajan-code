@@ -70,7 +70,13 @@ async function policyRangeCheck(projectDir) {
     const skipped = prScoped.size > 0 ? `; ${prScoped.size} diff-threshold invariant(s) skipped (PR-scoped)` : "";
     if (hard.length > 0) {
       const list = hard.map((v) => `[${v.rule_id}]${v.file ? ` ${v.file}` : ""}`).join(", ");
-      return { name: "policy", ok: false, detail: `${hard.length} deny violation(s) in ${scope} against the current policy: ${list}` };
+      // KJC-BUG-0374: supervisor files the seal does not back (an older kj's seal, or an
+      // unsealed edit) are fixed by regenerating and resealing, never by a tag or a grant.
+      const why = sup.note ? ` (${sup.note})` : "";
+      const reseal = hard.some((v) => v.rule_id === "defaults.supervisor.write")
+        ? ` — the supervisor seal does not back these files${why}: run kj harden, then ask your user for kj harden --commit`
+        : "";
+      return { name: "policy", ok: false, detail: `${hard.length} deny violation(s) in ${scope} against the current policy: ${list}${reseal}` };
     }
     return { name: "policy", ok: true, detail: `${scope} clean against the current policy (${violations.length} warning(s))${skipped}` };
   } catch (err) {
