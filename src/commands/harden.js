@@ -23,6 +23,7 @@ import { commandsForLanguage } from "../harden/hook-commands.js";
 import { installHooks } from "../harden/harden-engine.js";
 import { installHarnessHooks } from "../harden/harness-hooks.js";
 import { installSentinelHooks } from "../harden/sentinel-hooks.js";
+import { installSandbox } from "../harden/sandbox.js";
 import { detectStackRoots } from "../harden/stack-roots.js";
 import { installWorkflows } from "../harden/workflow-engine.js";
 import { adviseBranchProtection } from "../harden/branch-protection.js";
@@ -91,6 +92,7 @@ export async function hardenCommand({
   only = [],
   exclude = [],
   commitSupervisor = false,
+  sandbox = true,
   kjVersion = null,
   // KJC-BUG-0289: the contract files already dirty before anything was generated
   // (kj init captures them before writing its own). What is dirty NOW is the person's.
@@ -160,6 +162,8 @@ export async function hardenCommand({
       // sin sello, que es como una sesión se dejaba sin herramientas.
       const sh = installSentinelHooks({ projectDir, logger, human: commitSupervisor });
       result.sentinelHooks = sh.wired ? "wired" : "script-only";
+      // KJC-TSK-1092: the host sandbox, on by default wherever it can start here.
+      if (sandbox) result.sandbox = installSandbox({ projectDir, logger }).state;
     }
   } catch (err) {
     if (json) logger.info?.(JSON.stringify({ ok: false, error: err.message }));
