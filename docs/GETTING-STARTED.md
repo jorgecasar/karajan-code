@@ -147,10 +147,18 @@ kj harden                       # Install the standard profile
 kj harden --profile strict      # Add the shrink-budget gate too
 kj harden --dry-run             # Show what would change, write nothing
 kj harden --no-ci --no-guidelines   # Hooks + config only
+kj harden --no-sandbox          # Leave the host Bash sandbox alone
 ```
 
 What it installs (per the detected stack):
 
+- **The host Bash sandbox** in `.claude/settings.local.json`, only where it can
+  start on this machine (Linux: bubblewrap and socat; macOS: the system
+  sandbox). Writes stay in the project, plus kj's state and the package caches;
+  the supervisor and the phone key are out of reach; `gh` and `kj review` run
+  outside it.
+  Where it cannot start, nothing is written and kj says what is missing. A
+  `sandbox.enabled: false` you set is left as it is.
 - **Git hooks** under `.karajan/hooks/` (via `core.hooksPath`, so it never
   fights husky): pre-commit lint+format, commit-msg (Conventional Commits +
   100-char cap + AI-attribution block — pure POSIX, no Node), pre-push tests +

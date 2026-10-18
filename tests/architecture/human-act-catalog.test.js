@@ -30,6 +30,7 @@ const LIBRARIES_OF = { "src/harden/phone-sign.js": ["phone-enroll", "supervisor-
 const KNOWN_READERS = {
   "src/commands/rules-compile.js": "writes the rules PROPOSAL, which only kj rules approve installs",
   "src/harden/phone-invite.js": "writes the once-per-version invitation marker, reads whether the phone is enrolled",
+  "src/harden/sandbox.js": "writes .claude/settings.local.json; names the phone key to deny the sandbox writing it",
   "src/harden/sentinel-hooks.js": "writes the Sentinel's own state; names the supervisor files to protect them",
   "src/review/gate-gitignore.js": "writes .gitignore; names the governance files to keep them versioned",
 };

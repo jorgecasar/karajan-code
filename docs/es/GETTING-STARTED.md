@@ -147,10 +147,18 @@ kj harden                       # Instala el perfil standard
 kj harden --profile strict      # Añade además el gate de shrink-budget
 kj harden --dry-run             # Muestra qué cambiaría, sin escribir
 kj harden --no-ci --no-guidelines   # Solo hooks + config
+kj harden --no-sandbox          # No toca el sandbox de Bash del anfitrión
 ```
 
 Qué instala (según el stack detectado):
 
+- **El sandbox de Bash del anfitrión** en `.claude/settings.local.json`, solo
+  donde puede arrancar en esta máquina (Linux: bubblewrap y socat; macOS: el
+  sandbox del sistema). Las escrituras se quedan en el proyecto, más el estado
+  de kj y las cachés de paquetes; el supervisor y la clave del móvil quedan
+  fuera de alcance; `gh` y `kj review` corren fuera de él. Donde no arranca no se
+  escribe nada y kj dice qué falta. Un `sandbox.enabled: false` que hayas puesto
+  se respeta.
 - **Hooks de git** bajo `.karajan/hooks/` (vía `core.hooksPath`, sin pelear con
   husky): pre-commit lint+formato, commit-msg (Conventional Commits + tope de
   100 caracteres + bloqueo de atribución a IA — POSIX puro, sin Node), pre-push

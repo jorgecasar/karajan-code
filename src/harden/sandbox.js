@@ -6,8 +6,8 @@
  * no Bash at all (pilot KJC-TSK-1083: Ubuntu 24.04 restricts user namespaces until
  * bwrap has an AppArmor profile). So the probe runs first, on this machine.
  */
-import { existsSync, readFileSync } from "node:fs";
-import { delimiter, join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { delimiter, dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
 
 const USERNS_SYSCTL = "/proc/sys/kernel/apparmor_restrict_unprivileged_userns";
@@ -52,4 +52,69 @@ export function probeSandbox({ platform = process.platform, which = whichOnPath,
     return res.status === 0 ? { ok: true } : { ok: false, reason: `sandbox-exec cannot start a sandbox: ${detail}` };
   }
   return { ok: false, reason: `the host sandbox does not run on ${platform}` };
+}
+
+// KJC-TSK-1092: what the method needs from the sandbox (lessons of the pilot, KJC-TSK-1083).
+// gh keeps its tokens in the keyring over D-Bus; kj review reaches a local SonarQube,
+// which the sandbox's private localhost cannot (the reviewer agents run inside it).
+// Outside the project only kj's state and package caches are writable, and the
+// supervisor and the phone key stay out of reach.
+const METHOD_SANDBOX = {
+  excludedCommands: ["gh *", "kj review *"],
+  denyWrite: [".karajan/harness", ".karajan/supervisor-provenance.json", "~/.karajan/supervisor-phone.json"],
+  allowWrite: ["~/.karajan", "~/.npm/_cacache", "~/.npm/_logs", "~/.npm/_npx", "~/.cache", "~/.config/configstore"],
+  allowedDomains: [
+    "github.com", "api.github.com", "*.githubusercontent.com", "uploads.github.com", "registry.npmjs.org",
+    "api.openai.com", "chatgpt.com", "*.openai.com", "api.anthropic.com", "*.anthropic.com", "claude.ai",
+    "api.githubcopilot.com", "*.githubcopilot.com", "*.googleapis.com",
+  ],
+};
+
+const union = (have, add) => [...new Set([...(Array.isArray(have) ? have : []), ...add])];
+
+function withMethodSandbox(settings) {
+  const sb = settings.sandbox ?? {};
+  const fsCfg = sb.filesystem ?? {};
+  const net = sb.network ?? {};
+  return {
+    ...settings,
+    sandbox: {
+      ...sb,
+      enabled: true,
+      allowUnsandboxedCommands: false,
+      excludedCommands: union(sb.excludedCommands, METHOD_SANDBOX.excludedCommands),
+      filesystem: { ...fsCfg, denyWrite: union(fsCfg.denyWrite, METHOD_SANDBOX.denyWrite), allowWrite: union(fsCfg.allowWrite, METHOD_SANDBOX.allowWrite) },
+      network: { ...net, allowedDomains: union(net.allowedDomains, METHOD_SANDBOX.allowedDomains) },
+    },
+  };
+}
+
+/**
+ * Turn the host sandbox on in .claude/settings.local.json when it can start here.
+ * @returns {{state: "on" | "off" | "left-off" | "untouched", reason?: string}}
+ */
+export function installSandbox({ projectDir, logger = console, probe = probeSandbox }) {
+  const ready = probe();
+  if (!ready.ok) {
+    const remedy = ready.remedy ? `; ${ready.remedy}` : "";
+    logger.info?.(`kj harden: host sandbox left off, ${ready.reason}${remedy}`);
+    return { state: "off", reason: ready.reason };
+  }
+  const path = join(projectDir, ".claude", "settings.local.json");
+  let settings = {};
+  if (existsSync(path)) {
+    try {
+      settings = JSON.parse(readFileSync(path, "utf8"));
+    } catch {
+      logger.warn?.(`kj harden: ${path} is not valid JSON, the host sandbox was not written`);
+      return { state: "untouched", reason: "invalid JSON" };
+    }
+  }
+  if (settings.sandbox?.enabled === false) {
+    logger.info?.(`kj harden: the host sandbox stays off, ${path} says enabled: false`);
+    return { state: "left-off", reason: "enabled: false" };
+  }
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `${JSON.stringify(withMethodSandbox(settings), null, 2)}\n`);
+  return { state: "on" };
 }
