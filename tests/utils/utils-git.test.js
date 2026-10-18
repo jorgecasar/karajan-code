@@ -237,7 +237,7 @@ describe("utils/git", () => {
       runCommand.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
 
       await git.pushBranch("feat/test");
-      expect(runCommand).toHaveBeenCalledWith("git", ["push", "-u", "origin", "feat/test"], expect.anything());
+      expect(runCommand).toHaveBeenCalledWith("git", ["push", "origin", "feat/test"], expect.anything());
     });
   });
 

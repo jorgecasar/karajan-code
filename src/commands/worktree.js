@@ -34,7 +34,8 @@ export async function worktreeCommand({ config = null, action, args = [], flags 
       throw new Error(`lane "${slug}" already exists — cd ${wtPath}, or finish it with: kj worktree done ${slug}`);
     }
     const branch = `feat/${slug}`;
-    await git(["worktree", "add", "-b", branch, wtPath]);
+    // KJC-TSK-1093: --no-track, so no upstream lands in .git/config (read-only in the host sandbox).
+    await git(["worktree", "add", "--no-track", "-b", branch, wtPath]);
     const boot = await bootstrapWorktree({ worktreePath: wtPath, setupCommand: config?.session?.worktree_setup || null });
     console.log(`✓ lane ready: ${branch}`);
     console.log(`  cd ${wtPath}`);

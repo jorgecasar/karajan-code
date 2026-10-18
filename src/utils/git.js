@@ -307,8 +307,10 @@ export async function hasRemote(cwd = null) {
   return res.exitCode === 0;
 }
 
+// KJC-TSK-1093: no -u, which writes the upstream into .git/config, read-only inside
+// the host sandbox. Nothing in kj reads a feature branch's upstream.
 export async function pushBranch(branch, cwd = null) {
-  await runGit(["push", "-u", "origin", branch], cwd ? { cwd } : {});
+  await runGit(["push", "origin", branch], cwd ? { cwd } : {});
 }
 
 export async function createPullRequest({ baseBranch, branch, title, body, cwd = null }) {

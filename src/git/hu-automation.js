@@ -150,9 +150,9 @@ export async function prepareHuBranch({ story, huBranches, config, logger, cardI
  */
 export function pushRemedy(message, branch) {
   if (/workflow/i.test(message) && /scope/i.test(message)) {
-    return `the token lacks the workflow scope: run gh auth refresh -h github.com -s workflow, then git push -u origin ${branch}`;
+    return `the token lacks the workflow scope: run gh auth refresh -h github.com -s workflow, then git push origin ${branch}`;
   }
-  return `push the branch yourself: git push -u origin ${branch}`;
+  return `push the branch yourself: git push origin ${branch}`;
 }
 
 /** The warnings a run reports when the push or the PR of any HU failed. */
