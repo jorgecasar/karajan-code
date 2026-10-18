@@ -37,7 +37,8 @@ describe("utils/git cwd plumbing (PAR-E2)", () => {
     const runner = captureRunner();
     setRunner(runner);
     await pushBranch("kj-hu-HU-001", "/wt/HU-001");
-    expect(runner).toHaveBeenCalledWith("git", ["push", "-u", "origin", "kj-hu-HU-001"], { cwd: "/wt/HU-001" });
+    // KJC-TSK-1093: no -u — inside the host sandbox .git/config is read-only.
+    expect(runner).toHaveBeenCalledWith("git", ["push", "origin", "kj-hu-HU-001"], { cwd: "/wt/HU-001" });
   });
 
   it("omitting cwd keeps the legacy behavior (no cwd option)", async () => {

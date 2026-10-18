@@ -35,6 +35,15 @@ describe("kj worktree", () => {
     expect(gitDir).not.toBe(commonDir);
   });
 
+  // KJC-TSK-1093: inside the host sandbox .git/config is read-only, so a lane never
+  // records an upstream, even where git would by default.
+  it("start records no upstream for the lane, whatever branch.autoSetupMerge says", async () => {
+    execFileSync("git", ["-C", dir, "config", "branch.autoSetupMerge", "always"]);
+    const r = await worktreeCommand({ config: cfg(), action: "start", args: ["sin-upstream"], flags: {} });
+    const merge = () => execFileSync("git", ["-C", dir, "config", "--get", `branch.${r.branch}.merge`]);
+    expect(merge).toThrow();
+  });
+
   it("start refuses a duplicate slug and path-escaping slugs", async () => {
     await worktreeCommand({ config: cfg(), action: "start", args: ["dup"], flags: {} });
     await expect(worktreeCommand({ config: cfg(), action: "start", args: ["dup"], flags: {} }))
