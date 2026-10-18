@@ -237,7 +237,7 @@ export default function SignalDetailPage() {
       setIsSavingReview(false);
       setTimeout(() => setReviewMessage(null), 4000);
     }
-  }, [signal, reviewStatus, reviewNotes, t]);
+  }, [signal, setSignal, reviewStatus, reviewNotes, t]);
 
   /* Loading */
   if (isLoading) {
