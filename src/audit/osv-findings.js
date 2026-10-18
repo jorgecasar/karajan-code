@@ -103,6 +103,7 @@ export function parseOsvOutput(raw) {
           id: vuln.id || vuln.aliases?.[0] || "UNKNOWN",
           aliases: vuln.aliases || [],
           severity: extractSeverity(vuln, groups),
+          score: groupScore(vuln, groups),
           summary: vuln.summary || vuln.details?.split("\n")[0] || "",
           publishedAt: vuln.published || null, // the ADVISORY's date — the Steward ages by it (KJC-TSK-0789 AC6)
           package: name,
@@ -139,6 +140,13 @@ function extractSeverity(vuln, groups) {
     return String(vuln.database_specific.severity).toUpperCase();
   }
   return "UNKNOWN";
+}
+
+/** KJC-TSK-1097: the numeric CVSS score of the vuln's group (9 or more is critical), or null. */
+function groupScore(vuln, groups) {
+  const group = groups.find((g) => g.ids?.includes(vuln.id) && g.max_severity);
+  const score = group ? Number.parseFloat(group.max_severity) : Number.NaN;
+  return Number.isNaN(score) ? null : score;
 }
 
 function extractFixedVersion(vuln) {

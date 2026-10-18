@@ -1,0 +1,36 @@
+name: OSV
+
+# KJC-TSK-1097: fail any change that leaves a critical advisory (CVSS 9 or more)
+# in a lockfile of the repo, naming it. scripts/osv-gate.mjs reads the scan.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  OSV_VERSION: v2.6.0
+  OSV_SHA256: ca69b3d3cd08f889a49dc0a383122f71cc528b83803671df5fd874d97485b108
+
+jobs:
+  osv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Install osv-scanner (pinned by checksum)
+        run: |
+          curl -sSfL -o osv-scanner "https://github.com/google/osv-scanner/releases/download/${OSV_VERSION}/osv-scanner_linux_amd64"
+          echo "${OSV_SHA256}  osv-scanner" | sha256sum -c -
+          chmod +x osv-scanner
+      - name: Scan the lockfiles
+        # osv-scanner exits 1 when it finds anything; the gate decides on criticals.
+        run: ./osv-scanner --format=json -r . > osv.json || true
+      - name: Fail on critical advisories
+        run: node scripts/osv-gate.mjs osv.json
