@@ -236,6 +236,25 @@ describe("un id de regla no es un telefono", () => {
   });
 });
 
+// KJC-BUG-0380 (#2263, punto 3): coordenadas de datos de test leidas como telefono.
+describe("una coordenada GPS no es un telefono", () => {
+  const none = { personal: [], allow: [] };
+  const phones = (text) => scanText(text, { list: none }).filter((f) => f.type === "phone");
+
+  it("un par latitud, longitud (cuatro decimales o mas, en rango) se descarta y se cuenta", () => {
+    const found = scanText("location: [40.465491, -3.687512]\n{ lat: -33.86882, lng: 151.20929 } // 51.50735,-0.12776", { list: none });
+    expect(found.filter((f) => f.type === "phone")).toHaveLength(0);
+    expect(found.discardedByContext).toBeGreaterThan(0);
+  });
+
+  it("lo que no es un par en rango SIGUE avisando", () => {
+    const digits = ["612", "345", "678"].join("");
+    for (const text of [`tel ${digits}`, `tel +34 ${digits}`, "95.123456789, 40.4654913456 latitud fuera de rango", "90.0001234, 12.3456789", "12.3456789, 180.0001234"]) {
+      expect(phones(text), text).not.toHaveLength(0);
+    }
+  });
+});
+
 // KJC-BUG-0329 (#2089): a dependency named *-token, *-auth or *-secret in a lockfile
 // has a version as its value, and every dependency change warned [secret-assignment].
 describe("una version no es un secreto", () => {
