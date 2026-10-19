@@ -23,11 +23,14 @@ const finding = (i) => ({
   description: i.description ?? "", suggested_fix: i.suggested_fix ?? null,
 });
 
-/** The review as data: verdict, findings, suggestions and the PR-requirement checks. */
+/** The review as data: verdict, findings, suggestions, security checks and, apart, the house requirements. */
 export async function thirdPartyReview({ range, config, projectDir, logger, task = null, gitDiff = gitDiffOf, run = runOneShotReview, requirements = prRequirementChecks, security = prSecurityChecks, sonar = sonarCheck }) {
   const diff = await gitDiff(projectDir, range);
   // KJC-TSK-1076/1077: the PR's requirements and its security, with no tokens; they never stop the review.
-  const checks = [...await requirements({ range, projectDir, config }), ...await security({ diff, projectDir, config }), await sonar({ diff, config, projectDir })];
+  // KJC-BUG-0379 (#2263): the house requirements (size, commits, attribution, tests) travel apart:
+  // on another repo with other conventions they must not read as findings next to security.
+  const policyChecks = await requirements({ range, projectDir, config });
+  const checks = [...await security({ diff, projectDir, config }), await sonar({ diff, config, projectDir })];
   const record = await run({
     diff, task, config, logger, projectDir,
     reviewerOverride: resolveRole(config, "reviewer").provider || null,
@@ -41,6 +44,7 @@ export async function thirdPartyReview({ range, config, projectDir, logger, task
     findings: (record.issues ?? []).map(finding),
     suggestions: record.suggestions ?? [],
     checks,
+    policyChecks,
   };
 }
 
