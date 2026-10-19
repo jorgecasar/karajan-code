@@ -234,6 +234,7 @@ kj review --range main...pr-branch --third-party --json --reviewer claude
 - Runs only kj's reviewer, with the target repo's rules (`.karajan`) and the provider you pass, even if it is the one you are running in.
 - Skips the own-work gates (card, tests next to code, policy, session RAG proof) and **stores no verdict**: it can never unlock a commit of your own. `kj review --range` without `--third-party` keeps every gate.
 - Adds checks with no tokens, in two lists. `checks` holds security: `secrets`, `privacy`, `prompt-injection`, `dependency-cooldown`, `semgrep` (PR files only) and `sonar` (when SonarQube is reachable; otherwise "not available"). `policyChecks` holds the house requirements, which another repo may not share: `size` (the repo's budget), `conventional-commits`, `ai-attribution` and `tests`.
+- Reviews the whole diff of a large PR: whole files are grouped into batches that fit one reviewer prompt, up to 10 calls. A file too large for one prompt, or files past the cap, are not reviewed and are named in `coverage.unreviewed`. `verdict.status` is `rejected` if any batch was, `approved` only when every file was reviewed, and `partial` otherwise (`approved: false`).
 - Prints one JSON document on stdout (logs go to stderr) and exits 0 whatever the verdict; a non-zero code means kj itself failed.
 
 ```json
@@ -241,7 +242,8 @@ kj review --range main...pr-branch --third-party --json --reviewer claude
   "mode": "third-party",
   "range": "main...pr-branch",
   "reviewer": "claude",
-  "verdict": { "approved": false, "summary": "..." },
+  "verdict": { "status": "rejected", "approved": false, "summary": "..." },
+  "coverage": { "files": { "reviewed": 52, "total": 52 }, "lines": { "reviewed": 1822, "total": 1822 }, "truncated": false, "unreviewed": [] },
   "findings": [{ "file": "src/add.js", "line": 2, "severity": "high", "description": "...", "suggested_fix": "..." }],
   "suggestions": ["..."],
   "checks": [{ "id": "secrets", "ok": true, "detail": "..." }],

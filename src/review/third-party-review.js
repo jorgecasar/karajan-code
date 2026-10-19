@@ -11,6 +11,11 @@ import { runOneShotReview } from "./one-shot-review.js";
 import { prRequirementChecks } from "./pr-requirements.js";
 import { prSecurityChecks } from "./pr-security.js";
 import { sonarCheck } from "./pr-sonar.js";
+import { batchDiff } from "./diff-batches.js";
+import { DIFF_CLIP_CHARS } from "../prompts/diff-clip.js";
+
+// KJC-BUG-0378: a reviewer call per batch; past this many, files are left out and named.
+const MAX_REVIEW_BATCHES = 10;
 
 const gitDiffOf = async (projectDir, range) => {
   const res = await runCommand("git", ["diff", range], { cwd: projectDir });
@@ -24,28 +29,42 @@ const finding = (i) => ({
 });
 
 /** The review as data: verdict, findings, suggestions, security checks and, apart, the house requirements. */
-export async function thirdPartyReview({ range, config, projectDir, logger, task = null, gitDiff = gitDiffOf, run = runOneShotReview, requirements = prRequirementChecks, security = prSecurityChecks, sonar = sonarCheck }) {
+export async function thirdPartyReview({ range, config, projectDir, logger, task = null, gitDiff = gitDiffOf, run = runOneShotReview, requirements = prRequirementChecks, security = prSecurityChecks, sonar = sonarCheck, limit = DIFF_CLIP_CHARS, maxBatches = MAX_REVIEW_BATCHES }) {
   const diff = await gitDiff(projectDir, range);
   // KJC-TSK-1076/1077: the PR's requirements and its security, with no tokens; they never stop the review.
   // KJC-BUG-0379 (#2263): the house requirements (size, commits, attribution, tests) travel apart:
   // on another repo with other conventions they must not read as findings next to security.
   const policyChecks = await requirements({ range, projectDir, config });
   const checks = [...await security({ diff, projectDir, config }), await sonar({ diff, config, projectDir })];
-  const record = await run({
-    diff, task, config, logger, projectDir,
-    reviewerOverride: resolveRole(config, "reviewer").provider || null,
-    persist: false,
-  });
+  // KJC-BUG-0378 (#2263): the whole diff, in batches of whole files that fit the reviewer's
+  // prompt; what does not fit is named in the coverage and the verdict cannot be approved.
+  const provider = resolveRole(config, "reviewer").provider || null;
+  const { batches, coverage } = batchDiff(diff, { limit, maxBatches });
+  if (coverage.files.total === 0) throw new Error(`nothing to review — ${range} has no file changes`);
+  const records = [];
+  for (const batch of batches) {
+    records.push(await run({ diff: batch.text, task, config, logger, projectDir, reviewerOverride: provider, persist: false }));
+  }
   return {
     mode: "third-party",
     range,
-    reviewer: record.reviewer,
-    verdict: { approved: record.verdict === "approved", summary: record.summary ?? "" },
-    findings: (record.issues ?? []).map(finding),
-    suggestions: record.suggestions ?? [],
+    reviewer: records[0]?.reviewer ?? provider,
+    verdict: verdictOf(records, coverage),
+    coverage,
+    findings: records.flatMap((r) => (r.issues ?? []).map(finding)),
+    suggestions: records.flatMap((r) => r.suggestions ?? []),
     checks,
     policyChecks,
   };
+}
+
+/** Rejected if any batch was; approved only when every file was reviewed; partial otherwise. */
+function verdictOf(records, coverage) {
+  let status = "approved";
+  if (records.some((r) => r.verdict !== "approved")) status = "rejected";
+  else if (coverage.truncated) status = "partial";
+  const summary = records.map((r) => r.summary).filter(Boolean).join("\n");
+  return { status, approved: status === "approved", summary };
 }
 
 /**

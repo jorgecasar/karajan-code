@@ -57,6 +57,43 @@ describe("thirdPartyReview", () => {
   });
 });
 
+// KJC-BUG-0378 (#2263): a large PR was reviewed only up to the reviewer's clip and
+// could still come back approved.
+describe("thirdPartyReview on a large PR", () => {
+  const file = (name, n) => [`diff --git a/${name} b/${name}`, "@@ -1 +1 @@", ...Array.from({ length: n }, (_, i) => `+${name} ${i}`)].join("\n");
+  const none = async () => [];
+  const review = (diff, run, opts) => thirdPartyReview({
+    range: "main...pr", config: {}, projectDir: dir, logger: { info() {} },
+    gitDiff: async () => diff, run, requirements: none, security: none, sonar: async () => ({ id: "sonar", ok: true }), ...opts,
+  });
+  const verdictFor = (rejects) => vi.fn(async ({ diff }) => ({
+    reviewer: "claude", summary: "ok", suggestions: [],
+    verdict: rejects.some((f) => diff.includes(`a/${f}`)) ? "rejected" : "approved",
+    issues: rejects.filter((f) => diff.includes(`a/${f}`)).map((f) => ({ file: f, description: "bug" })),
+  }));
+
+  it("reviews every file in batches, and one rejection rejects the review", async () => {
+    const diff = [file("a.js", 5), file("b.js", 5), file("c.js", 5)].join("\n");
+    const run = verdictFor(["c.js"]);
+    const res = await review(diff, run, { limit: file("a.js", 5).length * 2 + 2, maxBatches: 5 });
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(res.verdict).toMatchObject({ status: "rejected", approved: false });
+    expect(res.findings.map((f) => f.file)).toEqual(["c.js"]);
+    expect(res.coverage).toMatchObject({ files: { reviewed: 3, total: 3 }, truncated: false });
+  });
+
+  it("never approves code it did not review: the verdict is partial and says what was left out", async () => {
+    const diff = [file("a.js", 5), file("huge.js", 400)].join("\n");
+    const res = await review(diff, verdictFor([]), { limit: file("a.js", 5).length + 1, maxBatches: 5 });
+    expect(res.verdict).toMatchObject({ status: "partial", approved: false });
+    expect(res.coverage).toMatchObject({ files: { reviewed: 1, total: 2 }, truncated: true, unreviewed: ["huge.js"] });
+  });
+
+  it("an empty range is an error, never an approval of nothing", async () => {
+    await expect(review("", verdictFor([]))).rejects.toThrow(/nothing to review/);
+  });
+});
+
 describe("thirdPartyReviewCommand", () => {
   const sink = () => { const chunks = []; return { write: (c) => chunks.push(c), text: () => chunks.join("") }; };
 

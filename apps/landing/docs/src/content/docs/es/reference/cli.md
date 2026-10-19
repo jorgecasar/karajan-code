@@ -234,6 +234,7 @@ kj review --range main...rama-de-la-pr --third-party --json --reviewer claude
 - Corre solo el reviewer de kj, con las reglas del repo destino (`.karajan`) y el proveedor que indiques, aunque sea en el que estás trabajando.
 - Se salta las gates del trabajo propio (card, tests junto al código, policy, prueba de RAG de la sesión) y **no guarda veredicto**: nunca puede desbloquear un commit tuyo. `kj review --range` sin `--third-party` mantiene todas las gates.
 - Añade checks sin tokens, en dos listas. `checks` lleva la seguridad: `secrets`, `privacy`, `prompt-injection`, `dependency-cooldown`, `semgrep` (solo los ficheros de la PR) y `sonar` (si hay SonarQube accesible; si no, "not available"). `policyChecks` lleva los requisitos de la casa, que otro repo puede no compartir: `size` (el presupuesto del repo), `conventional-commits`, `ai-attribution` y `tests`.
+- Revisa el diff entero de una PR grande: agrupa ficheros completos en lotes que caben en un prompt del revisor, hasta 10 llamadas. Un fichero demasiado grande para un prompt, o los que pasan del tope, no se revisan y salen en `coverage.unreviewed`. `verdict.status` es `rejected` si algún lote lo fue, `approved` solo si se revisaron todos los ficheros, y `partial` en otro caso (`approved: false`).
 - Imprime un único documento JSON en stdout (los logs van a stderr) y sale con código 0 sea cual sea el veredicto; un código distinto de 0 significa que ha fallado kj.
 
 ```json
@@ -241,7 +242,8 @@ kj review --range main...rama-de-la-pr --third-party --json --reviewer claude
   "mode": "third-party",
   "range": "main...rama-de-la-pr",
   "reviewer": "claude",
-  "verdict": { "approved": false, "summary": "..." },
+  "verdict": { "status": "rejected", "approved": false, "summary": "..." },
+  "coverage": { "files": { "reviewed": 52, "total": 52 }, "lines": { "reviewed": 1822, "total": 1822 }, "truncated": false, "unreviewed": [] },
   "findings": [{ "file": "src/add.js", "line": 2, "severity": "high", "description": "...", "suggested_fix": "..." }],
   "suggestions": ["..."],
   "checks": [{ "id": "secrets", "ok": true, "detail": "..." }],
