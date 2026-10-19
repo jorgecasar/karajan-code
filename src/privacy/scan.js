@@ -81,6 +81,11 @@ const SEMVER_OP = String.raw`(?:[\^~]|[<>]=?|=)`;
 const SEMVER_JOIN = String.raw`\s*(?:(?:\|\||-)\s*${SEMVER_OP}?|${SEMVER_OP})\s*`;
 const SEMVER_VALUE = new RegExp(String.raw`^\s*${SEMVER_OP}?\s*${SEMVER_TOKEN}(?:${SEMVER_JOIN}${SEMVER_TOKEN})*\s*$`);
 
+/** KJC-BUG-0380: a pair is discarded only when it is a real latitude, longitude. */
+function inGpsRange(_match, lat, lng) {
+  return Math.abs(Number(lat)) <= 90 && Math.abs(Number(lng)) <= 180;
+}
+
 const CONTEXT_DISCARDS = [
   { type: "git-sha", re: /\b(?:[0-9a-f]{64}|[0-9a-f]{40})\b/g },
   { type: "doc-domain-email", re: /\b[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)*(?:example\.(?:com|org|net)|test|invalid|localhost|example)\b/g },
@@ -114,7 +119,12 @@ const CONTEXT_DISCARDS = [
   // lookarounds instead of \b). Only that WHOLE shape with a real 20xx date and
   // time: no card of 14 digits starts with 20 (Diners is 30/36/38), and a
   // 16-digit card does not fit the slot.
-  { type: "plan-id", re: /(?<![A-Za-z0-9])plan-20\d\d(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])(?:[01]\d|2[0-3])[0-5]\d[0-5]\d-[a-z0-9]{4}(?![A-Za-z0-9])/g },
+  // KJC-BUG-0380 (#2263): a latitude, longitude pair in test data read as a phone.
+  // Only the WHOLE pair: both with a decimal point and four or more decimals, in
+  // range (latitude up to 90, longitude up to 180), joined by a comma. A lone
+  // number or a pair out of range still warns.
+  { type: "gps-pair", re: /(?<![\d.])(-?\d{1,3}\.\d{4,})\s*,\s*(-?\d{1,3}\.\d{4,})(?![\d.])/g, keep: inGpsRange },
+  { type: "plan-id", re:/(?<![A-Za-z0-9])plan-20\d\d(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])(?:[01]\d|2[0-3])[0-5]\d[0-5]\d-[a-z0-9]{4}(?![A-Za-z0-9])/g },
 ];
 
 /**
@@ -160,9 +170,13 @@ export function scanText(text, { list = loadPrivacyList(), source = "<text>" } =
         re.lastIndex = m.index + m[0].length;
       }
     }
-    for (const { re } of CONTEXT_DISCARDS) {
+    for (const { re, keep } of CONTEXT_DISCARDS) {
       re.lastIndex = 0;
-      probe = probe.replace(re, (m) => { discarded += 1; return " ".repeat(m.length); });
+      probe = probe.replace(re, (m, ...groups) => {
+        if (keep && !keep(m, ...groups)) return m;
+        discarded += 1;
+        return " ".repeat(m.length);
+      });
     }
     const red = redactPII(probe);
     if (red.total > 0) {
