@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.57.0] - 2026-10-19
+
+Minor. **`kj harden` turns the host sandbox on, and CI fails on critical advisories.**
+
+### Added
+
+- **`kj harden` turns Claude Code's Bash sandbox on by default** (KJC-TSK-1087, 1092): only where it can start on this machine (Linux: bubblewrap and socat, and bubblewrap creating its namespaces; macOS: the system sandbox). It goes to `.claude/settings.local.json`. Writes outside the project are limited to kj's state and package caches, the supervisor and the phone key are denied, and `gh` and `kj review` run outside it. Where it cannot start, nothing is written and kj says what is missing (an Ubuntu 24.04 AppArmor restriction is named with its remedy). A `sandbox.enabled: false` you set is left alone, and `--no-sandbox` leaves the sandbox untouched.
+- **An `OSV` CI job fails on any critical advisory** (KJC-TSK-1097): osv-scanner over the repo's lockfiles, pinned by checksum. The job names the lockfile, package, version and advisory, and output it cannot read fails too.
+
+### Changed
+
+- **kj writes no upstream into `.git/config`** (KJC-TSK-1093): branches are pushed without `-u` and `kj worktree start` creates lanes with `--no-track`, since the sandbox keeps `.git/config` read-only.
+- **The Sentinel no longer reads a deploy as a release** (KJC-BUG-0373): `firebase deploy` (database rules, a site) is not gated by the release check. `npm publish` and `gh release create` still are. Field case: a project could not deploy the rules that close its open database.
+- Dependencies with critical advisories brought up to date (KJC-TSK-1082, 1094, 1095, 1096, 1098): proxy-addr, websocket-driver, the radar frontend on vitest 4.1 and next 15.5 (React 19, its own ESLint 9 config), the radar backend's anyio and pyjwt, and the docs on astro 7 with Starlight 0.42.
+
+### Fixed
+
+- **`kj release check` says when the seal needs renewing** (KJC-BUG-0374): supervisor files the seal does not back (sealed by an older kj, or an unsealed edit) are named with the remedy, `kj harden` and then the user's `kj harden --commit`, instead of "deny violation in whole history".
+- **`kj harden` seeds ESLint with the TypeScript parser in TypeScript roots** (KJC-BUG-0376). Without the parser the config is not seeded and kj says what to install, and an existing managed block is never rewritten into one the project cannot load.
+- **Generated output is not source** (KJC-BUG-0377): a rebuilt docs site's `_astro/*.js` no longer trips the tests, RAG and Sonar gates of `kj review`.
+- **The size budget leaves lockfiles out wherever they live** (KJC-BUG-0375).
+
 ## [4.56.0] - 2026-10-18
 
 Minor. **kj reviews someone else's PR, and the Sentinel starts to stop reading shell.**

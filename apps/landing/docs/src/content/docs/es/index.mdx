@@ -65,7 +65,11 @@ El caveat que el loop engineering recalca — *los bucles desatendidos cometen e
 
 Las versiones más recientes, la última primero. Las anteriores están en [Arquitectura › Historia](/docs/es/architecture/history/) y en el [CHANGELOG](https://github.com/manufosela/karajan-code/blob/main/CHANGELOG.md).
 
-### v4.56.0: revisar la PR de otra persona (actual)
+### v4.57.0: el sistema operativo guarda el carril (actual)
+
+`kj harden` activa el sandbox de Bash de Claude Code donde puede arrancar en la máquina: las escrituras se quedan en el proyecto (más el estado de kj y las cachés de paquetes), y el supervisor y la clave del móvil quedan fuera de alcance. Donde no arranca, no se escribe nada y kj dice qué falta. Un job nuevo de CI falla con cualquier vulnerabilidad crítica en los lockfiles del repo, y las que había hoy están cerradas. Además: un despliegue ya no se trata como una release, el release check dice cuándo hay que renovar el sello, y kj harden siembra ESLint con el parser de TypeScript en los proyectos TypeScript.
+
+### v4.56.0: revisar la PR de otra persona
 
 `kj review --third-party --json` permite a un agente revisor revisar la PR de otra persona con el reviewer de kj y las reglas del repo destino, y devuelve un único JSON con el veredicto, los hallazgos y los requisitos de la PR (tamaño, commits, tests, secretos, datos personales, dependencias arriesgadas, semgrep, Sonar), sin las gates del trabajo propio y sin guardar veredicto. El Sentinel deja de leer shell donde ya decide un punto de control (actos humanos, identidad, push), `pre-push` comprueba la identidad de cada commit que sube, y el bloqueo del Steward también para un commit.
 
