@@ -41,7 +41,7 @@ From v2.0, Karajan introduces the **Karajan Brain** layer: an AI-powered orchest
 
 ```
 karajan-code/
-├── src/              # Source code (82k LOC, 669 files)
+├── src/              # Source code (82k LOC, 670 files)
 ├── tests/            # Test suite (511 test files)
 ├── templates/        # Role definitions (MD) + skill docs + workflows
 ├── docs/             # Documentation (you are here)
