@@ -233,7 +233,7 @@ kj review --range main...pr-branch --third-party --json --reviewer claude
 
 - Runs only kj's reviewer, with the target repo's rules (`.karajan`) and the provider you pass, even if it is the one you are running in.
 - Skips the own-work gates (card, tests next to code, policy, session RAG proof) and **stores no verdict**: it can never unlock a commit of your own. `kj review --range` without `--third-party` keeps every gate.
-- Adds the PR's requirements as checks, with no tokens: `size` (the repo's budget), `conventional-commits`, `ai-attribution`, `tests`, `secrets`, `privacy`, `prompt-injection`, `dependency-cooldown`, `semgrep` (PR files only) and `sonar` (when SonarQube is reachable; otherwise "not available").
+- Adds checks with no tokens, in two lists. `checks` holds security: `secrets`, `privacy`, `prompt-injection`, `dependency-cooldown`, `semgrep` (PR files only) and `sonar` (when SonarQube is reachable; otherwise "not available"). `policyChecks` holds the house requirements, which another repo may not share: `size` (the repo's budget), `conventional-commits`, `ai-attribution` and `tests`.
 - Prints one JSON document on stdout (logs go to stderr) and exits 0 whatever the verdict; a non-zero code means kj itself failed.
 
 ```json
@@ -244,7 +244,8 @@ kj review --range main...pr-branch --third-party --json --reviewer claude
   "verdict": { "approved": false, "summary": "..." },
   "findings": [{ "file": "src/add.js", "line": 2, "severity": "high", "description": "...", "suggested_fix": "..." }],
   "suggestions": ["..."],
-  "checks": [{ "id": "tests", "ok": false, "detail": "source changed with no test changed" }]
+  "checks": [{ "id": "secrets", "ok": true, "detail": "..." }],
+  "policyChecks": [{ "id": "tests", "ok": false, "detail": "source changed with no test changed" }]
 }
 ```
 

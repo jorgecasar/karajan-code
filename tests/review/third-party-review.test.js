@@ -50,7 +50,9 @@ describe("thirdPartyReview", () => {
       mode: "third-party", range: "main...pr", reviewer: "claude",
       verdict: { approved: false, summary: "s" },
       findings: [{ file: "x.js", line: 1, severity: "high", description: "d", suggested_fix: "f" }],
-      suggestions: ["n"], checks: [{ id: "size", ok: false, detail: "over the limit in main...pr" }, { id: "secrets", ok: true, detail: `scanned ${DIFF.length} chars` }, { id: "sonar", ok: true, detail: "not available: no SonarQube" }],
+      suggestions: ["n"], checks: [{ id: "secrets", ok: true, detail: `scanned ${DIFF.length} chars` }, { id: "sonar", ok: true, detail: "not available: no SonarQube" }],
+      // KJC-BUG-0379 (#2263): the house requirements travel apart, never mixed with the security checks.
+      policyChecks: [{ id: "size", ok: false, detail: "over the limit in main...pr" }],
     });
   });
 });
