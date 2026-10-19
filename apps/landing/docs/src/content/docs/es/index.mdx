@@ -65,7 +65,11 @@ El caveat que el loop engineering recalca — *los bucles desatendidos cometen e
 
 Las versiones más recientes, la última primero. Las anteriores están en [Arquitectura › Historia](/docs/es/architecture/history/) y en el [CHANGELOG](https://github.com/manufosela/karajan-code/blob/main/CHANGELOG.md).
 
-### v4.57.0: el sistema operativo guarda el carril (actual)
+### v4.57.1: una PR grande revisada entera (actual)
+
+`kj review --third-party` revisa el diff entero de una PR grande por lotes de ficheros completos, dice en `coverage` qué ha revisado y nunca aprueba código que no ha visto (`verdict.status: partial`). Los requisitos de la casa van aparte en `policyChecks`, y un par de coordenadas GPS ya no se toma por un teléfono.
+
+### v4.57.0: el sistema operativo guarda el carril
 
 `kj harden` activa el sandbox de Bash de Claude Code donde puede arrancar en la máquina: las escrituras se quedan en el proyecto (más el estado de kj y las cachés de paquetes), y el supervisor y la clave del móvil quedan fuera de alcance. Donde no arranca, no se escribe nada y kj dice qué falta. Un job nuevo de CI falla con cualquier vulnerabilidad crítica en los lockfiles del repo, y las que había hoy están cerradas. Además: un despliegue ya no se trata como una release, el release check dice cuándo hay que renovar el sello, y kj harden siembra ESLint con el parser de TypeScript en los proyectos TypeScript.
 

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.57.1] - 2026-10-19
+
+Patch. **`kj review --third-party` reviews a large PR whole** (#2263, field report from a reviewer agent on a 52-file PR).
+
+### Fixed
+
+- **The whole diff is reviewed** (KJC-BUG-0378): whole files are grouped into batches that fit one reviewer prompt, up to 10 calls, instead of the first ~12,000 characters. The JSON gains `coverage` (files and changed lines reviewed versus total, `truncated`, `unreviewed`) and `verdict.status`: `rejected` if any batch was, `approved` only when every file was reviewed, `partial` otherwise. Code that was not reviewed is never approved.
+- **House requirements travel apart** (KJC-BUG-0379): size, conventional commits, AI attribution and tests come in `policyChecks`, so on another repo they no longer read as findings next to the security `checks`.
+- **A GPS coordinate pair is not a phone number** (KJC-BUG-0380): the privacy scan discards a latitude, longitude pair in range; a lone number or a pair out of range still warns.
+
 ## [4.57.0] - 2026-10-19
 
 Minor. **`kj harden` turns the host sandbox on, and CI fails on critical advisories.**
