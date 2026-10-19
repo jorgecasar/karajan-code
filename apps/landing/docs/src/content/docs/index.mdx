@@ -65,7 +65,11 @@ The caveat loop engineering insists on — *unattended loops make unattended mis
 
 The most recent releases, newest first. Older versions live in [Architecture › History](/docs/architecture/history/) and the [CHANGELOG](https://github.com/manufosela/karajan-code/blob/main/CHANGELOG.md).
 
-### v4.56.0: reviewing someone else's PR (current)
+### v4.57.0: the operating system guards the lane (current)
+
+`kj harden` turns Claude Code's Bash sandbox on wherever it can start on the machine: writes stay in the project (plus kj's state and package caches), and the supervisor and the phone key are out of reach. Where it cannot start, nothing is written and kj says what is missing. A new CI job fails on any critical advisory in the repo's lockfiles, and the critical ones there today are fixed. Also: a deploy is no longer gated as a release, the release check says when the seal needs renewing, and kj harden seeds ESLint with the TypeScript parser in TypeScript projects.
+
+### v4.56.0: reviewing someone else's PR
 
 `kj review --third-party --json` lets a reviewer agent review another person's PR with kj's reviewer and the target repo's rules, and returns one JSON document with the verdict, the findings and the PR's requirement checks (size, commits, tests, secrets, personal data, risky dependencies, semgrep, Sonar), without the own-work gates and without storing a verdict. The Sentinel stops reading shell where a checkpoint already decides (human acts, identity, push), `pre-push` checks every pushed commit's identity, and the Steward's block also stops a commit.
 
