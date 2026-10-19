@@ -1,6 +1,6 @@
 {
-  "kj_version": "4.56.0",
-  "generated_at": "2026-10-18T17:59:51.042Z",
+  "kj_version": "4.57.0",
+  "generated_at": "2026-10-19T19:39:27.962Z",
   "generation": {
     "profile": "standard",
     "cmds": {
@@ -54,7 +54,7 @@
     },
     {
       "file": ".karajan/harness/sentinel-shell.mjs",
-      "sha256": "34667c58b9a8b80aa06c49300308d2c4baa5dbcfc353e4f13bccf37fa9704200"
+      "sha256": "b0808fb0a146d6c1a8183207b45097cbb1e5f1bc93c0c1d625ea12c1bcf6dfa3"
     },
     {
       "file": ".karajan/harness/sessionstart.mjs",
@@ -94,15 +94,15 @@
     }
   ],
   "signature": {
-    "cid": "23ea50a1d6a71b91f1b7c012ebc14ff8",
-    "nonce": "851d6afe75dc58eb12ffe62adc7715c8",
+    "cid": "7fdc9d4ef794f8448f7356c68b5ef72b",
+    "nonce": "b8cf669728ea5e894cd8a7cc3f38c4e9",
     "project": "karajan-code",
-    "filesHash": "5350020a9a2fe756c7a43e7e1621db6ace4a2c68486af01a517f5ba1fd4c92c3",
+    "filesHash": "137d3706fbbd820401eb44e56242fe19ca160755fdb3dc51a5463cb14437b2f0",
     "v": 2,
-    "kjVersion": "4.56.0",
-    "issuedMs": 1792346382252,
-    "expiresMs": 1792346442252,
+    "kjVersion": "4.57.0",
+    "issuedMs": 1792438757089,
+    "expiresMs": 1792438817089,
     "signer": "EgMc2b95g5nUh8e6LDCeLjv7G69cQaszUCIy+3aLpPQ=",
-    "signature": "z1Py1BK/08RHSfz++panzsiXZkVT8udH2Aay/cTeejJXPTfj8dXSAO2vTjw5eMSUUcxYYgXpKWf5LnwH235NAw=="
+    "signature": "e5I7pZvyu2kXJJFAnXW5FugZs63GBN1hvpZ3thvq2vH5Q63A4y9BaeMXvmmItBYO4LqxAxXKU+r8iYyJxdqCDA=="
   }
 }
