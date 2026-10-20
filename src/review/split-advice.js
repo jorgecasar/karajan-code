@@ -31,7 +31,8 @@ function commonPrefix(lists) {
 
 /** The structural path of each file: the segments that tell its responsibility. */
 function keysOf(files) {
-  const javaMain = /(^|\/)src\/main\/(java|kotlin)\/(.+)$/;
+  // KJC-BUG-0383: main and test source sets alike; a Maven PR can live wholly under src/test/java.
+  const javaMain = /(^|\/)src\/(?:main|test)\/(java|kotlin)\/(.+)$/;
   const javaDirs = files.map((f) => javaMain.exec(f.file)).filter(Boolean).map((m) => dirsOf(m[3]));
   // The root package (com/acme/app), never a layer: a PR that only touches pages/ keeps "pages".
   const common = commonPrefix(javaDirs);
@@ -39,12 +40,12 @@ function keysOf(files) {
   const prefix = layerAt === -1 ? common : common.slice(0, layerAt);
   return files.map(({ file }) => {
     if (/(^|\/)src\/(main|test)\/resources\//.test(file)) return ["resources"];
-    if (isTest(file)) return ["tests"];
     const java = javaMain.exec(file);
     if (java) {
       const rest = dirsOf(java[3]).slice(prefix.length);
       return rest.length > 0 ? rest : ["main"];
     }
+    if (isTest(file)) return ["tests"];
     const src = /(^|\/)src\/(.+)$/.exec(file);
     if (src && dirsOf(src[2]).length > 0) return dirsOf(src[2]);
     const dirs = dirsOf(file);
@@ -61,14 +62,22 @@ function group(entries, depth) {
   return [...groups].map(([name, items]) => ({ name, items, lines: items.reduce((n, i) => n + i.changed, 0), depth }));
 }
 
-/** Groups by the first segment, then splits any group over `limit` by its next level. */
+// KJC-BUG-0383: a chunk holding more than this share of the files is split one level down.
+const MAX_FILE_SHARE = 0.6;
+
+/** Groups by the first segment, then splits any group over `limit` or the file share by its next level. */
 function chunksOf(entries, limit) {
   const out = [];
   const pending = group(entries, 1);
   while (pending.length > 0) {
     const g = pending.shift();
     const deeper = g.items.some((i) => i.key.length > g.depth);
-    if (g.lines > limit && deeper) pending.push(...group(g.items, g.depth + 1));
+    const tooBig = g.lines > limit || g.items.length > entries.length * MAX_FILE_SHARE;
+    // Going down only helps when it really splits the group: past a lone subpackage, keep going.
+    let depth = g.depth + 1;
+    let sub = tooBig && deeper ? group(g.items, depth) : [];
+    while (sub.length === 1 && g.items.some((i) => i.key.length > depth)) sub = group(g.items, ++depth);
+    if (sub.length > 1) pending.push(...sub);
     else out.push(g);
   }
   return out;

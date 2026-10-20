@@ -31,6 +31,28 @@ describe("splitAdvice", () => {
     expect(splitAdvice(files, { limit: 100 }).chunks.map((c) => c.name)).toEqual(["services", "components", "tests"]);
   });
 
+  // KJC-BUG-0383 / KJC-TSK-1106 (#2263): hoop-carpool/qa-automation#20, a Maven project whose
+  // whole PR lives under src/test/java. Counts from MAXWELL's report: api 8, flows 1,
+  // model/api 10, pages 22, tests 4, utils 2 (1784 lines), plus 3 config and 2 resources.
+  it("groups a Maven PR that lives under src/test/java by package, never 90% in one chunk", () => {
+    const test = (pkg, n, lines) => Array.from({ length: n }, (_, i) => ({ file: `src/test/java/com/qaautomation/${pkg}/F${i}.java`, changed: lines }));
+    const files = [
+      { file: ".gitignore", changed: 5 }, { file: "README.md", changed: 10 }, { file: "pom.xml", changed: 15 },
+      { file: "src/test/resources/config.properties", changed: 7 }, { file: "src/test/resources/testdata/users.json", changed: 15 },
+      ...test("api", 8, 40), ...test("flows", 1, 60), ...test("model/api", 10, 30),
+      ...test("pages", 22, 30), ...test("tests", 4, 100), ...test("utils", 2, 32),
+    ];
+    const { chunks } = splitAdvice(files, { limit: 200 });
+    expect(chunks.map((c) => c.name)).toEqual(["config", "resources", "model", "utils", "api", "pages", "flows", "tests"]);
+    for (const c of chunks) expect(c.files.length / files.length, c.name).toBeLessThanOrEqual(0.6);
+    expect(chunks.find((c) => c.name === "pages").files).toHaveLength(22);
+  });
+
+  it("goes past a lone subpackage to split a group that is too large", () => {
+    const files = ["a", "b"].flatMap((leaf) => [java(`model/api/${leaf}`, "One.java", 150), java(`model/api/${leaf}`, "Two.java", 150)]);
+    expect(splitAdvice(files, { limit: 400 }).chunks.map((c) => c.name)).toEqual(["model/api/a", "model/api/b"]);
+  });
+
   it("splits a group that is still too large by its next level", () => {
     const files = ["a", "b", "c"].flatMap((sub) => [java(`pages/${sub}`, "One.java", 90), java(`pages/${sub}`, "Two.java", 90)]);
     const names = splitAdvice(files, { limit: 200 }).chunks.map((c) => c.name);
