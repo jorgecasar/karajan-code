@@ -17,38 +17,64 @@ export function splitByFile(diff) {
     if (parts.length === 0) continue;
     parts.at(-1).lines.push(line);
   }
-  return parts.map(({ file, lines }) => ({
-    file,
-    text: lines.join("\n"),
-    changed: lines.filter((l) => /^[+-]/.test(l) && !/^(\+\+\+|---) /.test(l)).length,
-  }));
+  return parts.map(({ file, lines }) => ({ file, text: lines.join("\n"), changed: changedLines(lines) }));
 }
+
+const changedLines = (lines) => lines.filter((l) => /^[+-]/.test(l) && !/^(\+\+\+|---) /.test(l)).length;
 
 /**
  * Whole files packed into batches of at most `limit` characters, at most
  * `maxBatches` of them, and the coverage that leaves.
  */
 export function batchDiff(diff, { limit, maxBatches }) {
+  const parts = splitByFile(diff);
   const batches = [];
-  const unreviewed = [];
-  for (const part of splitByFile(diff)) {
+  const left = [];
+  for (const piece of parts.flatMap((part) => piecesOf(part, limit))) {
     const last = batches.at(-1);
-    if (part.text.length > limit) unreviewed.push(part);
-    else if (last && last.text.length + 1 + part.text.length <= limit) last.add(part);
-    else if (batches.length < maxBatches) batches.push(newBatch(part));
-    else unreviewed.push(part);
+    if (piece.text.length > limit) left.push(piece);
+    else if (last && last.text.length + 1 + piece.text.length <= limit) last.add(piece);
+    else if (batches.length < maxBatches) batches.push(newBatch(piece));
+    else left.push(piece);
   }
-  const reviewed = batches.flatMap((b) => b.parts);
+  // A file counts as reviewed only when every piece of it was.
+  const missing = new Set(left.map((p) => p.file));
   const sum = (ps) => ps.reduce((n, p) => n + p.changed, 0);
+  const reviewedLines = sum(batches.flatMap((b) => b.parts));
   return {
-    batches: batches.map((b) => ({ files: b.parts.map((p) => p.file), text: b.text })),
+    batches: batches.map((b) => ({ files: [...new Set(b.parts.map((p) => p.file))], text: b.text })),
     coverage: {
-      files: { reviewed: reviewed.length, total: reviewed.length + unreviewed.length },
-      lines: { reviewed: sum(reviewed), total: sum(reviewed) + sum(unreviewed) },
-      truncated: unreviewed.length > 0,
-      unreviewed: unreviewed.map((p) => p.file),
+      files: { reviewed: parts.length - missing.size, total: parts.length },
+      lines: { reviewed: reviewedLines, total: reviewedLines + sum(left) },
+      truncated: missing.size > 0,
+      unreviewed: [...missing],
     },
   };
+}
+
+/**
+ * KJC-BUG-0382 (#2263): a file too large for one batch is cut into pieces of whole
+ * hunks, each with the file's header, so it is reviewed whole. A single hunk larger
+ * than the limit stays one piece and is left out (named in the coverage).
+ */
+function piecesOf(part, limit) {
+  if (part.text.length <= limit) return [part];
+  const lines = part.text.split("\n");
+  const firstHunk = lines.findIndex((l) => l.startsWith("@@"));
+  if (firstHunk === -1) return [part];
+  const header = lines.slice(0, firstHunk).join("\n");
+  const hunks = [];
+  for (const line of lines.slice(firstHunk)) {
+    if (line.startsWith("@@")) hunks.push([]);
+    hunks.at(-1).push(line);
+  }
+  const pieces = [];
+  for (const hunk of hunks.map((h) => h.join("\n"))) {
+    const last = pieces.at(-1);
+    if (last && last.text.length + 1 + hunk.length <= limit) last.text = `${last.text}\n${hunk}`;
+    else pieces.push({ file: part.file, text: `${header}\n${hunk}` });
+  }
+  return pieces.map((p) => ({ ...p, changed: changedLines(p.text.split("\n")) }));
 }
 
 function newBatch(first) {
