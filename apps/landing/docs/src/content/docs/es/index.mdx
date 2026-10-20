@@ -65,7 +65,11 @@ El caveat que el loop engineering recalca — *los bucles desatendidos cometen e
 
 Las versiones más recientes, la última primero. Las anteriores están en [Arquitectura › Historia](/docs/es/architecture/history/) y en el [CHANGELOG](https://github.com/manufosela/karajan-code/blob/main/CHANGELOG.md).
 
-### v4.57.2: consejo para partir una PR grande (actual)
+### v4.57.3: cada línea de una PR grande revisada (actual)
+
+`kj review --third-party` revisa ya un fichero nuevo que no cabe en un lote en trozos de líneas, con sus números de línea correctos, así que la cobertura llega al 100 %. `advice.split` agrupa una PR de Maven o Gradle por paquetes en vez de meter todo lo de `src/test/java` en un solo trozo.
+
+### v4.57.2: consejo para partir una PR grande
 
 `kj review --third-party` revisa ya un fichero que no cabe en un lote en trozos de hunks completos y, por encima del presupuesto de tamaño, añade `advice.split`: por qué una PR tan grande se revisa peor y cómo partirla, trozo a trozo, siguiendo la estructura del proyecto y en un orden en el que cada trozo se apoya en los anteriores. Es un consejo, nunca un hallazgo.
 
