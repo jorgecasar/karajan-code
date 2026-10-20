@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.57.3] - 2026-10-20
+
+Patch. **`kj review --third-party` reaches 100% coverage on new large files, and `advice.split` follows Maven packages** (#2263, the reviewer agent's test of 4.57.2 on a real PR).
+
+### Fixed
+
+- **A hunk too large for one batch is reviewed in pieces of lines** (KJC-BUG-0384): a new file is one hunk, and it was left out whole (85% coverage on the reported PR). Each piece carries the file's header and its own line numbers; only a single line larger than a whole batch is left out, and named.
+- **`advice.split` groups a Maven or Gradle PR by package** (KJC-BUG-0383): sources under `src/test/java` no longer all fall in one "tests" chunk; the source set and the common root package are stripped and files are grouped by the next package level, and a chunk with more than 60% of the files is split one level down.
+
 ## [4.57.2] - 2026-10-20
 
 Patch. **`kj review --third-party` reviews a large file whole and advises how to split a large PR** (#2263, follow-up from the reviewer agent).
