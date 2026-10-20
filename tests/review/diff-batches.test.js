@@ -25,6 +25,21 @@ describe("batchDiff", () => {
     expect(coverage).toEqual({ files: { reviewed: 3, total: 3 }, lines: { reviewed: 9, total: 9 }, truncated: false, unreviewed: [] });
   });
 
+  // KJC-BUG-0382 (#2263): one file too large for a batch was left out whole.
+  it("splits a file too large for one batch by hunks, repeating its header in each piece", () => {
+    const hunk = (n) => [`@@ -${n},1 +${n},2 @@`, ...Array.from({ length: 4 }, (_, i) => `+h${n} line ${i}`)].join("\n");
+    const head = ["diff --git a/big.js b/big.js", "--- a/big.js", "+++ b/big.js"].join("\n");
+    const big = [head, hunk(1), hunk(20), hunk(40)].join("\n");
+    const { batches, coverage } = batchDiff(big, { limit: `${head}\n${hunk(1)}`.length + 10, maxBatches: 5 });
+    expect(batches).toHaveLength(3);
+    for (const [i, n] of [1, 20, 40].entries()) {
+      expect(batches[i].text.startsWith("diff --git a/big.js")).toBe(true);
+      expect(batches[i].text).toContain(`@@ -${n},1`);
+      expect(batches[i].files).toEqual(["big.js"]);
+    }
+    expect(coverage).toEqual({ files: { reviewed: 1, total: 1 }, lines: { reviewed: 12, total: 12 }, truncated: false, unreviewed: [] });
+  });
+
   it("leaves out a file larger than the limit, and files past the batch cap, and says which", () => {
     const small = fileDiff("a.js", 2);
     const diff = [small, fileDiff("huge.js", 500), fileDiff("b.js", 2), fileDiff("c.js", 2)].join("\n");
