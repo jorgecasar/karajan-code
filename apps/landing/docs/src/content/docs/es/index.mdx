@@ -65,7 +65,11 @@ El caveat que el loop engineering recalca — *los bucles desatendidos cometen e
 
 Las versiones más recientes, la última primero. Las anteriores están en [Arquitectura › Historia](/docs/es/architecture/history/) y en el [CHANGELOG](https://github.com/manufosela/karajan-code/blob/main/CHANGELOG.md).
 
-### v4.57.1: una PR grande revisada entera (actual)
+### v4.57.2: consejo para partir una PR grande (actual)
+
+`kj review --third-party` revisa ya un fichero que no cabe en un lote en trozos de hunks completos y, por encima del presupuesto de tamaño, añade `advice.split`: por qué una PR tan grande se revisa peor y cómo partirla, trozo a trozo, siguiendo la estructura del proyecto y en un orden en el que cada trozo se apoya en los anteriores. Es un consejo, nunca un hallazgo.
+
+### v4.57.1: una PR grande revisada entera
 
 `kj review --third-party` revisa el diff entero de una PR grande por lotes de ficheros completos, dice en `coverage` qué ha revisado y nunca aprueba código que no ha visto (`verdict.status: partial`). Los requisitos de la casa van aparte en `policyChecks`, y un par de coordenadas GPS ya no se toma por un teléfono.
 
