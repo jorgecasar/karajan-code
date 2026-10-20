@@ -20,6 +20,42 @@ export function splitByFile(diff) {
   return parts.map(({ file, lines }) => ({ file, text: lines.join("\n"), changed: changedLines(lines) }));
 }
 
+const HUNK_HEAD = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$/;
+
+/**
+ * KJC-BUG-0384: one hunk cut into windows that fit `room` characters with their own
+ * `@@ -old,count +new,count @@` header, so the reviewer reads the right line numbers.
+ * A single line that cannot fit stays alone in a window larger than the room, which
+ * batchDiff leaves out and names; no batch ever exceeds the limit.
+ */
+function splitHunk(lines, budget) {
+  const head = HUNK_HEAD.exec(lines[0]);
+  if (!head) return [lines];
+  // The rewritten header: the original's trailing context plus four line numbers of up to 10 digits.
+  const room = budget - (head[3].length + 50);
+  let oldAt = Number(head[1]);
+  let newAt = Number(head[2]);
+  const windows = [];
+  let cur = [];
+  let size = 0;
+  const flush = () => {
+    const oldCount = cur.filter((l) => l[0] === " " || l[0] === "-").length;
+    const newCount = cur.filter((l) => l[0] === " " || l[0] === "+").length;
+    windows.push([`@@ -${oldAt},${oldCount} +${newAt},${newCount} @@${head[3]}`, ...cur]);
+    oldAt += oldCount;
+    newAt += newCount;
+    cur = [];
+    size = 0;
+  };
+  for (const line of lines.slice(1)) {
+    if (cur.length > 0 && size + line.length + 1 > room) flush();
+    cur.push(line);
+    size += line.length + 1;
+  }
+  if (cur.length > 0) flush();
+  return windows;
+}
+
 const changedLines = (lines) => lines.filter((l) => /^[+-]/.test(l) && !/^(\+\+\+|---) /.test(l)).length;
 
 /**
@@ -69,7 +105,10 @@ function piecesOf(part, limit) {
     hunks.at(-1).push(line);
   }
   const pieces = [];
-  for (const hunk of hunks.map((h) => h.join("\n"))) {
+  // KJC-BUG-0384: a hunk larger than a batch (a new file is one hunk) is cut by lines.
+  const room = limit - header.length - 1;
+  const fitted = hunks.flatMap((h) => (h.join("\n").length > room ? splitHunk(h, room) : [h]));
+  for (const hunk of fitted.map((h) => h.join("\n"))) {
     const last = pieces.at(-1);
     if (last && last.text.length + 1 + hunk.length <= limit) last.text = `${last.text}\n${hunk}`;
     else pieces.push({ file: part.file, text: `${header}\n${hunk}` });
