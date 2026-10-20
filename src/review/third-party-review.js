@@ -8,10 +8,12 @@
 import { runCommand } from "../utils/process.js";
 import { resolveRole } from "../config/role-resolver.js";
 import { runOneShotReview } from "./one-shot-review.js";
-import { prRequirementChecks } from "./pr-requirements.js";
+import { prRequirementChecks, prSizeLimit } from "./pr-requirements.js";
+import { splitAdvice } from "./split-advice.js";
+import { isGenerated } from "./loc-budget.js";
 import { prSecurityChecks } from "./pr-security.js";
 import { sonarCheck } from "./pr-sonar.js";
-import { batchDiff } from "./diff-batches.js";
+import { batchDiff, splitByFile } from "./diff-batches.js";
 import { DIFF_CLIP_CHARS } from "../prompts/diff-clip.js";
 
 // KJC-BUG-0378: a reviewer call per batch; past this many, files are left out and named.
@@ -29,7 +31,7 @@ const finding = (i) => ({
 });
 
 /** The review as data: verdict, findings, suggestions, security checks and, apart, the house requirements. */
-export async function thirdPartyReview({ range, config, projectDir, logger, task = null, gitDiff = gitDiffOf, run = runOneShotReview, requirements = prRequirementChecks, security = prSecurityChecks, sonar = sonarCheck, limit = DIFF_CLIP_CHARS, maxBatches = MAX_REVIEW_BATCHES }) {
+export async function thirdPartyReview({ range, config, projectDir, logger, task = null, gitDiff = gitDiffOf, run = runOneShotReview, requirements = prRequirementChecks, security = prSecurityChecks, sonar = sonarCheck, limit = DIFF_CLIP_CHARS, maxBatches = MAX_REVIEW_BATCHES, sizeLimit = null }) {
   const diff = await gitDiff(projectDir, range);
   // KJC-TSK-1076/1077: the PR's requirements and its security, with no tokens; they never stop the review.
   // KJC-BUG-0379 (#2263): the house requirements (size, commits, attribution, tests) travel apart:
@@ -55,7 +57,15 @@ export async function thirdPartyReview({ range, config, projectDir, logger, task
     suggestions: records.flatMap((r) => r.suggestions ?? []),
     checks,
     policyChecks,
+    advice: adviceFor(diff, sizeLimit ?? prSizeLimit({ projectDir, config }).limit),
   };
+}
+
+/** KJC-TSK-1101: over the size budget, how to split the PR; advice only, never a finding. */
+function adviceFor(diff, budget) {
+  const files = splitByFile(diff).filter((f) => !isGenerated(f.file));
+  const total = files.reduce((n, f) => n + f.changed, 0);
+  return total > budget ? { split: splitAdvice(files, { limit: budget }) } : {};
 }
 
 /** Rejected if any batch was; approved only when every file was reviewed; partial otherwise. */

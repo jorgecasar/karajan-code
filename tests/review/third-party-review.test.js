@@ -89,6 +89,18 @@ describe("thirdPartyReview on a large PR", () => {
     expect(res.coverage).toMatchObject({ files: { reviewed: 1, total: 2 }, truncated: true, unreviewed: ["huge.js"] });
   });
 
+  // KJC-TSK-1101: a PR over the size budget gets advice on how to split it, apart
+  // from the findings and the policy checks, and the verdict does not change.
+  it("adds advice.split only over the size budget, without touching findings or verdict", async () => {
+    const diff = [file("src/main/java/com/acme/api/A.java", 30), file("src/main/java/com/acme/model/M.java", 30)].join("\n");
+    const big = await review(diff, verdictFor([]), { sizeLimit: 40 });
+    expect(big.verdict.status).toBe("approved");
+    expect(big.findings).toEqual([]);
+    expect(big.advice.split.chunks.map((c) => c.name)).toEqual(["model", "api"]);
+    const small = await review(diff, verdictFor([]), { sizeLimit: 100 });
+    expect(small.advice).toEqual({});
+  });
+
   it("an empty range is an error, never an approval of nothing", async () => {
     await expect(review("", verdictFor([]))).rejects.toThrow(/nothing to review/);
   });
