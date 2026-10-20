@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.57.2] - 2026-10-20
+
+Patch. **`kj review --third-party` reviews a large file whole and advises how to split a large PR** (#2263, follow-up from the reviewer agent).
+
+### Added
+
+- **`advice.split`** (KJC-TSK-1101): over the size budget, the JSON says why a PR that large reviews worse and proposes ordered chunks (name, purpose, files, approximate lines), grouped by the project's real structure (the Java/Kotlin package, the folder under `src/`, tests and resources apart) and ordered by layer so each builds on the ones before it. Advice only: it never counts as a finding and never changes the verdict.
+
+### Fixed
+
+- **A file too large for one batch is reviewed in pieces of whole hunks** (KJC-BUG-0382), each with the file's header, instead of being left out. Only a single hunk larger than one batch is still left out, and named.
+
 ## [4.57.1] - 2026-10-19
 
 Patch. **`kj review --third-party` reviews a large PR whole** (#2263, field report from a reviewer agent on a 52-file PR).

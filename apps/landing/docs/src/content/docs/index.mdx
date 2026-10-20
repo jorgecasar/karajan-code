@@ -65,7 +65,11 @@ The caveat loop engineering insists on — *unattended loops make unattended mis
 
 The most recent releases, newest first. Older versions live in [Architecture › History](/docs/architecture/history/) and the [CHANGELOG](https://github.com/manufosela/karajan-code/blob/main/CHANGELOG.md).
 
-### v4.57.1: a large PR reviewed whole (current)
+### v4.57.2: advice on how to split a large PR (current)
+
+`kj review --third-party` now reviews a file too large for one batch in pieces of whole hunks, and, over the size budget, adds `advice.split`: why a PR that large reviews worse and how to split it, chunk by chunk, following the project's structure and in an order where each chunk builds on the ones before it. It is advice, never a finding.
+
+### v4.57.1: a large PR reviewed whole
 
 `kj review --third-party` reviews the whole diff of a large PR in batches of whole files, says in `coverage` what it reviewed, and never approves code it did not see (`verdict.status: partial`). The house requirements travel apart in `policyChecks`, and a GPS coordinate pair is no longer reported as a phone number.
 
