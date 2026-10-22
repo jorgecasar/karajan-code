@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.58.0] - 2026-10-22
+
+Minor. **CI proves every commit had its cross-AI review, a reviewed repo declares its own privacy false positives, and the Sentinel's shell-reading guards step aside where the host sandbox already protects.**
+
+### Added
+
+- **`kj review --verify-pr <n>`** (KJC-TSK-1088): the CI side of `--publish-pr`. It reads the kj review published for the PR's current head, written by an owner, member or collaborator, recomputes each commit's diff hash and exits 1 naming every commit that is not listed with a matching hash. Skipping the pre-commit hook (`--no-verify`) no longer leaves a commit unreviewed.
+- **`cross-ai-verdict` workflow** (KJC-TSK-1113): runs `kj review --verify-pr` on every PR from the repo's own branches, and again when a review is published.
+- **The reviewed repo's `.karajan/privacy.yml`** (KJC-TSK-1112): `kj review --third-party` honours its `allow` list, read at the **base** of the range so a PR cannot add the exemption it needs. A `personal` list there is ignored: it only lives in `~/.karajan/privacy.yml`.
+
+### Changed
+
+- **Sentinel guards 4, 12 and 13 step aside where the host sandbox denies their paths** (KJC-TSK-1114, plan KJC-TSK-1081): supervisor files named in Bash, the Bash part of the lane guard and repo writes through Bash. With the sandbox on, no unsandboxed commands and the paths in `denyWrite`, the sandbox guards them; anywhere else they deny as before. `kj harden` adds `.karajan/hooks`, `.claude/settings.json`, `kj.config.yml`, `.ragignore` and `.kj/worktrees` to `denyWrite` and runs `kj worktree` outside the sandbox. **Changes the harness: reseal after updating.**
+
+### Fixed
+
+- **`kj review --verify-pr` matched only diffs abbreviated like the publisher's** (KJC-BUG-0386): git shortens the object ids of the `index` lines by the clone's object count or `core.abbrev`; the check now accepts any length, with the patch still identical.
+- **Critical advisory on `certifi` in the radar backend** (KJC-BUG-0385): bumped to 2026.10.19; the OSV gate had gone red on every PR.
+
 ## [4.57.3] - 2026-10-20
 
 Patch. **`kj review --third-party` reaches 100% coverage on new large files, and `advice.split` follows Maven packages** (#2263, the reviewer agent's test of 4.57.2 on a real PR).

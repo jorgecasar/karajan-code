@@ -65,7 +65,11 @@ El caveat que el loop engineering recalca — *los bucles desatendidos cometen e
 
 Las versiones más recientes, la última primero. Las anteriores están en [Arquitectura › Historia](/docs/es/architecture/history/) y en el [CHANGELOG](https://github.com/manufosela/karajan-code/blob/main/CHANGELOG.md).
 
-### v4.57.3: cada línea de una PR grande revisada (actual)
+### v4.58.0: la review cruzada, probada en CI (actual)
+
+`kj review --verify-pr` hace fallar una PR cuando a un commit le falta la review cruzada publicada, y un workflow nuevo, `cross-ai-verdict`, lo ejecuta en cada PR. `kj review --third-party` respeta la lista `allow` de privacidad del propio repo revisado, leída en la base para que una PR no pueda eximirse a sí misma. Donde el sandbox del host ya deniega sus rutas, las guardas del Sentinel que leen la shell se apartan: menos falsos positivos y ninguna protección perdida. Tras actualizar, hay que resellar.
+
+### v4.57.3: cada línea de una PR grande revisada
 
 `kj review --third-party` revisa ya un fichero nuevo que no cabe en un lote en trozos de líneas, con sus números de línea correctos, así que la cobertura llega al 100 %. `advice.split` agrupa una PR de Maven o Gradle por paquetes en vez de meter todo lo de `src/test/java` en un solo trozo.
 

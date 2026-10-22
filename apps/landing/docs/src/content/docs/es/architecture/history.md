@@ -1825,6 +1825,12 @@ La misma versión abrió el camino a un equipo trabajando en un mismo repo y a e
 
 Antes de publicarse, el enrutado dio sus primeros pasos sobre esa línea base: cada HU sale de la descomposición con su tramo, contrastado con una señal determinista, y los perfiles con nombre (`frugal`, `standard`, `deep`) se apoyan en una sola tabla de modelos por defecto cuyos ids se verificaron contra cada CLI. Los planes aprendieron a decir si un cambio amplía, regenera o reconstruye código existente, y regenerar exige licencia: el mutation score del módulo en 0,8 o más, o antes una HU que lo endurezca. La cuarentena de dependencias ganó un modo que bloquea, `kj check` cuenta el trabajo desde la última auditoría, los patrones de prompt-injection pasaron a un catálogo portable que karajan-radar lee desde Python, y el contrato con claude se comprueba en la máquina del mantenedor: sin credenciales en CI, y `kj release check` sigue en rojo hasta que las grabaciones coinciden con el claude instalado.
 
+## Phase 146: v4.58.0, la review probada donde se mergea
+
+El hook de pre-commit pedía el veredicto de otra IA, pero `--no-verify` se saltaba el hook y la review con él, y nada después podía notarlo. `kj review --verify-pr` cierra ese hueco allí donde se mergea el código: lee la review que `--publish-pr` dejó para el head de la PR, solo la acepta de un miembro del repo y recalcula el hash del diff que trajo cada commit. La primera ejecución, en su propia PR, falló con una review válida, porque git acorta los ids de objeto de un diff según el tamaño de cada clon; el check acepta ya cualquier abreviatura y el parche tiene que seguir siendo idéntico.
+
+La misma versión empezó a retirar las guardas del Sentinel que leen la shell, como planeaba el ADR 0014, sin convertir el sandbox en requisito. Donde el sandbox del host está activo, no se puede esquivar y deniega las rutas que vigila una guarda, la guarda se aparta; en cualquier otro sitio deniega como antes. Y `kj review --third-party` aprendió a aceptar los falsos positivos de privacidad del propio repo revisado, leídos en la base del rango para que una PR no pueda escribirse su propia exención.
+
 ## Decisiones Arquitectonicas Clave
 
 ### CLI wrapping vs llamadas directas a API
