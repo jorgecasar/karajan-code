@@ -479,7 +479,7 @@ import { doc, CODE, TESTS, ROOT, BASE_BRANCHES, CARD, STATE, branchOf, foreignLa
 // KJC-TSK-0915 (ADR 0014): the shell reader is a real, unit-tested module copied here as is.
 import { isGhIssueCreate, isPublishCommand, optionValues, shellSegments, stripInertQuotes, stripTextOptionValues, stripTextOnlyCommandValues } from "./sentinel-shell.mjs";
 import { DISCARD_VERBS, discardOf, foreignLost, removedFiles } from "./sentinel-discard.mjs";
-import { shellWrites, writesRepo } from "./sentinel-bash-write.mjs";
+import { sandboxCovers, shellWrites, writesRepo } from "./sentinel-bash-write.mjs";
 const EDIT_TOOLS = ["Write", "Edit", "MultiEdit", "NotebookEdit"];
 const inOrder = (want, got) => { let i = 0; for (const w of got) if (w === want[i] && ++i === want.length) return true; return false; };
 // KJC-BUG-0333: a publish is read per simple command by the shell reader, so
@@ -547,7 +547,9 @@ process.stdin.on("end", () => {
     // the Read/Grep tools are for. Shell indirection (variables, globs,
     // substitution) cannot be resolved from command text: that vector is
     // caught by the Stop gate's checksum verification, which blocks the turn.
-    if (tool === "Bash" && PROTECTED.test(String(input.command || "").replaceAll("\\\\", "/"))) {
+    // KJC-TSK-1114: where the host sandbox denies writing them, the sandbox guards them instead.
+    const SUPERVISOR_PATHS = [".claude/settings.json", ".karajan/hooks", ".karajan/harness"];
+    if (tool === "Bash" && PROTECTED.test(String(input.command || "").replaceAll("\\\\", "/")) && !sandboxCovers(ROOT, SUPERVISOR_PATHS)) {
       console.error("karajan sentinel: los ficheros del supervisor no se tocan desde Bash — consultalos con la tool Read/Grep; solo el humano los modifica, fuera de la sesion." + doc("supervisor"));
       process.exit(2);
     }
@@ -745,6 +747,8 @@ process.stdin.on("end", () => {
         console.error("karajan sentinel: git worktree add/remove/prune no se ejecuta desde una sesion — estructura del repo, sin escape; usa kj worktree start|done." + doc("cross-lane"));
         process.exit(2);
       }
+      // KJC-TSK-1114: where the host sandbox denies writing the lanes, it confines Bash itself.
+      if (!sandboxCovers(ROOT, [".kj/worktrees"])) {
       // Deny-unless-known-read-only: un allowlist de verbos mutadores era
       // esquivable (dd, interpretes). Solo un comando SIMPLE de lectura (sin
       // encadenar ni redirigir) puede nombrar otro carril; leer carriles es
@@ -876,10 +880,13 @@ process.stdin.on("end", () => {
           if (lane && laneDeny(m[1], lane)) process.exit(2);
         }
       }
+      }
     }
     // KJC-BUG-0237 (#1886): the repo is written through Edit/Write only, the path every gate
     // guards. After the lane guard, whose message is the precise one for another lane.
-    if (tool === "Bash") {
+    // KJC-TSK-1114: gates run at commit now; what only this guard kept, the governance
+    // files, the host sandbox denies where it covers them.
+    if (tool === "Bash" && !sandboxCovers(ROOT, ["kj.config.yml", ".ragignore"])) {
       let moved = false; // after cd/pushd/popd, a relative target cannot be placed: fail-closed
       // $( ) and backticks run even inside double quotes: their bodies, read from the raw text, are commands too.
       const raw = String(input.command || "");

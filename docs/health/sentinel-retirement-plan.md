@@ -13,7 +13,7 @@ A guard leaves the Sentinel only when a checkpoint already gives its protection,
 | 1 | Deny recorder | exit code | infrastructure, not a guard | stays |
 | 2 | Supervisor files by Edit/Write path | tool path (structural) | | stays |
 | 3 | First touch of `rm` | shell text | goes with #9 | retire |
-| 4 | Supervisor files named in a Bash command | raw text | seal tamper check (PreToolUse and Stop) plus host sandbox write deny on `.karajan/harness` | retire after the sandbox rule |
+| 4 | Supervisor files named in a Bash command | raw text | seal tamper check (PreToolUse and Stop) plus host sandbox write deny on `.karajan/harness` | retired where the sandbox covers it (KJC-TSK-1114): steps aside when the sandbox is on, cannot be bypassed and denies `.claude/settings.json`, `.karajan/hooks` and `.karajan/harness` |
 | 5 | AI attribution in `gh pr/issue/release` bodies | raw text + body files | pre-commit diff and commit-msg (commits); CI attribution workflow (PR body) | retire for PRs; issue/release bodies: decide |
 | 6 | `gh issue create` to karajan-code | raw text | `kj report-issue` is the documented route; low value as a guard | retire |
 | 7 | Phone enrollment as a human act | raw text | `kj identity enroll-phone` checks its own caller (KJC-TSK-1084). The phone key file itself: no checkpoint yet (sandbox) | command retired; key file stays |
@@ -21,8 +21,8 @@ A guard leaves the Sentinel only when a checkpoint already gives its protection,
 | 9 | Discards (`git checkout --`, `restore`, `rm`) | raw text | host sandbox for writes outside the lane; inside the lane, nothing reads text reliably | decide with the user |
 | 10 | `KJ_SENTINEL_OFF` | env | | stays |
 | 11 | Identity lock (own tokenizer) | raw text | git part: pre-commit (author) and pre-push (every pushed commit, gh session), KJC-TSK-1085. gh part: no checkpoint sees `gh` API calls (the incident behind it) | git part retired; gh part stays |
-| 12 | Lane guard MONO-0 (cd, quoted paths, substitutions, path tokens) | raw text | host sandbox limited to the lane directory | retire after the sandbox rule; largest source of false positives |
-| 13 | Repo writes through Bash | raw text | card-first and rag-first are enforced at commit; the Steward's block too since KJC-TSK-1086. Still only here: unsealed governance files (`kj.config.yml`, `.ragignore`) written through Bash | waits for the sandbox to deny those paths |
+| 12 | Lane guard MONO-0 (cd, quoted paths, substitutions, path tokens) | raw text | host sandbox limited to the lane directory | retired where the sandbox covers it (KJC-TSK-1114): steps aside when the sandbox denies `.kj/worktrees`; the Edit/Write lane check stays (the sandbox only confines Bash) |
+| 13 | Repo writes through Bash | raw text | card-first and rag-first are enforced at commit; the Steward's block too since KJC-TSK-1086. Still only here: unsealed governance files (`kj.config.yml`, `.ragignore`) written through Bash | retired where the sandbox covers it (KJC-TSK-1114): steps aside when the sandbox denies `kj.config.yml` and `.ragignore`, which kj harden now adds |
 | 14 | Policy engine on the Bash input | whole input | policy gate at commit (`kj review`) and CI policy job | retire from Bash |
 | 15 | `--no-verify` / `core.hooksPath` | raw text | `main` is protected since 2026-10-18, but no required check proves each commit had its cross-AI verdict: a commit that skipped the hook skipped the review | waits for a CI check on the published verdicts (KJC-TSK-1088) |
 | 16 | `git add` blanket / runtime files | raw text | runtime files: pre-commit rejects them. Blanket `git add -A` sweeping unrelated files: no checkpoint | runtime part retirable; blanket part stays |

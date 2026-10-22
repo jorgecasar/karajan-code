@@ -2,7 +2,7 @@
 // ADR 0014). Inside the repo, files are written through Edit/Write only, the path
 // every gate guards. Copied byte for byte into .karajan/harness; `root` injected.
 // The stated limit: a program you run can write files; only a sandbox stops that.
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { headIndex, shellSegments, withoutRedirections } from "./sentinel-shell.mjs";
@@ -99,4 +99,30 @@ export const writesRepo = (t, root) => {
     return true;
   }
   return !rel.startsWith("..") && !rel.startsWith("/");
+};
+
+/** The project's sandbox settings: the local file wins over the shared one; unreadable is none. */
+const sandboxOf = (root) => {
+  for (const file of ["settings.local.json", "settings.json"]) {
+    const p = join(root, ".claude", file);
+    if (!existsSync(p)) continue;
+    try {
+      return JSON.parse(readFileSync(p, "utf8")).sandbox ?? null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+};
+
+/**
+ * KJC-TSK-1114 (plan KJC-TSK-1081): does the host sandbox already deny Bash writes to
+ * every one of these repo-relative paths? Only then does a guard that reads Bash text
+ * step aside. A sandbox that is off, can be bypassed or misses a path covers nothing.
+ */
+export const sandboxCovers = (root, paths) => {
+  const sb = sandboxOf(root);
+  if (sb?.enabled !== true || sb.allowUnsandboxedCommands !== false) return false;
+  const denied = (sb.filesystem?.denyWrite ?? []).map((d) => String(d).replace(/^\.\//, "").replace(/\/+$/, ""));
+  return paths.every((p) => denied.some((d) => p === d || p.startsWith(d + "/")));
 };
