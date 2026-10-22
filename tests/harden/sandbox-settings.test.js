@@ -34,8 +34,10 @@ describe("installSandbox", () => {
     expect(s.permissions.allow).toEqual(["Bash(npx vitest:*)"]);
     expect(s.sandbox.enabled).toBe(true);
     expect(s.sandbox.allowUnsandboxedCommands).toBe(false);
-    expect(s.sandbox.excludedCommands).toEqual(expect.arrayContaining(["docker *", "gh *", "kj review *"]));
+    expect(s.sandbox.excludedCommands).toEqual(expect.arrayContaining(["docker *", "gh *", "kj review *", "kj worktree *"]));
     expect(s.sandbox.filesystem.denyWrite).toEqual(expect.arrayContaining([".karajan/harness", "~/.karajan/supervisor-phone.json"]));
+    // KJC-TSK-1114: what the Sentinel's Bash-text guards hand over to the sandbox.
+    expect(s.sandbox.filesystem.denyWrite).toEqual(expect.arrayContaining([".karajan/hooks", ".claude/settings.json", "kj.config.yml", ".ragignore", ".kj/worktrees"]));
     // Outside the project, only state and caches: never a whole config directory.
     for (const broad of ["~/.claude", "~/.codex", "~/.config", "~/.npm", "~"]) expect(s.sandbox.filesystem.allowWrite).not.toContain(broad);
     expect(s.sandbox.network.allowedDomains).toEqual(expect.arrayContaining(["example.com", "github.com", "registry.npmjs.org"]));

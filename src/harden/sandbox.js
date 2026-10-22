@@ -60,8 +60,13 @@ export function probeSandbox({ platform = process.platform, which = whichOnPath,
 // Outside the project only kj's state and package caches are writable, and the
 // supervisor and the phone key stay out of reach.
 const METHOD_SANDBOX = {
-  excludedCommands: ["gh *", "kj review *"],
-  denyWrite: [".karajan/harness", ".karajan/supervisor-provenance.json", "~/.karajan/supervisor-phone.json"],
+  // KJC-TSK-1114: with these denied, the Sentinel's Bash-text guards step aside (plan KJC-TSK-1081);
+  // kj worktree runs outside, it is the sanctioned way to create and remove lanes.
+  excludedCommands: ["gh *", "kj review *", "kj worktree *"],
+  denyWrite: [
+    ".karajan/harness", ".karajan/hooks", ".claude/settings.json", ".karajan/supervisor-provenance.json", "~/.karajan/supervisor-phone.json",
+    "kj.config.yml", ".ragignore", ".kj/worktrees",
+  ],
   allowWrite: ["~/.karajan", "~/.npm/_cacache", "~/.npm/_logs", "~/.npm/_npx", "~/.cache", "~/.config/configstore"],
   allowedDomains: [
     "github.com", "api.github.com", "*.githubusercontent.com", "uploads.github.com", "registry.npmjs.org",
