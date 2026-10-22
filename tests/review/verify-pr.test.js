@@ -50,6 +50,19 @@ describe("verifyPrReview", () => {
     expect(r.problems).toEqual([expect.stringMatching(/aaa1111 \(feat: a\)/)]);
   });
 
+  // KJC-BUG-0386 (#2283): git abbreviates the index lines by the clone's object count.
+  it("passes when this clone abbreviates the index lines to another length than the publisher's", async () => {
+    const as = (len) => Object.fromEntries(Object.entries(DIFFS).map(([sha, d]) => [sha, `index ${"0".repeat(len)}..${"a".repeat(len)}\n${d}`]));
+    const seenByPublisher = as(9);
+    for (const diff of Object.values(seenByPublisher)) await saveVerdict(dir, diff, { verdict: "approved", reviewer: "codex" });
+    const posted = [];
+    await publishPrReview({ projectDir: dir, pr: 7, run: fakeRun({ posted, diffs: seenByPublisher }) });
+    const body = posted[0].find((a) => a.startsWith("body=")).slice("body=".length);
+    const ci = fakeRun({ reviews: [{ body, author_association: "OWNER" }], diffs: as(7) });
+    const run = async (cmd, args, opts) => (cmd === "git" && args.includes("--abbrev=9") ? { exitCode: 0, stdout: seenByPublisher[args.at(-1)] } : ci(cmd, args, opts));
+    expect(await verifyPrReview({ projectDir: dir, pr: 7, run })).toEqual({ ok: true, commits: 2, problems: [] });
+  });
+
   it("fails when no kj review was published for the current head", async () => {
     const body = (await publishedBody()).replace("head=bbb2222", "head=old0000");
     const r = await verifyPrReview({ projectDir: dir, pr: 7, run: fakeRun({ reviews: [{ body, author_association: "OWNER" }] }) });
