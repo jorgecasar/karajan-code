@@ -19,10 +19,20 @@ async function json(run, args, cwd) {
   return JSON.parse(res.stdout || "null");
 }
 
-async function hashOf(projectDir, sha, run) {
-  const res = await run("git", ["-C", projectDir, "diff", `${sha}^`, sha]);
-  if (res.exitCode !== 0) throw new Error(`git diff ${sha.slice(0, 7)} failed: ${(res.stderr || "").trim()}`);
-  return diffHash(res.stdout).slice(0, 12);
+// KJC-BUG-0386: git abbreviates the object ids of the index lines by the clone's object
+// count (or core.abbrev, 4 up to the full 40), so the publisher and CI may print the
+// same diff with ids of other lengths.
+const ABBREVS = Array.from({ length: 37 }, (_, i) => i + 4);
+
+/** The diff hashes of a commit under every abbreviation git may have used where it was reviewed. */
+async function hashesOf(projectDir, sha, run) {
+  const hashes = new Set();
+  for (const n of ABBREVS) {
+    const res = await run("git", ["-C", projectDir, "diff", `--abbrev=${n}`, `${sha}^`, sha]);
+    if (res.exitCode !== 0) throw new Error(`git diff ${sha.slice(0, 7)} failed: ${(res.stderr || "").trim()}`);
+    hashes.add(diffHash(res.stdout).slice(0, 12));
+  }
+  return hashes;
 }
 
 /**
@@ -43,7 +53,7 @@ export async function verifyPrReview({ projectDir, pr, run = runCommand }) {
   const problems = [];
   for (const c of commits) {
     const hash = listed.get(c.oid.slice(0, 7));
-    if (hash !== await hashOf(projectDir, c.oid, run)) problems.push(`${c.oid.slice(0, 7)} (${c.messageHeadline}): no approved verdict for the diff it brings`);
+    if (!hash || !(await hashesOf(projectDir, c.oid, run)).has(hash)) problems.push(`${c.oid.slice(0, 7)} (${c.messageHeadline}): no approved verdict for the diff it brings`);
   }
   return { ok: problems.length === 0, commits: commits.length, problems };
 }
