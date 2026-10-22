@@ -223,6 +223,10 @@ kj review "Review my auth refactor"
 kj review "Check for security issues" --reviewer claude --base-ref HEAD~5
 ```
 
+### Proving the cross-AI review in CI (`--publish-pr`, `--verify-pr`)
+
+`kj review --publish-pr <n>` publishes, as one GitHub review, the verdict kj holds for each commit of the PR, bound to the hash of the diff it brought. `kj review --verify-pr <n>` is its CI side: it exits 1 naming every commit that the review for the PR's current head does not list with a matching diff hash. Only a review written by an owner, member or collaborator of the repo counts, so skipping the pre-commit hook (`--no-verify`) no longer leaves a commit unreviewed.
+
 ### Reviewing someone else's PR (`--third-party`)
 
 For reviewer agents and people who review other people's PRs. In a clone with the PR's head checked out:

@@ -15,6 +15,7 @@ import { statusCommand } from "../commands/status.js";
 import { loadPlan } from "../plan/plan-store.js";
 import { withConfig } from "./_shared.js";
 import { publishPrReview } from "../review/publish-pr.js";
+import { verifyPrReview } from "../review/verify-pr.js";
 import { thirdPartyReviewCommand } from "../review/third-party-review.js";
 
 /**
@@ -258,6 +259,7 @@ export function registerPipeline(program, { pkgVersion }) {
     .option("--walked <route>", "Recorrido comprobado como lo haría una persona (repetible) — queda en el veredicto", (v, prev) => [...(prev || []), v], [])
     .option("--walked-with <tool>", "Con qué se comprobó el recorrido (por ejemplo chrome-devtools)")
     .option("--publish-pr <n>", "Publish the cross-AI verdicts of a PR's commits on it as one GitHub review")
+    .option("--verify-pr <n>", "CI check: every commit of the PR is listed, with its diff hash, in the kj review a member published")
     .option("--third-party", "Review someone else's PR (--range base...head): reviewer only, no own-work gates, no verdict stored")
     .option("--json", "With --third-party: print the review as one JSON document on stdout")
     .action(async (task, flags) => {
@@ -271,6 +273,14 @@ export function registerPipeline(program, { pkgVersion }) {
         if (flags.publishPr) {
           const r = await publishPrReview({ projectDir: config.projectDir || process.cwd(), pr: flags.publishPr });
           logger.info(r.published ? `✓ PR #${flags.publishPr}: review published (${r.commits} commit(s))` : `PR #${flags.publishPr}: ${r.reason}`);
+          return;
+        }
+        // KJC-TSK-1088: the CI side of the same review; a commit without its verdict fails the check.
+        if (flags.verifyPr) {
+          const r = await verifyPrReview({ projectDir: config.projectDir || process.cwd(), pr: flags.verifyPr });
+          if (r.ok) logger.info(`✓ PR #${flags.verifyPr}: ${r.commits} commit(s), each with its cross-AI verdict`);
+          else logger.error(`✗ PR #${flags.verifyPr}:\n  - ${r.problems.join("\n  - ")}`);
+          process.exitCode = r.ok ? 0 : 1;
           return;
         }
         // ENV-B1 (KJC-TSK-0637): the gate mode records a verdict tied to

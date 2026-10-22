@@ -1,0 +1,70 @@
+// KJC-TSK-1088: CI checks that every commit of a PR carries its cross-AI verdict,
+// as published by kj review --publish-pr: one review for the PR's head, from a
+// member of the repo, listing each commit with the hash of the diff it brought.
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { publishPrReview } from "../../src/review/publish-pr.js";
+import { verifyPrReview } from "../../src/review/verify-pr.js";
+import { saveVerdict } from "../../src/review/verdict-store.js";
+
+let dir;
+beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), "kj-verify-")); });
+afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+const DIFFS = { aaa1111: "diff --git a/a.js b/a.js\n+const a = 1;\n", bbb2222: "diff --git a/b.js b/b.js\n+const b = 2;\n" };
+const PR = { headRefOid: "bbb2222", commits: [{ oid: "aaa1111", messageHeadline: "feat: a" }, { oid: "bbb2222", messageHeadline: "fix: b" }] };
+
+function fakeRun({ reviews = [], posted = [], diffs = DIFFS } = {}) {
+  return async (cmd, args) => {
+    if (cmd === "gh" && args[0] === "pr") return { exitCode: 0, stdout: JSON.stringify(PR) };
+    if (cmd === "git") return { exitCode: 0, stdout: diffs[args.at(-1)] ?? "" };
+    if (cmd === "gh" && args.includes("POST")) { posted.push(args); return { exitCode: 0, stdout: "{}" }; }
+    if (cmd === "gh" && args.includes("--jq")) return { exitCode: 0, stdout: reviews.map((r) => JSON.stringify(r)).join("\n") };
+    if (cmd === "gh" && args[0] === "api") return { exitCode: 0, stdout: "[]" };
+    throw new Error(`unexpected ${cmd} ${args.join(" ")}`);
+  };
+}
+
+/** The review body kj review --publish-pr posts for PR, so both sides read the same format. */
+async function publishedBody() {
+  for (const diff of Object.values(DIFFS)) await saveVerdict(dir, diff, { verdict: "approved", reviewer: "codex", summary: "ok (diff deadbeef0000) inside" });
+  const posted = [];
+  await publishPrReview({ projectDir: dir, pr: 7, run: fakeRun({ posted }) });
+  return posted[0].find((a) => a.startsWith("body=")).slice("body=".length);
+}
+
+describe("verifyPrReview", () => {
+  it("passes when a member's kj review for the head lists every commit with its diff hash", async () => {
+    const body = await publishedBody();
+    const r = await verifyPrReview({ projectDir: dir, pr: 7, run: fakeRun({ reviews: [{ body, author_association: "OWNER" }] }) });
+    expect(r).toEqual({ ok: true, commits: 2, problems: [] });
+  });
+
+  it("fails naming the commit whose diff no longer matches the published hash", async () => {
+    const body = await publishedBody();
+    const diffs = { ...DIFFS, aaa1111: "diff --git a/a.js b/a.js\n+const a = 9;\n" };
+    const r = await verifyPrReview({ projectDir: dir, pr: 7, run: fakeRun({ reviews: [{ body, author_association: "MEMBER" }], diffs }) });
+    expect(r.ok).toBe(false);
+    expect(r.problems).toEqual([expect.stringMatching(/aaa1111 \(feat: a\)/)]);
+  });
+
+  it("fails when no kj review was published for the current head", async () => {
+    const body = (await publishedBody()).replace("head=bbb2222", "head=old0000");
+    const r = await verifyPrReview({ projectDir: dir, pr: 7, run: fakeRun({ reviews: [{ body, author_association: "OWNER" }] }) });
+    expect(r).toMatchObject({ ok: false, problems: [expect.stringMatching(/no kj review.*bbb2222/)] });
+  });
+
+  it("ignores a kj review written by someone who is not a member of the repo", async () => {
+    const body = await publishedBody();
+    const r = await verifyPrReview({ projectDir: dir, pr: 7, run: fakeRun({ reviews: [{ body, author_association: "CONTRIBUTOR" }] }) });
+    expect(r.ok).toBe(false);
+  });
+
+  it("fails naming a commit the review does not list", async () => {
+    const body = (await publishedBody()).split("\n").filter((l) => !l.includes("aaa1111")).join("\n");
+    const r = await verifyPrReview({ projectDir: dir, pr: 7, run: fakeRun({ reviews: [{ body, author_association: "COLLABORATOR" }] }) });
+    expect(r.problems).toEqual([expect.stringMatching(/aaa1111/)]);
+  });
+});
