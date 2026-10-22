@@ -1,0 +1,34 @@
+name: cross-ai-verdict
+
+# KJC-TSK-1113 (follows KJC-TSK-1088): every commit of a PR from this repo carries its
+# cross-AI verdict, published with kj review --publish-pr. A commit that skipped the
+# pre-commit hook (--no-verify) skipped the review, and this check names it.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  verdicts:
+    # Forks and bots hold no kj verdicts to publish: the check is for the team's own branches.
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.type != 'Bot'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Every commit has its published cross-AI verdict
+        run: node bin/kj.js review --verify-pr "$PR"
+        env:
+          PR: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
