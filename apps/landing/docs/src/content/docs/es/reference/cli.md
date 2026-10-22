@@ -223,6 +223,10 @@ kj review "Revisar mi refactor de autenticación"
 kj review "Buscar problemas de seguridad" --reviewer claude --base-ref HEAD~5
 ```
 
+### Probar la review cruzada en CI (`--publish-pr`, `--verify-pr`)
+
+`kj review --publish-pr <n>` publica, como una sola review de GitHub, el veredicto que kj guarda de cada commit de la PR, atado al hash del diff que trajo. `kj review --verify-pr <n>` es su parte de CI: sale con 1 y nombra cada commit que la review del head actual de la PR no lista con un hash de diff que coincida. Solo cuenta una review escrita por un owner, member o collaborator del repo, así que saltarse el hook de pre-commit (`--no-verify`) ya no deja un commit sin revisar.
+
 ### Revisar la PR de otra persona (`--third-party`)
 
 Para agentes revisores y para quien revisa PRs ajenas. En un clon con el head de la PR:

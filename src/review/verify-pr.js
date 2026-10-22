@@ -1,0 +1,49 @@
+/**
+ * KJC-TSK-1088: CI proof that every commit of a PR carries its cross-AI
+ * verdict, so skipping the pre-commit hook (--no-verify) cannot leave a commit
+ * unreviewed. It reads the review kj review --publish-pr posted for the PR's
+ * head, written by a member of the repo, and recomputes the hash of the diff
+ * each commit brought: a listed hash that no longer matches is no proof.
+ */
+import { runCommand } from "../utils/process.js";
+import { diffHash } from "./verdict-store.js";
+import { MARKER } from "./publish-pr.js";
+
+const TRUSTED = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
+// One line per commit, as publish-pr writes it: - `<sha7>` headline: approved by X (diff <hash12>)...
+const LISTED = /^- `([0-9a-f]{7})` .*?\(diff ([0-9a-f]{12})\)/gm;
+
+async function json(run, args, cwd) {
+  const res = await run("gh", args, { cwd });
+  if (res.exitCode !== 0) throw new Error(`gh ${args.slice(0, 3).join(" ")} failed: ${(res.stderr || res.stdout || "").trim()}`);
+  return JSON.parse(res.stdout || "null");
+}
+
+async function hashOf(projectDir, sha, run) {
+  const res = await run("git", ["-C", projectDir, "diff", `${sha}^`, sha]);
+  if (res.exitCode !== 0) throw new Error(`git diff ${sha.slice(0, 7)} failed: ${(res.stderr || "").trim()}`);
+  return diffHash(res.stdout).slice(0, 12);
+}
+
+/**
+ * @returns {Promise<{ok: boolean, commits: number, problems: string[]}>}
+ */
+export async function verifyPrReview({ projectDir, pr, run = runCommand }) {
+  const info = await json(run, ["pr", "view", String(pr), "--json", "headRefOid,commits"], projectDir);
+  const commits = info.commits ?? [];
+  // One review per line, every page: --slurp is missing from the gh that distros ship.
+  const res = await run("gh", ["api", "--paginate", `repos/{owner}/{repo}/pulls/${pr}/reviews`, "--jq", ".[] | {body, author_association}"], { cwd: projectDir });
+  if (res.exitCode !== 0) throw new Error(`gh api reviews failed: ${(res.stderr || res.stdout || "").trim()}`);
+  const reviews = (res.stdout || "").split("\n").filter(Boolean).map((line) => JSON.parse(line));
+  const review = reviews.findLast((r) => TRUSTED.has(r.author_association) && String(r.body ?? "").includes(MARKER(info.headRefOid)));
+  if (!review) {
+    return { ok: false, commits: commits.length, problems: [`no kj review published by a member for head ${info.headRefOid.slice(0, 7)}: run kj review --publish-pr ${pr}`] };
+  }
+  const listed = new Map([...review.body.matchAll(LISTED)].map((m) => [m[1], m[2]]));
+  const problems = [];
+  for (const c of commits) {
+    const hash = listed.get(c.oid.slice(0, 7));
+    if (hash !== await hashOf(projectDir, c.oid, run)) problems.push(`${c.oid.slice(0, 7)} (${c.messageHeadline}): no approved verdict for the diff it brings`);
+  }
+  return { ok: problems.length === 0, commits: commits.length, problems };
+}

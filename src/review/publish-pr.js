@@ -7,7 +7,7 @@
 import { runCommand } from "../utils/process.js";
 import { diffHash, loadVerdict } from "./verdict-store.js";
 
-const MARKER = (head) => `<!-- kj-review head=${head} -->`;
+export const MARKER = (head) => `<!-- kj-review head=${head} -->`;
 
 // gh runs in the project's own directory, so it reads and writes the same repo the verdicts belong to.
 async function json(run, cmd, args, cwd) {
