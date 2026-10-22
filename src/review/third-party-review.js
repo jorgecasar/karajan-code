@@ -37,7 +37,7 @@ export async function thirdPartyReview({ range, config, projectDir, logger, task
   // KJC-BUG-0379 (#2263): the house requirements (size, commits, attribution, tests) travel apart:
   // on another repo with other conventions they must not read as findings next to security.
   const policyChecks = await requirements({ range, projectDir, config });
-  const checks = [...await security({ diff, projectDir, config }), await sonar({ diff, config, projectDir })];
+  const checks = [...await security({ diff, projectDir, config, range }), await sonar({ diff, config, projectDir })];
   // KJC-BUG-0378 (#2263): the whole diff, in batches of whole files that fit the reviewer's
   // prompt; what does not fit is named in the coverage and the verdict cannot be approved.
   const provider = resolveRole(config, "reviewer").provider || null;

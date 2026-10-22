@@ -11,6 +11,7 @@ import { loadPrivacyList, scanText } from "../privacy/scan.js";
 import { isGeneratedPath, splitAddedByFile } from "../privacy/diff-scope.js";
 import { collectSemgrepFindings } from "../audit/semgrep-findings.js";
 import { cooldownAdvisories } from "./dep-cooldown.js";
+import { repoPrivacyAllow, withRepoAllow } from "./repo-privacy.js";
 
 const CREDENTIAL_IDS = new Set(CREDENTIAL_PATTERNS.map((p) => p.id));
 const BLOCKING_SEMGREP = new Set(["ERROR", "WARNING"]);
@@ -58,11 +59,13 @@ export async function semgrepCheck({ projectDir, files, collect = collectSemgrep
 }
 
 /** Every security and privacy check of the PR's diff. */
-export async function prSecurityChecks({ diff, projectDir, config }) {
+export async function prSecurityChecks({ diff, projectDir, config, range }) {
   const files = splitAddedByFile(diff).map((f) => f.file);
+  // KJC-TSK-1112: the reviewed repo's allow list, as it stands at the base of the range.
+  const list = withRepoAllow(loadPrivacyList(), await repoPrivacyAllow({ projectDir, range }));
   return [
     secretsCheck(diff, config),
-    privacyCheck(diff),
+    privacyCheck(diff, { list }),
     injectionCheck(diff),
     await cooldownCheck(diff, { thresholdHours: config?.supply_chain?.cooldown_hours }),
     await semgrepCheck({ projectDir, files }),

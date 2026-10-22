@@ -40,8 +40,8 @@ describe("thirdPartyReview", () => {
       gitDiff: async () => DIFF, run,
       // KJC-TSK-1076: the PR-requirement checks travel in the same document.
       requirements: async ({ range }) => [{ id: "size", ok: false, detail: `over the limit in ${range}` }],
-      // KJC-TSK-1077: the security checks read the same diff.
-      security: async ({ diff }) => [{ id: "secrets", ok: true, detail: `scanned ${diff.length} chars` }],
+      // KJC-TSK-1077: the security checks read the same diff; KJC-TSK-1112: and the range, for the repo's allow list.
+      security: async ({ diff, range }) => [{ id: "secrets", ok: range === "main...pr", detail: `scanned ${diff.length} chars` }],
       // KJC-TSK-1078: Sonar closes the list.
       sonar: async () => ({ id: "sonar", ok: true, detail: "not available: no SonarQube" }),
     });
