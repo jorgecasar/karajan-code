@@ -375,10 +375,25 @@ per area above); 16 one. About 40 PRs; steps 1–7 make atril usable on demand o
 
 ## Open questions
 
-- To verify before plan step 13, with a spike: a derived plugin from a local marketplace installs
-  in project scope on Claude Code and passes `claude plugin validate`; `rulesync import` of
-  `claudecode-plugin` round-trips the official plugins' hooks and MCP; the hook payload on
-  stdin under Codex and OpenCode, to turn `untested` into `compatible` or `incompatible`.
-- Whether Codex gets the plugin route too: it reads `.claude-plugin/marketplace.json` as a
-  legacy source and sets `CLAUDE_PLUGIN_ROOT`, but its CLI installs local plugins only through
-  the desktop app. Until verified, Codex takes the project route.
+Spike HU-0009 (2026-10-22, Claude Code 2.1.308, rulesync 16.39.1, claude-plugins-official af59ee3a) settled:
+- **Derived plugin, Claude Code: verified.** A plugin with only `hooks/hooks.json`, `.mcp.json` and a manifest, in a
+  `directory` marketplace, passes `claude plugin validate` and installs, lists and uninstalls in project scope.
+  Project scope still records the install in `~/.claude/plugins/installed_plugins.json` and copies the plugin to
+  `~/.claude/plugins/cache/`; the copy outlives the uninstall. rulesync writes no manifest: atril writes it.
+- **rulesync import is not lossless; atril normalizes before and checks after.** Events, matchers, `if`,
+  `asyncRewake`, `timeout` and `${CLAUDE_PLUGIN_ROOT}` round-trip; `rewakeMessage`/`rewakeSummary` and `hooks.json`
+  `modules` are lost. A flat `.mcp.json` (9 of 14 official) imports as zero servers without a warning: atril wraps it
+  in `mcpServers` before import and fails loudly if the server count changes. A plugin that would lose a field is
+  offered native-only, never split silently. `--output-root` takes a normalized absolute path.
+- **OpenCode: incompatible through rulesync.** Its generated plugin runs hook commands with no stdin and ignores
+  stdout and exit code. To decide (ADR to the user): atril emits its own OpenCode plugin that pipes the event input
+  into `atril hook run`, or marks OpenCode hooks `incompatible`.
+
+Still open:
+- The Codex hook payload: rulesync emits Claude-shaped `.codex/hooks.json` and leaves the payload to Codex. Needs
+  Codex installed and one recorded payload per event; until then Codex hooks are `untested`.
+- Whether Claude Code installs npm dependencies for a `directory`-marketplace plugin (it copies it to the cache).
+- Hooks and `mcpServers` declared inline in `plugin.json` (no official plugin does it): untested.
+- Whether Codex gets the plugin route too: it reads `.claude-plugin/marketplace.json` as a legacy source and sets
+  `CLAUDE_PLUGIN_ROOT`, but its CLI installs local plugins only through the desktop app. Until verified, Codex takes
+  the project route.
