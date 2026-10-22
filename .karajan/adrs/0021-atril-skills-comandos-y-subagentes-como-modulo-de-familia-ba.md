@@ -121,8 +121,12 @@ them instead of resolving what each task needs.
      agent through `resolve` — loads its **block**: the artifact plus the transitive closure
      of `uses` and `delegates`, deduplicated and ordered so each piece comes after what it
      depends on. Each delegated agent is marked as such, so the caller runs it as a subagent
-     with its own instructions instead of inlining it. `related` and the rest of the
-     `bundle` are listed as suggestions, never loaded.
+     with its own instructions instead of inlining it. **A subagent's dependencies travel
+     with it**: the agent carries its own block (its `uses` and `delegates`, resolved the
+     same way) and none of it enters the caller's context unless the caller uses it too.
+     That is why every artifact is parsed and its frontmatter completed: one request
+     returns everything each context needs. `related` and the rest of the `bundle` are
+     listed as suggestions, never loaded.
    - **A budget bounds the block**: a maximum of artifacts and of tokens, set by the consumer
      (Karajan passes its per-role limit, today `MAX_SKILLS = 3` in `src/skills/role-skills.js`,
      made a config key `skills.max_per_role` in the core switch). The artifact applied always
