@@ -38,6 +38,11 @@ in one source need rules to live together.
      the user's behalf keeps the artifact's name (`commands/kj-review.md`) or, from a plugin,
      `<plugin>__<name>`. A writer never edits or removes a file it did not write; a name clash
      is an error that names both.
+   - **Managed blocks.** Where a writer shares a file with the user — kj's method and
+     guidelines in `rules/karajan.md`, which teams extend with their own rules — the writer
+     owns its managed blocks, not the file: each block is a ledger entry keyed
+     `<path>#<block>` (`rules/karajan.md#guidelines`), and the text outside them stays the
+     user's.
    - **Single-file features** (`hooks.json`, `mcp.jsonc`, `permissions.jsonc`): each entry
      belongs to its writer. A writer adds, changes or removes only its own entries; an entry
      with no owner is the user's. Keys: an MCP server by its name (`mcp:<server>`), a
