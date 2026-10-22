@@ -280,7 +280,10 @@ them instead of resolving what each task needs.
       monitors and `userConfig` exist only on Claude Code; Markdown-only frontmatter
       (`allowed-tools`, `model`, an agent's `tools`) has no effect on demand. A hook script
       written for Claude Code's stdin payload is marked `untested` on CLIs whose payload
-      differs (OpenCode, Antigravity) until verified; atril does not translate payloads.
+      differs (Antigravity) until verified; atril does not translate payloads. On OpenCode
+      plugin hooks are `incompatible`: rulesync's OpenCode plugin runs hook commands with no
+      stdin and ignores their output and exit code, so atril does not install them there and
+      the report says so (the plugin's Markdown half still works on demand).
     - **Choice per plugin**, as for the recommended set: skip, **split** (the default) or
       **native** (the original plugin, installed with its own CLI's command, everything in
       context, that CLI only). A plugin with no Markdown is not split.
@@ -385,9 +388,9 @@ Spike HU-0009 (2026-10-22, Claude Code 2.1.308, rulesync 16.39.1, claude-plugins
   `modules` are lost. A flat `.mcp.json` (9 of 14 official) imports as zero servers without a warning: atril wraps it
   in `mcpServers` before import and fails loudly if the server count changes. A plugin that would lose a field is
   offered native-only, never split silently. `--output-root` takes a normalized absolute path.
-- **OpenCode: incompatible through rulesync.** Its generated plugin runs hook commands with no stdin and ignores
-  stdout and exit code. To decide (ADR to the user): atril emits its own OpenCode plugin that pipes the event input
-  into `atril hook run`, or marks OpenCode hooks `incompatible`.
+- **OpenCode: hooks incompatible.** Through rulesync its plugin runs hook commands with no stdin and ignores
+  stdout and exit code. Decided: atril marks OpenCode plugin hooks `incompatible` and does not install them;
+  an atril-owned OpenCode plugin piping the event into `atril hook run` can be revisited later.
 
 Still open:
 - The Codex hook payload: rulesync emits Claude-shaped `.codex/hooks.json` and leaves the payload to Codex. Needs
