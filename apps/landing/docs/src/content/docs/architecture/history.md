@@ -1826,6 +1826,12 @@ The same release opened the way to a team on one repo and to measured model choi
 
 Before it shipped, routing took its first steps on that baseline: each HU leaves the decomposition with its tier, checked against a deterministic signal, and named profiles (`frugal`, `standard`, `deep`) sit on one table of default models whose ids were verified against each CLI. Plans learned to say whether a change extends, reworks or rebuilds existing code, and a rework needs a licence: the module's mutation score at or over 0.8, or a hardening HU first. The supply-chain cooldown gained a blocking mode, `kj check` counts the work since the last audit, the prompt-injection patterns became a portable catalog karajan-radar reads from Python, and the contract with claude moved to the maintainer's machine: no credential in CI, and `kj release check` stays red until the recordings match the installed claude.
 
+## Phase 146: v4.58.0, the review proven where it is merged
+
+The pre-commit hook asked for a cross-AI verdict, but `--no-verify` skipped the hook and the review with it, and nothing downstream could tell. `kj review --verify-pr` closes that gap at the point where code is merged: it reads the review `--publish-pr` posted for the PR's head, trusts it only from a member of the repo, and recomputes the hash of the diff each commit brought. The first run on its own PR failed with a valid review, because git shortens the object ids of a diff by the size of each clone; the check now accepts any abbreviation while the patch must stay identical.
+
+The same release began retiring the Sentinel's shell-reading guards as ADR 0014 planned, without making the sandbox a precondition. Where the host sandbox is on, cannot be bypassed and denies the paths a guard watches, the guard steps aside; anywhere else it denies as before. And `kj review --third-party` learned to accept a reviewed repo's own privacy false positives, read at the base of the range so a PR cannot write its own exemption.
+
 ## Key Architectural Decisions
 
 ### CLI wrapping vs direct API calls
